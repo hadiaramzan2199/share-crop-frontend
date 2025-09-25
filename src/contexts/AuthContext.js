@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { v4 as uuidv4 } from 'uuid';
 import { mockAuthService } from '../services/mockServices';
 import { USER_ROLES } from '../utils/roles';
-import axios from 'axios'; // Import axios
+import api from '../services/api'; // Import the configured API service
 
 const AuthContext = createContext(null);
 
@@ -36,13 +36,13 @@ export const AuthProvider = ({ children }) => {
 
         // Check if user exists in backend by email, if not, create them
         try {
-          const userResponse = await axios.get(`http://localhost:5000/api/users/email/${currentUser.email}`);
+          const userResponse = await api.get(`/api/users/email/${currentUser.email}`);
           setUser(userResponse.data); // User found, set it
         } catch (error) {
           if (error.response && error.response.status === 404) {
             // User not found by email, try to create them
             try {
-              const createResponse = await axios.post('http://localhost:5000/api/users', {
+              const createResponse = await api.post('/api/users', {
                 name: currentUser.name,
                 email: currentUser.email,
                 password: 'mock_password', // Mock password for mock user
@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }) => {
               // If creation fails, it might be due to duplicate email. Try to log in.
               console.warn('User creation failed, attempting to log in:', createError);
               try {
-                const loginResponse = await axios.post('http://localhost:5000/api/auth/login', {
+                const loginResponse = await api.post('/api/auth/login', {
                   email: currentUser.email,
                   password: 'mock_password',
                 });
@@ -81,7 +81,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      const response = await api.post('/api/auth/login', { email, password });
       const { user: loggedInUser, token } = response.data;
       setUser(loggedInUser);
       localStorage.setItem('userRole', loggedInUser.user_type);
@@ -104,7 +104,7 @@ export const AuthProvider = ({ children }) => {
   const switchToRole = useCallback(async (role) => {
     try {
       const email = role === USER_ROLES.FARMER ? 'farmer@example.com' : 'dummy@example.com';
-      const userResponse = await axios.get(`http://localhost:5000/api/users/email/${email}`);
+      const userResponse = await api.get(`/api/users/email/${email}`);
       setUser(userResponse.data);
       localStorage.setItem('userRole', role);
     } catch (error) {
