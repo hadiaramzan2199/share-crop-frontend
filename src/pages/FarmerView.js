@@ -91,7 +91,7 @@ const FarmerView = () => {
           setFarmsList(mappedFarms);
           console.log('🔍 FarmerView Debug - Mapped farms for dropdown:', mappedFarms);
 
-          const fieldsResponse = await api.get(`/api/fields?owner_id=${user.id}`);
+          const fieldsResponse = await api.get(`/api/fields`);
           
           console.log('🔍 FarmerView Debug - Fields loaded:', fieldsResponse.data.length);
           console.log('🔍 FarmerView Debug - Fields data:', fieldsResponse.data);
