@@ -477,13 +477,7 @@ useEffect(() => {
     setBlinkingFarms(prev => new Set([...prev, product.id]));
     
     // Stop blinking after 5 seconds but keep the permanent glow
-    setTimeout(() => {
-      setBlinkingFarms(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(product.id);
-        return newSet;
-      });
-    }); // Blink for 5 seconds
+     // Blink for 5 seconds
     // END: Purchase Animation Logic
     
     // Deduct coins using coinService
