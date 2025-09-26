@@ -86,7 +86,7 @@ const FarmerView = () => {
           setFarmsList(mappedFarms);
           
 
-          const fieldsResponse = await api.get(`/api/fields?owner_id=${user.id}`);
+          const fieldsResponse = await api.get(`/api/fields`);
           
                   
           // Map database field names to frontend expected names
