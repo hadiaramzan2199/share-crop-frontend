@@ -338,9 +338,11 @@ useEffect(() => {
   }, [searchQuery, farms]);
 
   const isPurchased = useCallback((productId) => {
-    const farm = farms.find(f => f.id === productId);
-    return farm ? farm.isPurchased : false || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
-  }, [farms, purchasedFarms, purchasedProductIds]);
+  const farm = farms.find(f => f.id === productId);
+  const purchased = farm ? farm.isPurchased : false || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
+  console.log('🔍 Purchase check for:', productId, 'Result:', purchased);
+  return purchased;
+}, [farms, purchasedFarms, purchasedProductIds]);
 
   // Load user coins when user changes
   useEffect(() => {
@@ -469,18 +471,18 @@ useEffect(() => {
       await mockOrderService.createOrder(orderData);
     }
     
-    // START: Purchase Animation Logic
-    // Add to purchased farms for permanent glow
-    setPurchasedFarms(prev => new Set([...prev, product.id]));
-    
+    // Start intense blinking animation for 5 seconds
     setBlinkingFarms(prev => new Set([...prev, product.id]));
-      setTimeout(() => {
-        setBlinkingFarms(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(product.id);
-          return newSet;
-        });
-      }, 3000);
+    
+    // After 5 seconds, stop intense blinking but keep permanent glow
+    setTimeout(() => {
+      setBlinkingFarms(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(product.id);
+        console.log('🎯 Stopped blinking animation for:', product.id, 'but keeping permanent glow');
+        return newSet;
+      });
+    }, 5000);
     
     // Deduct coins using coinService
     await coinService.deductCoins(currentUser.id, totalCostInCoins);
@@ -759,58 +761,44 @@ useEffect(() => {
                 anchor="center"
               >
                 <div 
-                  style={{ 
-                    position: 'relative', 
-                    cursor: 'pointer', 
+                  // In the marker img style, update the filter and animation logic:
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    display: 'block',
+                    border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
+                    
+                    // ANIMATION LOGIC: Priority order - blinking > purchased > rented > farmer created
+                    // Update the filter property in the marker img style:
+                      filter: blinkingFarms.has(product.id) 
+                        ? 'brightness(1.2) drop-shadow(0 0 15px rgba(255, 215, 0, 0.9))'
+                        : isPurchased(product.id) 
+                        ? 'brightness(1) drop-shadow(0 0 6px rgba(255, 255, 255, 0.7))'
+                        : rentedFields.has(product.id)
+                        ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8))'
+                        : product.isFarmerCreated
+                        ? 'brightness(1.05) drop-shadow(0 0 6px rgba(76, 175, 80, 0.5))'
+                        : 'none',
+                    
+                    backgroundColor: 'transparent',
+                    padding: '0',
                     transition: 'all 0.3s ease',
-                    width: isMobile ? '20px' : '30px',
-                    height: isMobile ? '20px' : '30px'
-                  }} 
-                  onClick={(e) => handleProductClick(e, product)}
-                >
-                  <img
-                    src={getProductImageSrc(product)}
-                    alt={product.name || product.productName || 'Product'}
-                    onError={(e) => { 
-                      console.warn('[Marker Image Error] Fallback to icon for:', product.id, product.name);
-                      const fallback = getProductIcon(product.subcategory || product.category);
-                      if (e.currentTarget.src !== fallback) {
-                        e.currentTarget.src = fallback;
-                        e.currentTarget.style.objectFit = 'contain'; // Ensure icon fits
-                      }
-                    }}
-                    onLoad={(e) => {
-                      console.log('✅ Marker image loaded successfully:', product.name);
-                      e.currentTarget.style.opacity = '1';
-                    }}
-                    style={{
-                      width: '30px',
-                  height: '30px',
-                  borderRadius: '50%',
-                  border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                  filter: blinkingFarms.has(product.id) 
-                    ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
-                    : isPurchased(product.id) 
-                    ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                    : rentedFields.has(product.id)
-                    ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
-                    : product.isFarmerCreated
-                    ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                    : 'none',
-                  backgroundColor: 'transparent',
-                  padding: '0',
-                  transition: 'all 0.3s ease',
-
-                  animation: blinkingFarms.has(product.id) 
-                    ? 'glow-blink 0.8s infinite' 
-                    : isPurchased(product.id) 
-                    ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
-                    : rentedFields.has(product.id)
-                    ? 'glow-steady-green 2s infinite'
-                    : product.isFarmerCreated
-                    ? 'glow-farmer-created 3s infinite'
-                    : 'none',
-                    }}
+                    opacity: 0,
+                    
+                    // ANIMATION LOGIC: Priority order - blinking > purchased > rented > farmer created
+                    // Update the animation property in the marker img style:
+                    animation: blinkingFarms.has(product.id) 
+                      ? 'glow-blink 0.8s infinite' 
+                      : isPurchased(product.id) 
+                      ? 'glow-pulse-white 2s infinite ease-in-out'  // Smoother, continuous pulse
+                      : rentedFields.has(product.id)
+                      ? 'glow-steady-green 3s infinite ease-in-out'
+                      : product.isFarmerCreated
+                      ? 'glow-farmer-created 4s infinite ease-in-out'
+                      : 'none',
+                  }}
                   />
                   
                   {/* Farmer Created Badge */}
@@ -1486,99 +1474,63 @@ useEffect(() => {
 
       {/* Keyframes for animations */}
       <style>
-        {`
-          @keyframes glow-blink {
-            0% { 
-              filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7));
-            }
-            50% { 
-              filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.5)) drop-shadow(0 0 16px rgba(255, 193, 7, 0.3));
-            }
-            100% { 
-              filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7));
-            }
-          }
+  {`
+    @keyframes glow-pulse-white {
+      0% {
+        filter: brightness(1) drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+        transform: scale(1);
+      }
+      50% {
+        filter: brightness(1.1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9));
+        transform: scale(1.05);
+      }
+      100% {
+        filter: brightness(1) drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+        transform: scale(1);
+      }
+    }
 
-          @keyframes glow-pulse-white {
-            0% { 
-              filter: brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7));
-              transform: scale(1);
-            }
-            50% { 
-              filter: brightness(1.2) drop-shadow(0 0 20px rgba(255, 255, 255, 1)) drop-shadow(0 0 35px rgba(255, 255, 255, 0.9));
-              transform: scale(1.05);
-            }
-            100% { 
-              filter: brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7));
-              transform: scale(1);
-            }
-          }
+    @keyframes glow-blink {
+      0% { 
+        filter: drop-shadow(0 0 20px rgba(255, 193, 7, 1)) drop-shadow(0 0 40px rgba(255, 193, 7, 0.8));
+        transform: scale(1.2);
+      }
+      50% { 
+        filter: drop-shadow(0 0 10px rgba(255, 193, 7, 0.6)) drop-shadow(0 0 20px rgba(255, 193, 7, 0.4));
+        transform: scale(1.1);
+      }
+      100% { 
+        filter: drop-shadow(0 0 20px rgba(255, 193, 7, 1)) drop-shadow(0 0 40px rgba(255, 193, 7, 0.8));
+        transform: scale(1.2);
+      }
+    }
 
-          @keyframes heartbeat {
-            0% {
-              transform: scale(1);
-            }
-            25% {
-              transform: scale(1.1);
-            }
-            50% {
-              transform: scale(1);
-            }
-            75% {
-              transform: scale(1.1);
-            }
-            100% {
-              transform: scale(1);
-            }
-          }
+    /* Remove the heartbeat animation and use only the pulse */
+    @keyframes glow-steady-green {
+      0% { 
+        filter: brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8));
+      }
+      50% { 
+        filter: brightness(1.15) drop-shadow(0 0 15px rgba(76, 175, 80, 0.9));
+      }
+      100% { 
+        filter: brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8));
+      }
+    }
 
-          @keyframes enhanced-pulse {
-            0% {
-              filter: brightness(1) drop-shadow(0 0 0px rgba(255, 255, 255, 0.7));
-            }
-            50% {
-              filter: brightness(1.2) drop-shadow(0 0 5px rgba(255, 255, 255, 0.9));
-            }
-            100% {
-              filter: brightness(1) drop-shadow(0 0 0px rgba(255, 255, 255, 0.7));
-            }
-          }
-
-          @keyframes glow-steady-blue {
-
-            0% { 
-              filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 16px rgba(59, 130, 246, 0.6));
-            }
-            100% { 
-              filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 16px rgba(59, 130, 246, 0.6));
-            }
-          }
-
-          @keyframes glow-steady-green {
-            0% { 
-              filter: brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6));
-            }
-            50% { 
-              filter: brightness(1.2) drop-shadow(0 0 15px rgba(76, 175, 80, 0.9)) drop-shadow(0 0 25px rgba(76, 175, 80, 0.7));
-            }
-            100% { 
-              filter: brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6));
-            }
-          }
-
-          @keyframes glow-farmer-created {
-            0% { 
-              filter: brightness(1.05) drop-shadow(0 0 6px rgba(76, 175, 80, 0.5)) drop-shadow(0 0 12px rgba(76, 175, 80, 0.3));
-            }
-            50% { 
-              filter: brightness(1.15) drop-shadow(0 0 10px rgba(76, 175, 80, 0.7)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.5));
-            }
-            100% { 
-              filter: brightness(1.05) drop-shadow(0 0 6px rgba(76, 175, 80, 0.5)) drop-shadow(0 0 12px rgba(76, 175, 80, 0.3));
-            }
-          }
-        `}
-      </style>
+    @keyframes glow-farmer-created {
+      0% { 
+        filter: brightness(1.05) drop-shadow(0 0 6px rgba(76, 175, 80, 0.5));
+      }
+      50% { 
+        filter: brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.7));
+      }
+      100% { 
+        filter: brightness(1.05) drop-shadow(0 0 6px rgba(76, 175, 80, 0.5));
+      }
+    }
+  `}
+</style>
     </div>
   );
 });
