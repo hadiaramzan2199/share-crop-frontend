@@ -486,7 +486,7 @@ useEffect(() => {
         console.log('🎯 Stopped blinking animation for:', product.id, 'but keeping permanent glow');
         return newSet;
       });
-    }, 5000);
+    }, 500000);
     
     // Deduct coins using coinService
     await coinService.deductCoins(currentUser.id, totalCostInCoins);
