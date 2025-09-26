@@ -483,7 +483,7 @@ useEffect(() => {
         newSet.delete(product.id);
         return newSet;
       });
-    }, 5000); // Blink for 5 seconds
+    }); // Blink for 5 seconds
     // END: Purchase Animation Logic
     
     // Deduct coins using coinService
