@@ -473,12 +473,14 @@ useEffect(() => {
     // Add to purchased farms for permanent glow
     setPurchasedFarms(prev => new Set([...prev, product.id]));
     
-    // Start blinking animation
     setBlinkingFarms(prev => new Set([...prev, product.id]));
-    
-    // Stop blinking after 5 seconds but keep the permanent glow
-     // Blink for 5 seconds
-    // END: Purchase Animation Logic
+      setTimeout(() => {
+        setBlinkingFarms(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(product.id);
+          return newSet;
+        });
+      }, 3000);
     
     // Deduct coins using coinService
     await coinService.deductCoins(currentUser.id, totalCostInCoins);
@@ -782,34 +784,32 @@ useEffect(() => {
                       e.currentTarget.style.opacity = '1';
                     }}
                     style={{
-                      width: '100%',
-                      height: '100%',
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      display: 'block',
-                      border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                      filter: blinkingFarms.has(product.id) 
-                        ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
-                        : isPurchased(product.id) 
-                        ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                        : rentedFields.has(product.id)
-                        ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
-                        : product.isFarmerCreated
-                        ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                        : 'none',
-                      backgroundColor: 'transparent',
-                      padding: '0',
-                      transition: 'all 0.3s ease',
-                      opacity: 0, // Start hidden, fade in on load
-                      animation: blinkingFarms.has(product.id) 
-                        ? 'glow-blink 0.8s infinite' 
-                        : isPurchased(product.id) 
-                        ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
-                        : rentedFields.has(product.id)
-                        ? 'glow-steady-green 2s infinite'
-                        : product.isFarmerCreated
-                        ? 'glow-farmer-created 3s infinite'
-                        : 'none',
+                      width: '30px',
+                  height: '30px',
+                  borderRadius: '50%',
+                  border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
+                  filter: blinkingFarms.has(product.id) 
+                    ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
+                    : isPurchased(product.id) 
+                    ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
+                    : rentedFields.has(product.id)
+                    ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
+                    : product.isFarmerCreated
+                    ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
+                    : 'none',
+                  backgroundColor: 'transparent',
+                  padding: '0',
+                  transition: 'all 0.3s ease',
+
+                  animation: blinkingFarms.has(product.id) 
+                    ? 'glow-blink 0.8s infinite' 
+                    : isPurchased(product.id) 
+                    ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
+                    : rentedFields.has(product.id)
+                    ? 'glow-steady-green 2s infinite'
+                    : product.isFarmerCreated
+                    ? 'glow-farmer-created 3s infinite'
+                    : 'none',
                     }}
                   />
                   
