@@ -88,12 +88,6 @@ const BuyerView = () => {
     }
   }, [currentUser]);
 
-  useEffect(() => {
-    loadAllFieldsFromStorage();
-  }, [loadAllFieldsFromStorage]);
-
-
-
   const handleSearchChange = (query) => {
     setSearchQuery(query);
   };

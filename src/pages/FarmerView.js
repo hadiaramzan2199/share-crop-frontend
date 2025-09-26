@@ -66,19 +66,14 @@ const FarmerView = () => {
 
   // Combine farms and fields for the map
   const combinedMapData = fields; // Use stable reference to avoid unnecessary re-renders
-  
-  // Debug logging for field data
-  console.log('🔍 FarmerView Debug - Fields loaded:', fields.length);
-  console.log('🔍 FarmerView Debug - Fields data:', fields);
-  console.log('🔍 FarmerView Debug - Combined map data:', combinedMapData);
 
   useEffect(() => {
     const loadData = async () => {
       if (user) {
         try {
-          console.log('Loading farms for user:', user.id);
+          
           const farmsResponse = await api.get(`/api/farms`); // Filter by owner to show only farmer's farms
-          console.log('Farms response:', farmsResponse.data);
+          
           
           // Map database field names to frontend expected names
           const mappedFarms = farmsResponse.data
@@ -89,15 +84,11 @@ const FarmerView = () => {
               farmIcon: farm.farm_icon
             }));
           setFarmsList(mappedFarms);
-          console.log('🔍 FarmerView Debug - Mapped farms for dropdown:', mappedFarms);
+          
 
           const fieldsResponse = await api.get(`/api/fields?owner_id=${user.id}`);
           
-          console.log('🔍 FarmerView Debug - Fields loaded:', fieldsResponse.data.length);
-          console.log('🔍 FarmerView Debug - Fields data:', fieldsResponse.data);
-          console.log('🔍 FarmerView Debug - Sample field structure:', fieldsResponse.data[0]);
-          console.log('🔍 FarmerView Debug - Combined map data:', combinedMapData);
-          
+                  
           // Map database field names to frontend expected names
           const mappedFields = fieldsResponse.data
             .filter(field => field && field.id) // Only include fields with valid id
@@ -127,7 +118,6 @@ const FarmerView = () => {
     if (fieldToZoom && mapRef.current && mapRef.current.zoomToFarm) {
       // Use a small delay to ensure the map component has processed the new field
       const timer = setTimeout(() => {
-        console.log('🎯 DELAYED ZOOM - Zooming to field:', fieldToZoom.name);
         mapRef.current.zoomToFarm(fieldToZoom, true);
         setFieldToZoom(null); // Clear the field to zoom
       }, 100); // Small delay to allow map component to update
@@ -210,9 +200,7 @@ const FarmerView = () => {
         owner_id: createdFarm.owner_id
       };
 
-      console.log('Frontend - farmForList object:', farmForList);
-      console.log('Frontend - current farmsList before update:', farmsList);
-      
+            
       setFarmsList(prevFarms => {
         const updatedFarms = [...prevFarms, farmForList];
         console.log('Frontend - updated farmsList:', updatedFarms);

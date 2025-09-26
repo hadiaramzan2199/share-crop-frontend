@@ -11,7 +11,6 @@ import ProductSummaryBar from './ProductSummaryBar';
 import { Map as MapboxMap, Marker, NavigationControl, FullscreenControl } from 'react-map-gl';
 import { cachedReverseGeocode } from '../../utils/geocoding';
 import { getProductIcon } from '../../utils/productIcons';
-import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Detect mobile screens
 const useIsMobile = () => {
@@ -55,7 +54,7 @@ const EnhancedFarmMap = forwardRef(({
   const [viewState, setViewState] = useState({
     longitude: 15, // Center on Central Europe
     latitude: 45, // Center on Central Europe
-    zoom: isMobile ? 6 : 4, // Zoom out more on mobile for better overview
+    zoom: isMobile ? 8 : 4, // Zoom out more on mobile for better overview
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [popupPosition, setPopupPosition] = useState(null);
@@ -72,14 +71,6 @@ const EnhancedFarmMap = forwardRef(({
   const [userCoins, setUserCoins] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Update zoom level when screen size changes
-  useEffect(() => {
-    setViewState(prev => ({
-      ...prev,
-      zoom: isMobile ? 6 : 4
-    }));
-  }, [isMobile]);
-
   // Robust image src resolver for products (supports various shapes)
   const getProductImageSrc = useCallback((product) => {
     try {
@@ -92,8 +83,6 @@ const EnhancedFarmMap = forwardRef(({
       const category = product.subcategory || product.category;
       const iconPath = getProductIcon(category);
       
-      console.log('🖼️ getProductImageSrc - Product:', product.name, 'Category:', category, 'Icon:', iconPath);
-      
       return iconPath;
     } catch (e) {
       console.warn('Failed to resolve product image, using fallback:', e);
@@ -101,15 +90,8 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, []);
   // Function to fetch location for a product
-  const fetchLocationForProduct = useCallback(async (product) => {
-    if (!product) {
-      console.log('🌍 fetchLocationForProduct: No product', product);
-      return;
-    }
-    
+  const fetchLocationForProduct = useCallback(async (product) => {   
     const productId = product.id;
-    
-    console.log('🌍 fetchLocationForProduct called for:', product.name, 'ID:', productId, 'Existing location:', product.location, 'UserType:', userType);
     
     // Use functional update to check current state without dependency
     setProductLocations(prev => {
@@ -240,120 +222,94 @@ const EnhancedFarmMap = forwardRef(({
   }), [fetchLocationForProduct]); // Removed viewState dependency to prevent unnecessary re-creation
 
   // Load farms data
-  useEffect(() => {
-    console.log('🔄 EnhancedFarmMap useEffect triggered - externalFarms:', externalFarms?.length, 'externalFields:', externalFields?.length);
-    
-    if (externalFarms && externalFarms.length > 0) {
-      console.log('🔄 Setting farms from externalFarms:', externalFarms.length);
-      setFarms(externalFarms);
-      setFilteredFarms(externalFarms);
-      if (onFarmsLoad) {
-        onFarmsLoad(externalFarms);
-      }
-    } else if (externalFields && externalFields.length > 0) {
-      // Use external fields when available (from BuyerView/FarmerView)
-      console.log('🔄 Using external fields from props:', externalFields.length);
-      console.log('🔄 External fields data:', externalFields);
-      setFarms(externalFields);
-      setFilteredFarms(externalFields);
-      // Don't call onFarmsLoad for external fields to prevent circular updates
-    } else {
-      // Load fields from API only
-      const loadFarms = async () => {
-        try {
-          // Load fields from database API
-          let databaseFields = [];
-          try {
-            console.log('🔄 Attempting to fetch fields from database...');
-            const response = await fieldsService.getAll();
-            console.log('🔄 API Response:', response);
-            databaseFields = response.data || [];
-            console.log('🗄️ Loaded fields from database:', databaseFields.length);
-            console.log('🗄️ Database fields:', databaseFields);
-            
-            // Check specifically for the watermelon field
-            const watermelonField = databaseFields.find(f => f.name === 'My Watermelon');
-            if (watermelonField) {
-              console.log('🍉 Found watermelon field:', watermelonField);
+  // In the useEffect that loads farms data, replace with this:
+
+useEffect(() => {
+  console.log('🔄 EnhancedFarmMap useEffect triggered - externalFarms:', externalFarms?.length, 'externalFields:', externalFields?.length);
+  
+  // Priority: externalFields > externalFarms > API call
+  if (externalFields && externalFields.length > 0) {
+    console.log('🔄 Using external fields from props:', externalFields.length);
+    const validFields = externalFields.filter(field => field.coordinates);
+    console.log('✅ Valid external fields with coordinates:', validFields.length);
+    setFarms(validFields);
+    setFilteredFarms(validFields);
+  } else if (externalFarms && externalFarms.length > 0) {
+    console.log('🔄 Using external farms from props:', externalFarms.length);
+    const validFarms = externalFarms.filter(farm => farm.coordinates);
+    console.log('✅ Valid external farms with coordinates:', validFarms.length);
+    setFarms(validFarms);
+    setFilteredFarms(validFarms);
+    if (onFarmsLoad) {
+      onFarmsLoad(validFarms);
+    }
+  } else {
+    // Load only from database API, skip mock data to avoid conflicts
+    const loadFarms = async () => {
+      try {
+        console.log('🔄 Loading fields from database API only...');
+        const response = await fieldsService.getAll();
+        const databaseFields = response.data || [];
+        console.log('🗄️ Loaded fields from database:', databaseFields.length);
+        
+        // Filter only fields with valid coordinates
+        const validFields = databaseFields.filter(field => {
+          if (!field.coordinates) return false;
+          
+          let lng, lat;
+          if (Array.isArray(field.coordinates)) {
+            lng = field.coordinates[0];
+            lat = field.coordinates[1];
+          } else {
+            lng = field.coordinates.lng || field.coordinates.longitude;
+            lat = field.coordinates.lat || field.coordinates.latitude;
+          }
+          
+          return lng != null && lat != null && !isNaN(lng) && !isNaN(lat);
+        });
+        
+        console.log('✅ Valid database fields with coordinates:', validFields.length);
+        setFarms(validFields);
+        setFilteredFarms(validFields);
+        
+        // Auto-fit to valid fields only
+        if (mapRef.current && validFields.length > 0) {
+          const coordinates = validFields.map(field => {
+            if (Array.isArray(field.coordinates)) {
+              return [field.coordinates[0], field.coordinates[1]];
             } else {
-              console.log('🍉 Watermelon field not found in database response');
+              return [
+                field.coordinates.lng || field.coordinates.longitude,
+                field.coordinates.lat || field.coordinates.latitude
+              ];
             }
-          } catch (error) {
-            console.error('❌ Failed to load fields from database:', error);
-            console.error('❌ Error details:', error.response || error.message);
-          }
+          });
           
-          // Load mock data for demo purposes
-          let mockFields = [];
-          try {
-            const response = await mockProductService.getProducts();
-            mockFields = response.data.products || [];
-          } catch (error) {
-            console.error('Failed to load mock data:', error);
-          }
-          
-          // Combine fields (database + mock data)
-          const allFields = [...databaseFields, ...mockFields];
-          console.log('🔄 Combined all fields:', allFields.length);
-          console.log('🔄 All fields with coordinates:', allFields.filter(f => f.coordinates).length);
-          
-          // Note: Purchase status and rented fields are now managed via API
-          // In a full implementation, we would fetch user orders and rented fields from API
-          
-          // Set fields directly (purchase status managed via API)
-          setFarms(allFields);
-          setFilteredFarms(allFields);
-          
-          // Auto-fit map to show all farms
-          if (mapRef.current && allFields.length > 0) {
-            const validFarms = allFields.filter(farm => farm.coordinates);
-            console.log('🗺️ Auto-fit Debug - Valid farms for auto-fit:', validFarms.length);
-            console.log('🗺️ Auto-fit Debug - Valid farms:', validFarms);
-            if (validFarms.length > 0) {
-              const coordinates = validFarms.map(farm => {
-                if (Array.isArray(farm.coordinates)) {
-                  return [farm.coordinates[0], farm.coordinates[1]];
-                } else if (typeof farm.coordinates === 'object') {
-                  return [farm.coordinates.lng || farm.coordinates.longitude, farm.coordinates.lat || farm.coordinates.latitude];
-                }
-                return null;
-              }).filter(coord => coord !== null);
-              
-              if (coordinates.length > 0) {
-                
-                // Calculate bounds
-                const lngs = coordinates.map(coord => coord[0]);
-                const lats = coordinates.map(coord => coord[1]);
-                const minLng = Math.min(...lngs);
-                const maxLng = Math.max(...lngs);
-                const minLat = Math.min(...lats);
-                const maxLat = Math.max(...lats);
-                
-                mapRef.current.fitBounds(
-                  [[minLng, minLat], [maxLng, maxLat]],
-                  { padding: 50, duration: 2000 }
-                );
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load farms:', error);
-          // Fallback to mock data on error
-          try {
-            const response = await mockProductService.getProducts();
-            setFarms(response.data.products);
-            setFilteredFarms(response.data.products);
-            if (onFarmsLoad) {
-              onFarmsLoad(response.data.products);
-            }
-          } catch (fallbackError) {
-            console.error('Failed to load fallback farms:', fallbackError);
+          if (coordinates.length > 0) {
+            const lngs = coordinates.map(coord => coord[0]);
+            const lats = coordinates.map(coord => coord[1]);
+            const minLng = Math.min(...lngs);
+            const maxLng = Math.max(...lngs);
+            const minLat = Math.min(...lats);
+            const maxLat = Math.max(...lats);
+            
+            mapRef.current.fitBounds(
+              [[minLng, minLat], [maxLng, maxLat]],
+              { padding: 50, duration: 2000 }
+            );
           }
         }
-      };
-      loadFarms();
-    }
-  }, [onFarmsLoad, externalFarms, externalFields, refreshTrigger]); // Refresh when refreshTrigger changes
+      } catch (error) {
+        console.error('❌ Failed to load fields from database:', error);
+        // Set empty arrays on error to avoid showing old/mock data
+        setFarms([]);
+        setFilteredFarms([]);
+      }
+    };
+    
+    loadFarms();
+  }
+}, [onFarmsLoad, externalFarms, externalFields, refreshTrigger]);
 
   // Filter farms based on search query
   useEffect(() => {
@@ -386,14 +342,6 @@ const EnhancedFarmMap = forwardRef(({
     return farm ? farm.isPurchased : false || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
   }, [farms, purchasedFarms, purchasedProductIds]);
 
-  // Debug user state
-  useEffect(() => {
-    console.log('🔍 Current user state changed:', currentUser);
-    console.log('🔍 User has ID?', currentUser?.id);
-    console.log('🔍 User type:', currentUser?.user_type);
-    console.log('🔍 Full user object:', JSON.stringify(currentUser, null, 2));
-  }, [currentUser]);
-
   // Load user coins when user changes
   useEffect(() => {
     const loadUserCoins = async () => {
@@ -414,189 +362,167 @@ const EnhancedFarmMap = forwardRef(({
   }, [currentUser]);
 
   const handleBuyNow = async (product) => {
-    console.log('=== PURCHASE DEBUG START ===');
-    console.log('Current user object:', currentUser);
-    console.log('Current user ID:', currentUser?.id);
-    console.log('Product being purchased:', product);
-    console.log('=== PURCHASE DEBUG END ===');
-    
-    if (!currentUser || !currentUser.id) {
-      if (onNotification) {
-        onNotification('Please log in to make a purchase.', 'error');
-      }
-      return;
+  console.log('=== PURCHASE DEBUG START ===');
+  console.log('Current user object:', currentUser);
+  console.log('Current user ID:', currentUser?.id);
+  console.log('Product being purchased:', product);
+  console.log('=== PURCHASE DEBUG END ===');
+  
+  if (!currentUser || !currentUser.id) {
+    if (onNotification) {
+      onNotification('Please log in to make a purchase.', 'error');
     }
-    
-    const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
-    const totalCostInCoins = Math.ceil(totalCostInDollars); // 1 coin = $100, so we need totalCostInDollars/100 coins
-    
-    // Reset insufficient funds error
-    setInsufficientFunds(false);
-    
-    // Check if user has sufficient coins using coinService
-    const hasSufficientCoins = await coinService.hasSufficientCoins(currentUser.id, totalCostInCoins);
-    if (!hasSufficientCoins) {
-      setInsufficientFunds(true);
-      return;
+    return;
+  }
+  
+  const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
+  const totalCostInCoins = Math.ceil(totalCostInDollars);
+  
+  // Reset insufficient funds error
+  setInsufficientFunds(false);
+  
+  // Check if user has sufficient coins using coinService
+  const hasSufficientCoins = await coinService.hasSufficientCoins(currentUser.id, totalCostInCoins);
+  if (!hasSufficientCoins) {
+    setInsufficientFunds(true);
+    return;
+  }
+  
+  // Check if user is trying to purchase from their own farm
+  if (currentUser && (product.farmer_id === currentUser.id || product.created_by === currentUser.id)) {
+    if (onNotification) {
+      onNotification('You cannot purchase from your own farm!', 'error');
     }
+    return;
+  }
+  
+  try {
+    // Create order data
+    const orderData = {
+      id: Date.now(),
+      fieldId: product.id,
+      product_name: product.name,
+      name: product.name,
+      farmer_name: product.farmer_name || 'Farm Owner',
+      farmer_id: product.farmer_id || product.created_by,
+      location: product.location || 'Unknown Location',
+      area_rented: quantity,
+      area: quantity,
+      crop_type: product.category || 'Mixed Crops',
+      total_cost: totalCostInDollars,
+      cost: totalCostInDollars,
+      price_per_unit: product.price || 0.55,
+      monthly_rent: Math.round(totalCostInDollars / 6),
+      status: 'confirmed',
+      start_date: new Date().toISOString(),
+      end_date: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      progress: 0,
+      notes: `Purchased via marketplace. Shipping: ${selectedShipping || 'Delivery'}`,
+      shipping_method: selectedShipping || 'Delivery',
+      selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
+      selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
+      created_at: new Date().toISOString()
+    };
     
-    // Check if user is trying to purchase from their own farm
-    if (currentUser && (product.farmer_id === currentUser.id || product.created_by === currentUser.id)) {
-      if (onNotification) {
-        onNotification('You cannot purchase from your own farm!', 'error');
-      }
-      return;
-    }
-    
-    try {
-      // Create order data
-      const orderData = {
-        id: Date.now(),
-        fieldId: product.id,
-        product_name: product.name,
-        name: product.name,
-        farmer_name: product.farmer_name || 'Farm Owner',
-        farmer_id: product.farmer_id || product.created_by,
-        location: product.location || 'Unknown Location',
-        area_rented: quantity,
-        area: quantity,
-        crop_type: product.category || 'Mixed Crops',
-        total_cost: totalCostInDollars,
-        cost: totalCostInDollars,
-        price_per_unit: product.price || 0.55,
-        monthly_rent: Math.round(totalCostInDollars / 6), // Assuming 6-month rental
-        status: 'confirmed',
-        start_date: new Date().toISOString(),
-        end_date: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(), // 6 months from now
-        progress: 0,
-        notes: `Purchased via marketplace. Shipping: ${selectedShipping || 'Delivery'}`,
-        shipping_method: selectedShipping || 'Delivery',
+    // Create order via real API
+    console.log('Current user for order creation:', currentUser);
+    if (currentUser && currentUser.id) {
+      const apiOrderData = {
+        buyer_id: currentUser.id,
+        field_id: product.id,
+        quantity: quantity,
+        total_price: totalCostInDollars,
+        status: 'active',
         selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
-        selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
-        created_at: new Date().toISOString()
+        selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null
       };
       
-      // Note: Removed deprecated storage service calls - using API only
-      
-      // Create order via real API
-      console.log('Current user for order creation:', currentUser);
-      if (currentUser && currentUser.id) {
-        const apiOrderData = {
-          buyer_id: currentUser.id,
-          field_id: product.id,
-          quantity: quantity,
-          total_price: totalCostInDollars,
-          status: 'active',
-          selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
-          selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null
-        };
+      console.log('Creating order with API data:', apiOrderData);
+      try {
+        const orderResponse = await orderService.createOrder(apiOrderData);
+        console.log('Order created successfully:', orderResponse.data);
         
-        console.log('Creating order with API data:', apiOrderData);
-        try {
-          const orderResponse = await orderService.createOrder(apiOrderData);
-          console.log('Order created successfully:', orderResponse.data);
+        // Create notification for the farmer
+        const farmerId = product.farmer_id || product.created_by;
+        if (farmerId) {
+          const notificationData = {
+            user_id: farmerId,
+            message: `New order received! ${currentUser.name || 'A buyer'} purchased ${quantity}m² of your field "${product.name}" for $${totalCostInDollars.toFixed(2)}`,
+            type: 'success'
+          };
           
-          // Create notification for the farmer
-          const farmerId = product.farmer_id || product.created_by;
-          if (farmerId) {
-            const notificationData = {
-              user_id: farmerId,
-              message: `New order received! ${currentUser.name || 'A buyer'} purchased ${quantity}m² of your field "${product.name}" for $${totalCostInDollars.toFixed(2)}`,
-              type: 'success'
-            };
-            
-            try {
-              await notificationsService.create(notificationData);
-              console.log('Farmer notification created successfully');
-            } catch (notifError) {
-              console.error('Failed to create farmer notification:', notifError);
-            }
+          try {
+            await notificationsService.create(notificationData);
+            console.log('Farmer notification created successfully');
+          } catch (notifError) {
+            console.error('Failed to create farmer notification:', notifError);
           }
-        } catch (error) {
-          console.error('Failed to create order via API:', error);
-          console.error('Error details:', error.response?.data || error.message);
-          // Fall back to mock service for now
-          await mockOrderService.createOrder(orderData);
         }
-      } else {
-        console.log('No current user or user ID, falling back to mock service');
-        // Fall back to mock service if no user
+      } catch (error) {
+        console.error('Failed to create order via API:', error);
+        console.error('Error details:', error.response?.data || error.message);
+        // Fall back to mock service for now
         await mockOrderService.createOrder(orderData);
       }
-      
-      // Note: Field purchase status managed via API
-      
-      // Update UI state
-      setPurchasedFarms(prev => new Set([...prev, product.id]));
-      
-      // Deduct coins using coinService
-      await coinService.deductCoins(currentUser.id, totalCostInCoins);
-      
-      // Refresh coin balance
-      const updatedCoins = await coinService.getUserCoins(currentUser.id);
-      setUserCoins(updatedCoins);
-      
-      // Immediately refresh notifications to show purchase notification
-      if (onNotificationRefresh) {
-        onNotificationRefresh();
-      }
-      
-      // Immediately refresh coin count in header
-      if (onCoinRefresh) {
-        onCoinRefresh();
-      }
-      
-      // Note: Notification is automatically created by the backend when order is placed
-      setSelectedProduct(null);
-      setQuantity(1);
-      setInsufficientFunds(false);
-      setSelectedHarvestDate(null);
-      
-      setBlinkingFarms(prev => new Set([...prev, product.id]));
-      setTimeout(() => {
-        setBlinkingFarms(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(product.id);
-          return newSet;
-        });
-      }, 3000);
-      
-      // Update UI to reflect purchase status (using API-based approach)
-      // The purchase status is now managed via the database, so we just update the local UI state
-      // In a full implementation, we would reload the fields from the API to get updated status
-      
-      // If this is a farmer-created field, create a farm order and send notification
-      if (product.isFarmerCreated) {
-        const farmOrder = {
-          id: `order_${Date.now()}`,
-          fieldId: product.id,
-          fieldName: product.name,
-          buyerId: 'buyer@test.com', // Current buyer
-          buyerName: 'Test Buyer',
-          farmerId: product.createdBy || 'farmer@test.com',
-          quantity: quantity,
-          totalPrice: totalCostInCoins,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          shippingMethod: selectedShipping || 'Delivery'
-        };
-        
-        // Farm orders and notifications are now managed via API
-        // TODO: Implement API calls for farm orders and notifications
-        
-        // Note: Notification already sent above, no need for duplicate notification
-      }
-      
-    } catch (error) {
-      console.error('Failed to create order:', error);
-      if (onNotification) {
-        onNotification('Purchase failed. Please try again.', 'error');
-      }
-      setSelectedProduct(null);
-      setInsufficientFunds(false);
-      setQuantity(1);
+    } else {
+      console.log('No current user or user ID, falling back to mock service');
+      await mockOrderService.createOrder(orderData);
     }
-  };
+    
+    // START: Purchase Animation Logic
+    // Add to purchased farms for permanent glow
+    setPurchasedFarms(prev => new Set([...prev, product.id]));
+    
+    // Start blinking animation
+    setBlinkingFarms(prev => new Set([...prev, product.id]));
+    
+    // Stop blinking after 5 seconds but keep the permanent glow
+    setTimeout(() => {
+      setBlinkingFarms(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(product.id);
+        return newSet;
+      });
+    }, 5000); // Blink for 5 seconds
+    // END: Purchase Animation Logic
+    
+    // Deduct coins using coinService
+    await coinService.deductCoins(currentUser.id, totalCostInCoins);
+    
+    // Refresh coin balance
+    const updatedCoins = await coinService.getUserCoins(currentUser.id);
+    setUserCoins(updatedCoins);
+    
+    // Immediately refresh notifications to show purchase notification
+    if (onNotificationRefresh) {
+      onNotificationRefresh();
+    }
+    
+    // Immediately refresh coin count in header
+    if (onCoinRefresh) {
+      onCoinRefresh();
+    }
+    
+    // Note: Notification is automatically created by the backend when order is placed
+    setSelectedProduct(null);
+    setQuantity(1);
+    setInsufficientFunds(false);
+    setSelectedHarvestDate(null);
+    
+    if (onNotification) {
+      onNotification(`Successfully purchased ${quantity}m² of ${product.name}!`, 'success');
+    }
+    
+  } catch (error) {
+    console.error('Failed to create order:', error);
+    if (onNotification) {
+      onNotification('Purchase failed. Please try again.', 'error');
+    }
+    setSelectedProduct(null);
+    setInsufficientFunds(false);
+    setQuantity(1);
+  }
+};
 
 
 
@@ -657,224 +583,269 @@ const EnhancedFarmMap = forwardRef(({
   return (
     <div style={{ height: '100vh', width: '100%', position: 'relative'}}>
       <MapboxMap
-        ref={mapRef}
-        {...viewState}
-        onMove={evt => setViewState(evt.viewState)}
-        onClick={() => {
-              setSelectedProduct(null);
-              setPopupPosition(null); // Also clear popup position
-              setInsufficientFunds(false);
-            }}
-        mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
-        style={{ width: '100%', height: '100%', marginTop: '-65px' }}
-        mapboxAccessToken={process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}
-        projection="globe"
-        initialViewState={{
-          longitude: 120,
-          latitude: 0,
-          zoom: 4,
-        }}
-      >
+  ref={mapRef}
+  {...viewState}
+  onMove={evt => setViewState(evt.viewState)}
+  onClick={() => {
+    setSelectedProduct(null);
+    setPopupPosition(null);
+    setInsufficientFunds(false);
+  }}
+  mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
+  style={{ width: '100%', height: '100%', marginTop: '-65px' }}
+  mapboxAccessToken={process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}
+  projection="globe"
+  initialViewState={{
+    longitude: 120,
+    latitude: 0,
+    zoom: isMobile ? 8 : 4, // Consistent zoom level for both mobile and desktop
+  }}
+>
 
         <NavigationControl position="top-right" style={{ marginTop: '80px', marginRight: '10px' }} />
         <FullscreenControl position="top-right" style={{ marginTop: '35px', marginRight: '10px' }} />
         
         {/* Home Control Button */}
-        <div 
-          style={{
-            position: 'absolute',
-            top: '170px',
-            right: '10px',
-            zIndex: 1
-          }}
-        >
-          <button
-            onClick={() => {
-              setSelectedProduct(null); // Close any open popup
-              setPopupPosition(null); // Also clear popup position
-              setInsufficientFunds(false);
-              
-              // Zoom to fit all farms instead of a fixed global view
-              if (mapRef.current && filteredFarms.length > 0) {
-                const farmsWithCoords = filteredFarms.filter(farm => farm.coordinates);
-                
-                if (farmsWithCoords.length > 0) {
-                  const coordinates = farmsWithCoords.map(farm => {
-                    if (Array.isArray(farm.coordinates)) {
-                      return farm.coordinates;
-                    } else if (typeof farm.coordinates === 'object') {
-                      return [farm.coordinates.lng || farm.coordinates.longitude, farm.coordinates.lat || farm.coordinates.latitude];
-                    }
-                    return null;
-                  }).filter(coord => coord && coord[0] != null && coord[1] != null);
-                  
-                  if (coordinates.length > 0) {
-                    const lngs = coordinates.map(coord => coord[0]);
-                    const lats = coordinates.map(coord => coord[1]);
-                    const minLng = Math.min(...lngs);
-                    const maxLng = Math.max(...lngs);
-                    const minLat = Math.min(...lats);
-                    const maxLat = Math.max(...lats);
-                    
-                    mapRef.current.fitBounds(
-                      [[minLng, minLat], [maxLng, maxLat]],
-                      { padding: 100, duration: 2000 }
-                    );
-                  } else {
-                    // Fallback to default view if no coordinates
-                    mapRef.current.flyTo({
-                      center: [120, 0],
-                      zoom: 4,
-                      duration: 2000,
-                      easing: (t) => t * (2 - t)
-                    });
-                  }
-                } else {
-                  // Fallback to default view if no farms
-                  mapRef.current.flyTo({
-                    center: [120, 0],
-                    zoom: 4,
-                    duration: 2000,
-                    easing: (t) => t * (2 - t)
-                  });
-                }
-              }
-            }}
-            style={{
-              background: '#fff',
-              border: '2px solid rgba(0,0,0,.1)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              padding: '0',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              color: '#333',
-              boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
-              width: '29px',
-              height: '29px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Reset to home view"
-          >
-            🏠
-          </button>
-        </div>
+        
+<div 
+  style={{
+    position: 'absolute',
+    top: '170px',
+    right: '10px',
+    zIndex: 1
+  }}
+>
+  <button
+    onClick={() => {
+      setSelectedProduct(null);
+      setPopupPosition(null);
+      setInsufficientFunds(false);
+      
+      if (mapRef.current && filteredFarms.length > 0) {
+        const farmsWithCoords = filteredFarms.filter(farm => farm.coordinates);
+        
+        if (farmsWithCoords.length > 0) {
+          const coordinates = farmsWithCoords.map(farm => {
+            if (Array.isArray(farm.coordinates)) {
+              return farm.coordinates;
+            } else if (typeof farm.coordinates === 'object') {
+              return [farm.coordinates.lng || farm.coordinates.longitude, farm.coordinates.lat || farm.coordinates.latitude];
+            }
+            return null;
+          }).filter(coord => coord && coord[0] != null && coord[1] != null);
+          
+          if (coordinates.length > 0) {
+            const lngs = coordinates.map(coord => coord[0]);
+            const lats = coordinates.map(coord => coord[1]);
+            const minLng = Math.min(...lngs);
+            const maxLng = Math.max(...lngs);
+            const minLat = Math.min(...lats);
+            const maxLat = Math.max(...lats);
+            
+            mapRef.current.fitBounds(
+              [[minLng, minLat], [maxLng, maxLat]],
+              { padding: 100, duration: 2000 }
+            );
+          } else {
+            // Fallback to default view with consistent zoom
+            mapRef.current.flyTo({
+              center: [120, 0],
+              zoom: 4, // Consistent zoom for mobile and desktop
+              duration: 2000,
+              easing: (t) => t * (2 - t)
+            });
+          }
+        } else {
+          // Fallback to default view with consistent zoom
+          mapRef.current.flyTo({
+            center: [15, 45],
+            zoom: 8, // Consistent zoom for mobile and desktop
+            duration: 2000,
+            easing: (t) => t * (2 - t)
+          });
+        }
+      }
+    }}
+    style={{
+      background: '#fff',
+      border: '2px solid rgba(0,0,0,.1)',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      padding: '0',
+      fontSize: '14px',
+      fontWeight: 'bold',
+      color: '#333',
+      boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
+      width: '29px',
+      height: '29px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}
+    title="Reset to home view"
+  >
+    🏠
+  </button>
+</div>
 
 
 
         {/* Farm Markers */}
+        // EnhancedFarmMap.js - Fix the marker rendering section
+
+// Replace the entire marker rendering section with this:
+
+        {/* Farm Markers */}
         {(() => {
           console.log('🔍 MARKER RENDER DEBUG - filteredFarms length:', filteredFarms.length);
-          console.log('🔍 MARKER RENDER DEBUG - filteredFarms:', filteredFarms.map(f => ({ id: f.id, name: f.name, coordinates: f.coordinates })));
+          console.log('🔍 MARKER RENDER DEBUG - filteredFarms:', filteredFarms.map(f => ({ 
+            id: f.id, 
+            name: f.name, 
+            coordinates: f.coordinates,
+            hasValidCoords: f.coordinates && Array.isArray(f.coordinates) && f.coordinates.length === 2
+          })));
           
-          return filteredFarms.map((product) => {
-            console.log('🎯 EnhancedFarmMap Debug - Processing product:', product.name, 'category:', product.category, 'coordinates:', product.coordinates);
+          // Filter only farms with valid coordinates
+          const farmsWithValidCoords = filteredFarms.filter(farm => {
+            if (!farm.coordinates) {
+              console.warn('⚠️ Skipping farm with no coordinates:', farm.name);
+              return false;
+            }
+            
+            let longitude, latitude;
+            
+            if (Array.isArray(farm.coordinates)) {
+              longitude = farm.coordinates[0];
+              latitude = farm.coordinates[1];
+            } else if (typeof farm.coordinates === 'object') {
+              longitude = farm.coordinates.lng || farm.coordinates.longitude;
+              latitude = farm.coordinates.lat || farm.coordinates.latitude;
+            } else {
+              return false;
+            }
+            
+            const isValid = longitude != null && latitude != null && 
+                          !isNaN(parseFloat(longitude)) && !isNaN(parseFloat(latitude));
+            
+            if (!isValid) {
+              console.warn('⚠️ Skipping farm with invalid coordinates:', farm.name, farm.coordinates);
+            }
+            
+            return isValid;
+          });
           
-          // Handle coordinate format conversion and null checks
-          let longitude, latitude;
+          console.log('✅ Farms with valid coordinates:', farmsWithValidCoords.length);
           
-          if (!product.coordinates) {
-            console.warn('⚠️ Skipping product with no coordinates:', product.name);
-            return null; // Skip rendering if no coordinates
-          }
-          
-          if (Array.isArray(product.coordinates)) {
-            // Array format: [longitude, latitude]
-            longitude = product.coordinates[0];
-            latitude = product.coordinates[1];
-          } else if (typeof product.coordinates === 'object') {
-            // Object format: { lat: ..., lng: ... } or { latitude: ..., longitude: ... }
-            longitude = product.coordinates.lng || product.coordinates.longitude;
-            latitude = product.coordinates.lat || product.coordinates.latitude;
-          } else {
-            return null; // Skip if coordinates format is unknown
-          }
-          
-          // Skip if coordinates are still null/undefined
-          if (longitude == null || latitude == null) {
-            return null;
-          }
-          
-          console.log('🗺️ Rendering marker for:', product.name, 'at', latitude, longitude);
-          
-          return (
-            <Marker
-              key={product.id}
-              longitude={longitude}
-              latitude={latitude}
-              anchor="center"
-            >
-            <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
-              <img
-                src={getProductImageSrc(product)}
-                alt={product.name || product.productName || 'Product'}
-                onError={(e) => { 
-                  // Debug: image failed, fallback to product icon
-                  // eslint-disable-next-line no-console
-                  console.warn('[Marker Image Error] Fallback to icon:', product.id, product.name, product.image);
-                  const fallback = getProductIcon(product.subcategory || product.category);
-                  if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
-                }}
-                style={{
-                  width: isMobile ? '20px' : '30px',
-                  height: isMobile ? '20px' : '30px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                  filter: blinkingFarms.has(product.id) 
-                    ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
-                    : isPurchased(product.id) 
-                    ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                    : rentedFields.has(product.id)
-                    ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
-                    : product.isFarmerCreated
-                    ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                    : 'none',
-                  backgroundColor: 'transparent',
-                  padding: '0',
-                  transition: 'all 0.3s ease',
-
-                  animation: blinkingFarms.has(product.id) 
-                    ? 'glow-blink 0.8s infinite' 
-                    : isPurchased(product.id) 
-                    ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
-                    : rentedFields.has(product.id)
-                    ? 'glow-steady-green 2s infinite'
-                    : product.isFarmerCreated
-                    ? 'glow-farmer-created 3s infinite'
-                    : 'none',
-                }}
-              />
-              {/* Farmer Created Badge */}
-              {product.isFarmerCreated && (
-                <div style={{
-                  position: 'absolute',
-                  top: isMobile ? '-5px' : '-8px',
-                  right: isMobile ? '-5px' : '-8px',
-                  width: isMobile ? '12px' : '16px',
-                  height: isMobile ? '12px' : '16px',
-                  backgroundColor: '#4CAF50',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: isMobile ? '8px' : '10px',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  border: '2px solid white',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                  zIndex: 10
-                }}>
-                  F
+          return farmsWithValidCoords.map((product) => {
+            console.log('🎯 Rendering marker for:', product.name, 'at', product.coordinates);
+            
+            let longitude, latitude;
+            
+            if (Array.isArray(product.coordinates)) {
+              longitude = product.coordinates[0];
+              latitude = product.coordinates[1];
+            } else {
+              longitude = product.coordinates.lng || product.coordinates.longitude;
+              latitude = product.coordinates.lat || product.coordinates.latitude;
+            }
+            
+            // Final validation
+            if (longitude == null || latitude == null || isNaN(longitude) || isNaN(latitude)) {
+              console.error('❌ Invalid coordinates after processing:', product.name, product.coordinates);
+              return null;
+            }
+            
+            return (
+              <Marker
+                key={`marker-${product.id}-${longitude}-${latitude}`} // Unique key with coordinates
+                longitude={parseFloat(longitude)}
+                latitude={parseFloat(latitude)}
+                anchor="center"
+              >
+                <div 
+                  style={{ 
+                    position: 'relative', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s ease',
+                    width: isMobile ? '20px' : '30px',
+                    height: isMobile ? '20px' : '30px'
+                  }} 
+                  onClick={(e) => handleProductClick(e, product)}
+                >
+                  <img
+                    src={getProductImageSrc(product)}
+                    alt={product.name || product.productName || 'Product'}
+                    onError={(e) => { 
+                      console.warn('[Marker Image Error] Fallback to icon for:', product.id, product.name);
+                      const fallback = getProductIcon(product.subcategory || product.category);
+                      if (e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                        e.currentTarget.style.objectFit = 'contain'; // Ensure icon fits
+                      }
+                    }}
+                    onLoad={(e) => {
+                      console.log('✅ Marker image loaded successfully:', product.name);
+                      e.currentTarget.style.opacity = '1';
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      display: 'block',
+                      border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
+                      filter: blinkingFarms.has(product.id) 
+                        ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
+                        : isPurchased(product.id) 
+                        ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
+                        : rentedFields.has(product.id)
+                        ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
+                        : product.isFarmerCreated
+                        ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
+                        : 'none',
+                      backgroundColor: 'transparent',
+                      padding: '0',
+                      transition: 'all 0.3s ease',
+                      opacity: 0, // Start hidden, fade in on load
+                      animation: blinkingFarms.has(product.id) 
+                        ? 'glow-blink 0.8s infinite' 
+                        : isPurchased(product.id) 
+                        ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
+                        : rentedFields.has(product.id)
+                        ? 'glow-steady-green 2s infinite'
+                        : product.isFarmerCreated
+                        ? 'glow-farmer-created 3s infinite'
+                        : 'none',
+                    }}
+                  />
+                  
+                  {/* Farmer Created Badge */}
+                  {product.isFarmerCreated && (
+                    <div style={{
+                      position: 'absolute',
+                      top: isMobile ? '-5px' : '-8px',
+                      right: isMobile ? '-5px' : '-8px',
+                      width: isMobile ? '12px' : '16px',
+                      height: isMobile ? '12px' : '16px',
+                      backgroundColor: '#4CAF50',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: isMobile ? '8px' : '10px',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      border: '2px solid white',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      zIndex: 10
+                    }}>
+                      F
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Marker>
-          );
-        }).filter(Boolean);
+              </Marker>
+            );
+          });
         })()}
 
 
@@ -1580,6 +1551,7 @@ const EnhancedFarmMap = forwardRef(({
           }
 
           @keyframes glow-steady-blue {
+
             0% { 
               filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 16px rgba(59, 130, 246, 0.6));
             }
@@ -1616,5 +1588,4 @@ const EnhancedFarmMap = forwardRef(({
     </div>
   );
 });
-
 export default EnhancedFarmMap;
