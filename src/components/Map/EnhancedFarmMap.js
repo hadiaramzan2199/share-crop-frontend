@@ -125,10 +125,26 @@ const EnhancedFarmMap = forwardRef(({
   const deliveryAnimatedIdsRef = useRef(new Set());
   const [showDeliveryPanel, setShowDeliveryPanel] = useState(false);
   const deliveryIconRef = useRef(null);
+  const [deliveryPanelLeft, setDeliveryPanelLeft] = useState(54);
 
   useEffect(() => {
     setShowDeliveryPanel(false);
   }, []);
+
+  useEffect(() => {
+    if (!showDeliveryPanel) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const mapRect = map.getContainer().getBoundingClientRect();
+    const iconRect = deliveryIconRef.current?.getBoundingClientRect();
+    const cardWidth = isMobile ? 60 : 72;
+    const margin = 12;
+    let left = 54;
+    if (iconRect) left = (iconRect.right - mapRect.left) + margin;
+    const maxLeft = Math.max(margin, mapRect.width - cardWidth - margin);
+    if (!Number.isFinite(left)) left = 54;
+    setDeliveryPanelLeft(Math.max(margin, Math.min(maxLeft, left)));
+  }, [showDeliveryPanel, isMobile, viewState]);
   const canonicalizeCategory = useCallback((raw) => {
     const s = raw ? raw.toString().trim() : '';
     let slug = s.toLowerCase().replace(/[\s_]+/g, '-');
@@ -1678,38 +1694,56 @@ const EnhancedFarmMap = forwardRef(({
         const pt = map.project([lng, lat]);
         const baseX = mapRect.left + pt.x - layerRect.left;
         const baseY = mapRect.top + pt.y - layerRect.top;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const cardW = isMobile ? 64 : 76;
+        const cardH = isMobile ? 64 : 76;
+        const margin = 12;
+        const minCenterX = margin + cardW / 2;
+        const maxCenterX = layerRect.width - margin - cardW / 2;
+        const minCenterY = margin + cardH / 2;
+        const maxCenterY = layerRect.height - margin - cardH / 2;
+        const baseXc = clamp(baseX, minCenterX, maxCenterX);
+        const baseYc = clamp(baseY, minCenterY, maxCenterY);
         let targetX;
         let targetY;
         if (deliveryIconRef.current) {
           const iconRect = deliveryIconRef.current.getBoundingClientRect();
           targetX = (iconRect.left + iconRect.width / 2) - layerRect.left;
-          targetY = (iconRect.top + iconRect.height / 2) - layerRect.top;
+          targetY = (iconRect.top + iconRect.height / 2) - layerRect.top + (isMobile ? 10 : 16);
         } else {
           targetX = 12;
-          targetY = (isMobile ? 118 : 140);
+          targetY = (isMobile ? 130 : 156);
         }
+        targetX = clamp(targetX, minCenterX, maxCenterX);
+        targetY = clamp(targetY, minCenterY, maxCenterY);
         const id = `deliv-${f.id}-${Date.now()}`;
-        setDeliveryFlyCards(prev => [...prev, { id, product: f, rented: pa || 0, total: f.total_area || 0, x: baseX, y: baseY, tx: targetX, ty: targetY, stage: 'start' }]);
-        setTimeout(() => {
-          setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, x: c.tx, y: c.ty, stage: 'fly' } : c));
-          setTimeout(() => {
-            setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, stage: 'arrive' } : c));
+        setDeliveryFlyCards(prev => [...prev, { id, product: f, rented: pa || 0, total: f.total_area || 0, x: baseXc, y: baseYc, tx: targetX, ty: targetY, stage: 'start' }]);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, x: c.tx, y: c.ty, stage: 'fly' } : c));
             setTimeout(() => {
-              setDeliveryFlyCards(prev => prev.filter(c => c.id !== id));
-              setDeliveryTodayCards(prev => {
-                const name = f.name || entry?.name || 'Field';
-                const category = f.subcategory || f.category || entry?.category;
-                return [...prev, { id: f.id, name, category, product: f }];
-              });
-            }, 120);
-          }, 2400);
-        }, 0);
+              setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, stage: 'arrive' } : c));
+              setTimeout(() => {
+                setDeliveryFlyCards(prev => prev.filter(c => c.id !== id));
+                setDeliveryTodayCards(prev => {
+                  const name = f.name || entry?.name || 'Field';
+                  const category = f.subcategory || f.category || entry?.category;
+                  return [...prev, { id: f.id, name, category, product: f }];
+                });
+              }, 120);
+            }, 2400);
+          });
+        });
       };
-      if (typeof map.isMoving === 'function' && (map.isMoving() || map.isZooming?.())) {
-        map.once('moveend', startAnimation);
-      } else {
-        startAnimation();
-      }
+      const scheduleStart = () => {
+        const run = () => setTimeout(startAnimation, 120);
+        if (typeof map.once === 'function') {
+          map.once('idle', run);
+        } else {
+          run();
+        }
+      };
+      scheduleStart();
     });
   }, [farms, purchasedProducts, isHarvestToday, showDeliveryPanel]);
 
@@ -2073,7 +2107,7 @@ const EnhancedFarmMap = forwardRef(({
       </div>
 
       {showDeliveryPanel && deliveryTodayCards.length > 0 && (
-        <div style={{ position: 'absolute', top: isMobile ? '100px' : '120px', left: '54px', zIndex: 1100, display: 'flex', flexDirection: 'column', gap: isMobile ? '8px' : '10px' }}>
+        <div style={{ position: 'absolute', top: isMobile ? '120px' : '140px', left: `${deliveryPanelLeft}px`, zIndex: 1100, display: 'flex', flexDirection: 'column', gap: isMobile ? '8px' : '10px' }}>
           {deliveryTodayCards.slice(0, 5).map(item => (
             <div key={`delivery-card-${item.id}`} style={{ width: isMobile ? '60px' : '72px', borderRadius: isMobile ? '10px' : '12px', background: 'linear-gradient(135deg, #ffffff 0%, #fff7e6 100%)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ffe0b2', overflow: 'hidden', animation: 'cardGlow 2800ms ease-in-out infinite' }}>
               <div style={{ width: '100%', height: isMobile ? '26px' : '30px', backgroundColor: '#fff0d9' }}>
