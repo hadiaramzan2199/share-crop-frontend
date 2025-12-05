@@ -109,7 +109,8 @@ const FarmerView = () => {
               pricePerM2: field.price_per_m2, // Map price_per_m2 to pricePerM2
               fieldSize: field.field_size, // Map field_size to fieldSize
               productionRate: field.production_rate, // Map production_rate to productionRate
-              location: field.location, // Ensure location is preserved
+              location: field.location,
+              shippingScope: field.shipping_scope
             }));
           setFields(mappedFields);
           setFilteredFields(mappedFields);
@@ -245,7 +246,7 @@ const FarmerView = () => {
     try {
       if (editingField) {
         // Update existing field
-        const updatedField = { ...editingField, ...formData };
+        const updatedField = { ...editingField, ...formData, shipping_scope: formData.shippingScope };
         const response = await api.put(`/api/fields/${editingField.id}`, updatedField);
         
         // Map the response data to frontend format
@@ -255,7 +256,8 @@ const FarmerView = () => {
           pricePerM2: response.data.price_per_m2,
           fieldSize: response.data.field_size,
           productionRate: response.data.production_rate,
-          location: response.data.location, // Ensure location is properly mapped
+          location: response.data.location,
+          shippingScope: response.data.shipping_scope,
         };
         
         const mappedFieldWithSubcategory = {
@@ -315,6 +317,7 @@ const FarmerView = () => {
           available_area: formData.fieldSize,
           total_area: formData.fieldSize,
           weather: 'Sunny',
+          shipping_scope: formData.shippingScope,
         };
 
         const response = await api.post('/api/fields', newField);
@@ -326,7 +329,8 @@ const FarmerView = () => {
           pricePerM2: response.data.price_per_m2,
           fieldSize: response.data.field_size,
           productionRate: response.data.production_rate,
-          location: response.data.location || actualLocation, // Ensure location is properly mapped
+          location: response.data.location || actualLocation,
+          shippingScope: response.data.shipping_scope,
           // Ensure coordinates exist for map markers
           coordinates: response.data.coordinates ?? (
             response.data.longitude != null && response.data.latitude != null

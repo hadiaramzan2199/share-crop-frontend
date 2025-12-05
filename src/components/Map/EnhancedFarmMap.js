@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react';
-import { Box, Card, CardContent, Chip, Divider, LinearProgress, Typography, Button, IconButton, TextField } from '@mui/material';
-import { LocationOn, Agriculture, CalendarToday, MoreVert } from '@mui/icons-material';
+import { Box, Card, CardContent, Chip, Divider, LinearProgress, Typography, Button, IconButton, TextField, Paper } from '@mui/material';
+import { LocationOn, Agriculture, CalendarToday, MoreVert, HomeWork } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import coinService from '../../services/coinService';
 import fieldsService from '../../services/fields';
@@ -60,9 +60,9 @@ const EnhancedFarmMap = forwardRef(({
   const popupFixedRef = useRef({ left: null, top: null, transform: null });
 
   const [viewState, setViewState] = useState({
-    longitude: 15,
-    latitude: 45,
-    zoom: 3,
+    longitude: 12.5674,
+    latitude: 41.8719,
+    zoom: 0.1,
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [popupPosition, setPopupPosition] = useState(null);
@@ -91,6 +91,14 @@ const EnhancedFarmMap = forwardRef(({
   });
   const [addressError, setAddressError] = useState('');
   const [showAddressOverlay, setShowAddressOverlay] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [addressSearchLoading, setAddressSearchLoading] = useState(false);
+  const addressSearchTimeoutRef = useRef(null);
+  const addressOverlayContentRef = useRef(null);
+  const addressLine1Ref = useRef(null);
+  const [addressSuggestionsPos, setAddressSuggestionsPos] = useState(null);
+  const [userPosition, setUserPosition] = useState(null);
+  const [userLocationName, setUserLocationName] = useState('');
  
   const [userCoins, setUserCoins] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -115,6 +123,12 @@ const EnhancedFarmMap = forwardRef(({
   const deliveryFlyLayerRef = useRef(null);
   const [deliveryFlyCards, setDeliveryFlyCards] = useState([]);
   const deliveryAnimatedIdsRef = useRef(new Set());
+  const [showDeliveryPanel, setShowDeliveryPanel] = useState(false);
+  const deliveryIconRef = useRef(null);
+
+  useEffect(() => {
+    setShowDeliveryPanel(false);
+  }, []);
   const canonicalizeCategory = useCallback((raw) => {
     const s = raw ? raw.toString().trim() : '';
     let slug = s.toLowerCase().replace(/[\s_]+/g, '-');
@@ -189,6 +203,84 @@ const EnhancedFarmMap = forwardRef(({
     });
     return Array.from(map.values());
   }, []);
+
+  const fetchAddressSuggestions = useCallback(async (query) => {
+    const q = (query || '').trim();
+    if (!q) { setAddressSuggestions([]); return; }
+    setAddressSearchLoading(true);
+    try {
+      if (process.env.REACT_APP_MAPBOX_ACCESS_TOKEN) {
+        const resp = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}`);
+        const data = await resp.json();
+        const results = Array.isArray(data?.features) ? data.features.map(f => ({
+          name: f.text,
+          formatted_address: f.place_name,
+          context: f.context || [],
+        })) : [];
+        setAddressSuggestions(results);
+      } else {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=5`, { headers: { 'User-Agent': 'ShareCrop-Frontend/1.0' } });
+        const data = await resp.json();
+        const results = Array.isArray(data) ? data.map(it => ({
+          name: it.display_name?.split(',')[0] || it.display_name || q,
+          formatted_address: it.display_name || q,
+          address: it.address || {},
+        })) : [];
+        setAddressSuggestions(results);
+      }
+    } catch (e) {
+      setAddressSuggestions([]);
+    } finally {
+      setAddressSearchLoading(false);
+    }
+  }, []);
+
+  const applyAddressSelection = useCallback((place) => {
+    let city = newDeliveryAddress.city;
+    let state = newDeliveryAddress.state;
+    let zip = newDeliveryAddress.zip;
+    let country = newDeliveryAddress.country;
+    if (place.context && Array.isArray(place.context)) {
+      const pick = (prefix) => {
+        const item = place.context.find(c => typeof c.id === 'string' && c.id.startsWith(prefix));
+        return item ? (item.text || '') : '';
+      };
+      city = pick('place') || city;
+      state = pick('region') || state;
+      country = pick('country') || country;
+      zip = pick('postcode') || zip;
+    }
+    if (place.address && typeof place.address === 'object') {
+      city = place.address.city || place.address.town || place.address.village || city;
+      state = place.address.state || state;
+      country = place.address.country || country;
+      zip = place.address.postcode || zip;
+    }
+    setNewDeliveryAddress({
+      ...newDeliveryAddress,
+      line1: place.formatted_address || place.name || newDeliveryAddress.line1,
+      city,
+      state,
+      zip,
+      country,
+    });
+    setAddressSuggestions([]);
+    setAddressError('');
+  }, [newDeliveryAddress]);
+
+  useEffect(() => {
+    if (!showAddressOverlay || addressSuggestions.length === 0) { setAddressSuggestionsPos(null); return; }
+    const container = addressOverlayContentRef.current;
+    const target = addressLine1Ref.current;
+    if (!container || !target) return;
+    const cRect = container.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    setAddressSuggestionsPos({
+      top: (tRect.bottom - cRect.top) + (isMobile ? 6 : 8),
+      left: (tRect.left - cRect.left),
+      width: tRect.width,
+    });
+  }, [addressSuggestions, showAddressOverlay, isMobile]);
   const normalizeField = useCallback((f) => {
     const co = f.coordinates;
     let lng;
@@ -267,9 +359,46 @@ const EnhancedFarmMap = forwardRef(({
       occupied_area: Number.isFinite(occupied) ? occupied : f.occupied_area,
       purchased_area: Number.isFinite(purchasedArea) ? purchasedArea : f.purchased_area,
       available_area: Number.isFinite(availableArea) ? availableArea : f.available_area,
-      isPurchased: isPurchasedDerived
+      isPurchased: isPurchasedDerived,
+      shipping_scope: f.shipping_scope ?? f.shippingScope ?? 'Global'
     };
   }, []);
+
+  useEffect(() => {
+    if (!userPosition && typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setUserPosition({ latitude, longitude });
+          cachedReverseGeocode(latitude, longitude)
+            .then((name) => setUserLocationName(name))
+            .catch(() => {});
+        },
+        () => {}
+      );
+    }
+  }, [userPosition]);
+
+  const extractCityCountry = useCallback((s) => {
+    const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+    const city = (parts[0] || '').toLowerCase();
+    const country = (parts[parts.length - 1] || '').toLowerCase();
+    return { city, country };
+  }, []);
+
+  const isDeliveryAllowed = useCallback((prod) => {
+    if (!prod) return false;
+    const scopeRaw = prod.shipping_scope || prod.shippingScope || 'Global';
+    const scope = String(scopeRaw || '').toLowerCase();
+    if (scope === 'global') return true;
+    const prodLocStr = productLocations.get(prod.id) || prod.location || '';
+    const userLocStr = userLocationName || existingDeliveryAddress || (currentUser?.location || user?.location || '');
+    const p = extractCityCountry(prodLocStr);
+    const u = extractCityCountry(userLocStr);
+    if (scope === 'country') return Boolean(p.country && u.country && p.country === u.country);
+    if (scope === 'city') return Boolean(p.city && u.city && p.city === u.city);
+    return true;
+  }, [productLocations, userLocationName, existingDeliveryAddress, currentUser, user, extractCityCountry]);
 
   const triggerBurst = useCallback((product, qty) => {
     if (!mapRef.current || !product?.coordinates) return;
@@ -719,8 +848,11 @@ const EnhancedFarmMap = forwardRef(({
               
               if (coordinates.length > 0) {
                 if (!hasInitialFlyRef.current) {
-                  const center = getCenterFromCoords(coordinates);
-                  mapRef.current.flyTo({ center, zoom: 2, duration: 1500, essential: true });
+                  setTimeout(() => {
+                    if (mapRef.current) {
+                      mapRef.current.flyTo({ center: [12.5674, 41.8719], zoom: 2, duration: 2500, essential: true });
+                    }
+                  }, 600);
                   hasInitialFlyRef.current = true;
                 }
               }
@@ -1073,6 +1205,10 @@ const EnhancedFarmMap = forwardRef(({
       return;
     }
     if (selectedShipping === 'Delivery') {
+      if (!isDeliveryAllowed(product)) {
+        if (onNotification) onNotification('Delivery is unavailable at your location.', 'error');
+        return;
+      }
       setAddressError('');
       if (deliveryMode === 'existing') {
         if (!existingDeliveryAddress || existingDeliveryAddress.trim().length < 5) {
@@ -1542,14 +1678,22 @@ const EnhancedFarmMap = forwardRef(({
         const pt = map.project([lng, lat]);
         const baseX = mapRect.left + pt.x - layerRect.left;
         const baseY = mapRect.top + pt.y - layerRect.top;
-        const targetX = 12;
-        const targetY = (isMobile ? 118 : 140) + (deliveryTodayCards.length * (isMobile ? 56 : 64));
+        let targetX;
+        let targetY;
+        if (deliveryIconRef.current) {
+          const iconRect = deliveryIconRef.current.getBoundingClientRect();
+          targetX = (iconRect.left + iconRect.width / 2) - layerRect.left;
+          targetY = (iconRect.top + iconRect.height / 2) - layerRect.top;
+        } else {
+          targetX = 12;
+          targetY = (isMobile ? 118 : 140);
+        }
         const id = `deliv-${f.id}-${Date.now()}`;
         setDeliveryFlyCards(prev => [...prev, { id, product: f, rented: pa || 0, total: f.total_area || 0, x: baseX, y: baseY, tx: targetX, ty: targetY, stage: 'start' }]);
         setTimeout(() => {
-          setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, stage: 'fly' } : c));
+          setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, x: c.tx, y: c.ty, stage: 'fly' } : c));
           setTimeout(() => {
-            setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, x: c.tx, y: c.ty, stage: 'arrive' } : c));
+            setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, stage: 'arrive' } : c));
             setTimeout(() => {
               setDeliveryFlyCards(prev => prev.filter(c => c.id !== id));
               setDeliveryTodayCards(prev => {
@@ -1557,9 +1701,9 @@ const EnhancedFarmMap = forwardRef(({
                 const category = f.subcategory || f.category || entry?.category;
                 return [...prev, { id: f.id, name, category, product: f }];
               });
-            }, 200);
-          }, 1600);
-        }, 80);
+            }, 120);
+          }, 2400);
+        }, 0);
       };
       if (typeof map.isMoving === 'function' && (map.isMoving() || map.isZooming?.())) {
         map.once('moveend', startAnimation);
@@ -1567,7 +1711,7 @@ const EnhancedFarmMap = forwardRef(({
         startAnimation();
       }
     });
-  }, [farms, purchasedProducts, isHarvestToday]);
+  }, [farms, purchasedProducts, isHarvestToday, showDeliveryPanel]);
 
   // Update popup position when selected product changes or view moves; avoid jitter during programmatic animation
   useEffect(() => {
@@ -1612,6 +1756,7 @@ const EnhancedFarmMap = forwardRef(({
         ref={mapRef}
         {...viewState}
         onMove={evt => setViewState(evt.viewState)}
+        attributionControl={false}
         onClick={() => {
               setSelectedProduct(null);
               setPopupPosition(null); // Also clear popup position
@@ -1622,9 +1767,9 @@ const EnhancedFarmMap = forwardRef(({
         mapboxAccessToken={MAPBOX_TOKEN}
         projection="globe"
         initialViewState={{
-          longitude: 120,
-          latitude: 0,
-          zoom: 3,
+          longitude: 12.5674,
+          latitude: 41.8719,
+          zoom: 0.5,
         }}
       >
 
@@ -1714,7 +1859,7 @@ const EnhancedFarmMap = forwardRef(({
             }}
             title="Reset to home view"
           >
-            🏠
+            <HomeWork style={{ fontSize: isMobile ? '18px' : '20px', color: '#2196F3' }} />
           </button>
         </div>
 
@@ -1873,10 +2018,44 @@ const EnhancedFarmMap = forwardRef(({
 
       </MapboxMap>
 
+      {/* Delivery Toggle Icon - top-left of map container */}
+      <div 
+        style={{
+          position: 'absolute',
+          top: isMobile ? '60px' : '120px',
+          left: '10px',
+          zIndex: 1100,
+          pointerEvents: 'auto'
+        }}
+      >
+        <button
+          ref={deliveryIconRef}
+          onClick={() => setShowDeliveryPanel(prev => !prev)}
+          style={{
+            background: 'linear-gradient(90deg, rgba(255, 235, 59, 0.18), rgba(255, 152, 0, 0.2))',
+            border: '2px solid rgba(255, 152, 0, 0.35)',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            padding: '0',
+            fontSize: '20px',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(33,150,243,0.15)',
+            width: '40px',
+            height: '40px', 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title={showDeliveryPanel ? 'Hide deliveries' : 'Show deliveries'}
+        >
+          🚚
+        </button>
+      </div>
+
       {/* Custom Scale Bar */}
       <CustomScaleBar map={mapRef.current?.getMap()} />
 
-      <div ref={harvestLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1200 }}>
+      <div ref={harvestLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1050 }}>
         {harvestGifs.map(g => (
           <img
             key={`harvest-gif-${g.id}`}
@@ -1893,10 +2072,10 @@ const EnhancedFarmMap = forwardRef(({
         ))}
       </div>
 
-      {deliveryTodayCards.length > 0 && (
-        <div style={{ position: 'absolute', top: isMobile ? '118px' : '140px', left: isMobile ? '8px' : '12px', zIndex: 1100, display: 'flex', flexDirection: 'column', gap: isMobile ? '8px' : '10px' }}>
+      {showDeliveryPanel && deliveryTodayCards.length > 0 && (
+        <div style={{ position: 'absolute', top: isMobile ? '100px' : '120px', left: '54px', zIndex: 1100, display: 'flex', flexDirection: 'column', gap: isMobile ? '8px' : '10px' }}>
           {deliveryTodayCards.slice(0, 5).map(item => (
-            <div key={`delivery-card-${item.id}`} style={{ width: isMobile ? '60px' : '72px', borderRadius: isMobile ? '10px' : '12px', background: 'linear-gradient(135deg, #ffffff 0%, #fff7e6 100%)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ffe0b2', overflow: 'hidden', animation: 'cardSlideIn 600ms ease both, cardGlow 2800ms ease-in-out infinite' }}>
+            <div key={`delivery-card-${item.id}`} style={{ width: isMobile ? '60px' : '72px', borderRadius: isMobile ? '10px' : '12px', background: 'linear-gradient(135deg, #ffffff 0%, #fff7e6 100%)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ffe0b2', overflow: 'hidden', animation: 'cardGlow 2800ms ease-in-out infinite' }}>
               <div style={{ width: '100%', height: isMobile ? '26px' : '30px', backgroundColor: '#fff0d9' }}>
                 <img src={getProductImageSrc(item.product)} alt={item.name || 'Product'} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.src = getProductIcon(item.category); }} />
               </div>
@@ -1948,9 +2127,9 @@ const EnhancedFarmMap = forwardRef(({
                 position: 'absolute',
                 left: c.x,
                 top: c.y,
-                transform: 'translate(-50%, -50%)',
-                transition: 'left 1600ms cubic-bezier(0.22, 1, 0.36, 1), top 1600ms cubic-bezier(0.22, 1, 0.36, 1)',
-                animation: c.stage === 'fly' ? 'flipTravelY 700ms ease-in-out' : undefined,
+                transform: c.stage === 'arrive' ? 'translate(-50%, -50%) scale(0.6)' : 'translate(-50%, -50%)',
+                transition: 'left 2400ms cubic-bezier(0.22, 1, 0.36, 1), top 2400ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease',
+                animation: c.stage === 'fly' ? 'flipTravelY 900ms ease-in-out' : undefined,
               width: isMobile ? 64 : 76,
                 borderRadius: isMobile ? 8 : 10,
                 overflow: 'hidden',
@@ -1987,7 +2166,7 @@ const EnhancedFarmMap = forwardRef(({
       {/* Custom Popup */}
       {selectedProduct && popupPosition && (
   <div
-  key={`popup-${selectedProduct.id}-${Date.now()}`}
+  key={`popup-${selectedProduct.id}`}
     style={{
       position: 'absolute',
       left: popupPosition.left,
@@ -2105,6 +2284,7 @@ const EnhancedFarmMap = forwardRef(({
           e.target.style.transform = 'scale(1)';
           e.target.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
         }}
+        onClick={() => window.open('https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1', '_blank', 'noopener,noreferrer')}
         title="View Live Camera Feed"
         >
           <svg width={isMobile ? "16" : "18"} height={isMobile ? "16" : "18"} viewBox="0 0 24 24" fill="white">
@@ -2476,34 +2656,55 @@ const EnhancedFarmMap = forwardRef(({
                   if (selectedProduct.shipping_pickup) availableOptions.push('Pickup');
                   if (selectedProduct.shipping_delivery) availableOptions.push('Delivery');
                   const options = (availableOptions.length > 0 ? availableOptions : ['Delivery', 'Pickup']);
-                  return options.map((option) => (
-                    <div
-                      key={option}
-                      role="button"
-                      aria-pressed={selectedShipping === option}
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedShipping(option); setShippingError(false); } }}
-                      onClick={() => { setSelectedShipping(option); setShippingError(false); }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.06)' : 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.05)' : 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                      style={{
-                        padding: '4px 8px',
-                        backgroundColor: selectedShipping === option ? '#007bff' : '#f8f9fa',
-                        color: selectedShipping === option ? 'white' : '#6c757d',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        border: selectedShipping ? (selectedShipping === option ? 'none' : '1px solid #e9ecef') : (shippingError ? '2px solid #ef4444' : '1px solid #e9ecef'),
-                        fontWeight: 500,
-                        transition: 'background-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease',
-                        transform: selectedShipping === option ? 'scale(1.05)' : 'scale(1)'
-                      }}
-                    >
-                      {option}
-                    </div>
-                  ));
+                  const deliveryAllowed = isDeliveryAllowed(selectedProduct);
+                  return options.map((option) => {
+                    const isDelivery = option === 'Delivery';
+                    const disabled = isDelivery && !deliveryAllowed;
+                    return (
+                      <div
+                        key={option}
+                        role="button"
+                        aria-pressed={selectedShipping === option}
+                        aria-disabled={disabled}
+                        tabIndex={disabled ? -1 : 0}
+                        onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { setSelectedShipping(option); setShippingError(false); } }}
+                        onClick={() => { if (disabled) return; setSelectedShipping(option); setShippingError(false); }}
+                        onMouseEnter={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.06)' : 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; }}
+                        onMouseLeave={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.05)' : 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        style={{
+                          padding: '4px 8px',
+                          backgroundColor: disabled ? '#f0f0f0' : (selectedShipping === option ? '#007bff' : '#f8f9fa'),
+                          color: disabled ? '#9aa0a6' : (selectedShipping === option ? 'white' : '#6c757d'),
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          border: disabled ? '1px solid #e9ecef' : (selectedShipping ? (selectedShipping === option ? 'none' : '1px solid #e9ecef') : (shippingError ? '2px solid #ef4444' : '1px solid #e9ecef')),
+                          fontWeight: 500,
+                          transition: 'background-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease',
+                          transform: selectedShipping === option ? 'scale(1.05)' : 'scale(1)',
+                          opacity: disabled ? 0.7 : 1
+                        }}
+                      >
+                        {option}
+                      </div>
+                    );
+                  });
                 })()}
               </div>
+
+              {!isDeliveryAllowed(selectedProduct) && (
+                <div style={{
+                  width: '98%',
+                  margin: isMobile ? '6px 0 6px 0' : '8px 0 8px 0',
+                  color: '#ef4444',
+                  fontWeight: 600,
+                  fontSize: isMobile ? '9px' : '11px',
+                  textAlign: 'center',
+                  
+                }}>
+                  Delivery is unavailable at your location.
+                </div>
+              )}
 
               {selectedShipping === 'Delivery' && (
                 <div style={{ marginTop: isMobile ? '8px' : '10px' }}>
@@ -2671,13 +2872,26 @@ const EnhancedFarmMap = forwardRef(({
                 <div style={{ fontWeight: 700, color: '#212529', fontSize: isMobile ? '12px' : '14px', paddingBottom: isMobile ? '6px' : '8px' }}>Add Delivery Address</div>
                 <div onClick={() => setShowAddressOverlay(false)} style={{ cursor: 'pointer', fontSize: isMobile ? '12px' : '14px', color: '#6c757d', width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#f0f0f0', position: 'absolute', top: isMobile ? '6px' : '8px', right: isMobile ? '6px' : '8px', fontWeight: 'bold', zIndex: 10 }}>✕</div>
               </div>
-              <div style={{ padding: isMobile ? '8px' : '10px', maxHeight: isMobile ? '70vh' : '72vh', overflowY: 'auto' }}>
+              <div ref={addressOverlayContentRef} style={{ position: 'relative', padding: isMobile ? '8px' : '10px', maxHeight: isMobile ? '70vh' : '72vh', overflowY: 'auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '8px' : '10px' }}>
                   <TextField label="Full name" variant="outlined" size="small" fullWidth value={newDeliveryAddress.name} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, name: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
                   <TextField label="Phone" variant="outlined" size="small" fullWidth value={newDeliveryAddress.phone} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, phone: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
                 </div>
-                <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
-                  <TextField label="Address line 1" variant="outlined" size="small" fullWidth value={newDeliveryAddress.line1} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, line1: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                <div ref={addressLine1Ref} style={{ marginBottom: isMobile ? '8px' : '10px' }}>
+                  <TextField 
+                    label="Address line 1" 
+                    variant="outlined" 
+                    size="small" 
+                    fullWidth 
+                    value={newDeliveryAddress.line1} 
+                    onChange={e => {
+                      const v = e.target.value;
+                      setNewDeliveryAddress({ ...newDeliveryAddress, line1: v });
+                      if (addressSearchTimeoutRef.current) clearTimeout(addressSearchTimeoutRef.current);
+                      addressSearchTimeoutRef.current = setTimeout(() => { fetchAddressSuggestions(v); }, 300);
+                    }} 
+                    sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} 
+                  />
                 </div>
                 <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
                   <TextField label="Address line 2 (optional)" variant="outlined" size="small" fullWidth value={newDeliveryAddress.line2} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, line2: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
@@ -2692,6 +2906,53 @@ const EnhancedFarmMap = forwardRef(({
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
                   <button onClick={() => { const summary = `${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`; setExistingDeliveryAddress(summary); setDeliveryMode('existing'); setShowAddressOverlay(false); }} style={{ backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '8px 12px' : '10px 14px', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', fontWeight: 600 }}>Save Address</button>
                 </div>
+                {addressSuggestionsPos && addressSuggestions.length > 0 && (
+                  <Paper 
+                    style={{ 
+                      position: 'absolute', 
+                      top: addressSuggestionsPos.top, 
+                      left: addressSuggestionsPos.left, 
+                      minWidth: addressSuggestionsPos.width, 
+                      maxHeight: isMobile ? 150 : 200, 
+                      overflow: 'auto', 
+                      borderRadius: isMobile ? 8 : 12, 
+                      border: '1px solid #e8f5e8', 
+                      boxShadow: '0 4px 20px rgba(76, 175, 80, 0.1)', 
+                      zIndex: 1102, 
+                      backgroundColor: '#fff'
+                    }}
+                  >
+                    {addressSuggestions.map((place, idx) => (
+                      <Box 
+                        key={`addr-sugg-${idx}`} 
+                        onClick={() => applyAddressSelection(place)} 
+                        style={{ 
+                          padding: isMobile ? '12px' : '14px', 
+                          cursor: 'pointer', 
+                          borderBottom: idx < addressSuggestions.length - 1 ? '1px solid #f0f7f0' : 'none',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => { 
+                          e.currentTarget.style.backgroundColor = '#f8fdf8'; 
+                          e.currentTarget.style.borderLeft = '3px solid #4caf50'; 
+                          e.currentTarget.style.paddingLeft = isMobile ? '14px' : '16px';
+                        }}
+                        onMouseLeave={(e) => { 
+                          e.currentTarget.style.backgroundColor = 'transparent'; 
+                          e.currentTarget.style.borderLeft = 'none'; 
+                          e.currentTarget.style.paddingLeft = isMobile ? '12px' : '14px';
+                        }}
+                      >
+                        <Typography style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: '#2e7d32', marginBottom: 2 }}>
+                          {place.name}
+                        </Typography>
+                        <Typography style={{ fontSize: isMobile ? 9 : 11, color: '#666' }}>
+                          {place.formatted_address}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Paper>
+                )}
               </div>
             </div>
           </div>

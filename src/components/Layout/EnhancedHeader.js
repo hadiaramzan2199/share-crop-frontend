@@ -673,31 +673,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                 </IconButton>
               </Badge>
 
-              {/* Create Farm Button - Only show for farmers */}
-              {userType === 'farmer' && (
-                <Tooltip title="Create New Farm">
-                  <IconButton
-                    color="inherit"
-                    onClick={onCreateFarm}
-                    size={isMobile ? "small" : "medium"}
-                    sx={{ 
-                      backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                      color: '#2196F3',
-                      '&:hover': { 
-                        backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                        transform: 'scale(1.05)'
-                      },
-                      transition: 'all 0.2s ease-in-out',
-                      border: '1px solid rgba(33, 150, 243, 0.3)',
-                      '& .MuiSvgIcon-root': {
-                        fontSize: isMobile ? '18px' : '24px'
-                      }
-                    }}
-                  >
-                    <HomeWork />
-                  </IconButton>
-                </Tooltip>
-              )}
+              
 
               {/* Create Field Button - Only show for farmers */}
               {userType === 'farmer' && (

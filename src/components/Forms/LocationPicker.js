@@ -425,6 +425,7 @@ const LocationPicker = ({ open, onClose, onLocationSelect, initialLocation }) =>
             onMove={evt => setViewState(evt.viewState)}
             onClick={handleMapClick}
             mapboxAccessToken={process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}
+            attributionControl={false}
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
           >

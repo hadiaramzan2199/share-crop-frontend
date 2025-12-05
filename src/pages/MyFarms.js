@@ -41,6 +41,7 @@ import storageService from '../services/storage';
 import fieldsService from '../services/fields';
 import farmsService from '../services/farms';
 import { useAuth } from '../contexts/AuthContext';
+import AddFarmForm from '../components/Forms/AddFarmForm';
 
 const MyFarms = () => {
   const [myFarms, setMyFarms] = useState([]);
@@ -48,6 +49,7 @@ const MyFarms = () => {
   const [userCurrency, setUserCurrency] = useState('USD');
   const [selectedFarm, setSelectedFarm] = useState(null);
   const [farmDetailOpen, setFarmDetailOpen] = useState(false);
+  const [addFarmOpen, setAddFarmOpen] = useState(false);
   const { user } = useAuth();
   
   // Currency symbols mapping
@@ -71,6 +73,34 @@ const MyFarms = () => {
   const handleCloseFarmDetail = () => {
     setFarmDetailOpen(false);
     setSelectedFarm(null);
+  };
+
+  const handleAddFarmOpen = () => setAddFarmOpen(true);
+  const handleAddFarmClose = () => setAddFarmOpen(false);
+  const handleAddFarmSubmit = async (farmData) => {
+    try {
+      await farmsService.create(farmData);
+      await fetchFarms();
+    } catch (error) {
+      setMyFarms(prev => [{
+        id: farmData.id || Date.now(),
+        name: farmData.farmName,
+        location: farmData.location || 'Not specified',
+        cropType: 'Mixed',
+        plantingDate: new Date().toISOString(),
+        harvestDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+        progress: 0,
+        area: 'Not specified',
+        soilType: 'Loamy',
+        irrigationType: 'Drip Irrigation',
+        monthlyRevenue: 0,
+        status: 'Active',
+        image: '/api/placeholder/400/200',
+        description: farmData.description || '',
+        fields: []
+      }, ...prev]);
+    }
+    setAddFarmOpen(false);
   };
 
   // Generate mock farm data for demo purposes
@@ -259,19 +289,38 @@ const MyFarms = () => {
               Monitor and manage your agricultural farm properties with real-time insights
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<Assessment />}
-            sx={{
-              backgroundColor: '#4caf50',
-              '&:hover': { backgroundColor: '#a1eda4' },
-              borderRadius: 2,
-              px: 2.5,
-              py: 1
-            }}
-          >
-            Farm Report
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Agriculture />}
+              onClick={handleAddFarmOpen}
+              sx={{
+                backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                color: '#2196F3',
+                border: '1px solid rgba(33, 150, 243, 0.3)',
+                '&:hover': { backgroundColor: 'rgba(33, 150, 243, 0.2)', transform: 'scale(1.05)' },
+                transition: 'all 0.2s ease-in-out',
+                borderRadius: 2,
+                px: 2,
+                py: 1
+              }}
+            >
+              Add New Farm
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Assessment />}
+              sx={{
+                backgroundColor: '#4caf50',
+                '&:hover': { backgroundColor: '#a1eda4' },
+                borderRadius: 2,
+                px: 2.5,
+                py: 1
+              }}
+            >
+              Farm Report
+            </Button>
+          </Box>
         </Stack>
 
         {/* Stats Overview */}
@@ -975,6 +1024,7 @@ const MyFarms = () => {
           </DialogActions>
         </Dialog>
       </Box>
+      <AddFarmForm open={addFarmOpen} onClose={handleAddFarmClose} onSubmit={handleAddFarmSubmit} />
     </Box>
   );
 };

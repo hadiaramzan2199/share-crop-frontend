@@ -14,7 +14,8 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
     location: '',
     description: '',
     harvestDate: '',
-    farmId: '', // New field for farm selection
+    farmId: '',
+    shippingScope: 'Global'
   });
 
   const [loading, setLoading] = useState(false);
@@ -68,7 +69,8 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
         latitude: 40.7128 + (Math.random() - 0.5) * 0.1, 
         longitude: -74.0060 + (Math.random() - 0.5) * 0.1,
         image: `/icons/products/${formData.crop.toLowerCase()}.png`,
-        category: 'farmer_created'
+        category: 'farmer_created',
+        shipping_scope: formData.shippingScope
       };
 
       const response = await api.post('/api/fields', fieldData);
@@ -87,6 +89,7 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
         description: '',
         harvestDate: '',
         farmId: '',
+        shippingScope: 'Global'
       });
 
       alert('Field added successfully!');
@@ -187,6 +190,21 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
             onChange={handleChange}
             placeholder="e.g., Iowa, USA"
           />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="shippingScope">Shipping Scope *</label>
+          <select
+            id="shippingScope"
+            name="shippingScope"
+            value={formData.shippingScope}
+            onChange={handleChange}
+            required
+          >
+            <option value="Global">Global</option>
+            <option value="Country">Country</option>
+            <option value="City">City</option>
+          </select>
         </div>
 
         <div className="form-group">
