@@ -1735,15 +1735,15 @@ const EnhancedFarmMap = forwardRef(({
           });
         });
       };
-      const scheduleStart = () => {
-        const run = () => setTimeout(startAnimation, 120);
-        if (typeof map.once === 'function') {
-          map.once('idle', run);
-        } else {
-          run();
-        }
-      };
-      scheduleStart();
+      const run = () => setTimeout(startAnimation, 120);
+      const moving = (typeof map.isMoving === 'function' && (map.isMoving() || map.isZooming?.())) || isMapAnimatingRef.current;
+      if (moving && typeof map.once === 'function') {
+        map.once('moveend', () => map.once('idle', run));
+      } else if (typeof map.once === 'function') {
+        map.once('idle', run);
+      } else {
+        run();
+      }
     });
   }, [farms, purchasedProducts, isHarvestToday, showDeliveryPanel]);
 
