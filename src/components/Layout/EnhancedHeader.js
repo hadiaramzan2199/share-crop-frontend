@@ -52,6 +52,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
+import { orderService } from '../../services/orders';
 import { getProductIcon } from '../../utils/productIcons';
 
 // Custom hook to detect mobile screens
@@ -293,10 +294,76 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   };
 
   useEffect(() => {
-    const ready = Array.isArray(fields) ? fields.filter((f) => isHarvestToday(f) && hasPickupShipping(f)) : [];
-    setPickupReadyCount(ready.length);
-    setPickupReadyList(ready);
-  }, [fields]);
+    const loadPickupReadyFromOrders = async () => {
+      try {
+        if (!user || !user.id) { setPickupReadyCount(0); setPickupReadyList([]); return; }
+        const res = await orderService.getBuyerOrdersWithFields(user.id);
+        const orders = Array.isArray(res?.data) ? res.data : (res?.data?.orders || []);
+        const byField = new Map();
+        orders.forEach((o) => {
+          const fid = o.field_id || o.fieldId || o.field?.id;
+          if (!fid) return;
+          const prev = byField.get(fid) || { created_at: null, selected_harvest_date: null, mode: null, purchased: false, field: o.field };
+          const createdAt = o.created_at || o.createdAt || null;
+          const prevTs = prev.created_at ? new Date(prev.created_at).getTime() : -Infinity;
+          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+          const m = (o.mode_of_shipping || o.shipping_method || '').trim().toLowerCase();
+          const canon = m === 'pickup' ? 'Pickup' : (m === 'delivery' ? 'Delivery' : (m ? m : null));
+          if (curTs >= prevTs) {
+            const purchased = (o.purchased === true)
+              || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+              || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })();
+            byField.set(fid, { created_at: createdAt, selected_harvest_date: o.selected_harvest_date || null, mode: canon, purchased, field: o.field });
+          }
+        });
+        const withinGrace = (val, days = 4) => {
+          if (!val) return false;
+          const today = new Date();
+          const d = new Date(val);
+          if (isNaN(d.getTime())) return false;
+          const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+          const h0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+          const diffDays = Math.round((h0 - t0) / (24 * 60 * 60 * 1000));
+          return diffDays <= 0 && diffDays >= -days;
+        };
+        const getModes = (f, last) => {
+          const arr = [];
+          if (last?.mode) arr.push(last.mode);
+          if (f?.shipping_pickup) arr.push('Pickup');
+          if (f?.shipping_delivery) arr.push('Delivery');
+          const single = f?.shipping_option || f?.mode_of_shipping || f?.shipping_method || '';
+          const s = String(single).trim().toLowerCase();
+          if (s === 'pickup') arr.push('Pickup'); else if (s === 'delivery') arr.push('Delivery'); else if (s.includes('both')) arr.push('Delivery');
+          const set = new Set();
+          return arr.filter(m => { const k = String(m || '').toLowerCase(); if (set.has(k)) return false; set.add(k); return true; });
+        };
+        const toDate = (val) => {
+          if (!val) return null;
+          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+            const d0 = new Date(`${val}T00:00:00`);
+            if (!isNaN(d0.getTime())) return d0;
+          }
+          const d = new Date(val);
+          return isNaN(d.getTime()) ? null : d;
+        };
+        const ready = Array.isArray(fields) ? fields.filter((f) => {
+          const last = byField.get(f.id);
+          if (!last) return false;
+          if (last.purchased !== true) return false;
+          const modes = getModes(f, last).map(m => String(m || '').toLowerCase());
+          const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
+          if (mode !== 'pickup') return false;
+          return withinGrace(last.selected_harvest_date, 4);
+        }) : [];
+        setPickupReadyCount(ready.length);
+        setPickupReadyList(ready);
+      } catch {
+        setPickupReadyCount(0);
+        setPickupReadyList([]);
+      }
+    };
+    loadPickupReadyFromOrders();
+  }, [fields, user]);
 
   const handleFilterClear = () => {
     setActiveFilters({ categories: [], subcategories: [], locations: [] });

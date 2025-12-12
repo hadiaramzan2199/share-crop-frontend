@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react';
-import { Box, Card, CardContent, Chip, Divider, LinearProgress, Typography, Button, IconButton, TextField, Paper } from '@mui/material';
+import { Box, Card, CardContent, Chip, Divider, LinearProgress, Typography, Button, IconButton, TextField, Paper, Checkbox, FormControlLabel } from '@mui/material';
 import { LocationOn, Agriculture, CalendarToday, MoreVert, HomeWork } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import coinService from '../../services/coinService';
@@ -89,6 +89,9 @@ const EnhancedFarmMap = forwardRef(({
     zip: '',
     country: ''
   });
+  const [orderForSomeoneElse, setOrderForSomeoneElse] = useState(false);
+  const [recipientCity, setRecipientCity] = useState('');
+  const [recipientCountry, setRecipientCountry] = useState('');
   const [addressError, setAddressError] = useState('');
   const [showAddressOverlay, setShowAddressOverlay] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
@@ -130,6 +133,7 @@ const EnhancedFarmMap = forwardRef(({
   useEffect(() => {
     setShowDeliveryPanel(false);
   }, []);
+
 
   useEffect(() => {
     if (!showDeliveryPanel) return;
@@ -228,20 +232,62 @@ const EnhancedFarmMap = forwardRef(({
       if (process.env.REACT_APP_MAPBOX_ACCESS_TOKEN) {
         const resp = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}`);
         const data = await resp.json();
-        const results = Array.isArray(data?.features) ? data.features.map(f => ({
+        let results = Array.isArray(data?.features) ? data.features.map(f => ({
           name: f.text,
           formatted_address: f.place_name,
           context: f.context || [],
         })) : [];
+        const scopeRaw = selectedProduct?.shipping_scope || selectedProduct?.shippingScope || 'Global';
+        const scope = String(scopeRaw || '').toLowerCase();
+        if (orderForSomeoneElse && scope !== 'global' && selectedProduct) {
+          const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+          const p = extractCityCountry(locStr);
+          if (scope === 'city' && p.city) {
+            const cityLower = p.city.toLowerCase();
+            results = results.filter(r => {
+              const place = (r.context || []).find(c => typeof c.id === 'string' && c.id.startsWith('place'));
+              const txt = (place?.text || '').toLowerCase();
+              return txt === cityLower;
+            });
+          } else if (scope === 'country' && p.country) {
+            const countryLower = p.country.toLowerCase();
+            results = results.filter(r => {
+              const country = (r.context || []).find(c => typeof c.id === 'string' && c.id.startsWith('country'));
+              const txt = (country?.text || '').toLowerCase();
+              return txt === countryLower;
+            });
+          }
+        }
         setAddressSuggestions(results);
       } else {
         const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=5`, { headers: { 'User-Agent': 'ShareCrop-Frontend/1.0' } });
         const data = await resp.json();
-        const results = Array.isArray(data) ? data.map(it => ({
+        let results = Array.isArray(data) ? data.map(it => ({
           name: it.display_name?.split(',')[0] || it.display_name || q,
           formatted_address: it.display_name || q,
           address: it.address || {},
         })) : [];
+        const scopeRaw = selectedProduct?.shipping_scope || selectedProduct?.shippingScope || 'Global';
+        const scope = String(scopeRaw || '').toLowerCase();
+        if (orderForSomeoneElse && scope !== 'global' && selectedProduct) {
+          const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+          const p = extractCityCountry(locStr);
+          if (scope === 'city' && p.city) {
+            const cityLower = p.city.toLowerCase();
+            results = results.filter(r => {
+              const adr = r.address || {};
+              const txt = (adr.city || adr.town || adr.village || '').toLowerCase();
+              return txt === cityLower;
+            });
+          } else if (scope === 'country' && p.country) {
+            const countryLower = p.country.toLowerCase();
+            results = results.filter(r => {
+              const adr = r.address || {};
+              const txt = (adr.country || '').toLowerCase();
+              return txt === countryLower;
+            });
+          }
+        }
         setAddressSuggestions(results);
       }
     } catch (e) {
@@ -249,7 +295,7 @@ const EnhancedFarmMap = forwardRef(({
     } finally {
       setAddressSearchLoading(false);
     }
-  }, []);
+  }, [orderForSomeoneElse, selectedProduct, productLocations]);
 
   const applyAddressSelection = useCallback((place) => {
     let city = newDeliveryAddress.city;
@@ -297,6 +343,20 @@ const EnhancedFarmMap = forwardRef(({
       width: tRect.width,
     });
   }, [addressSuggestions, showAddressOverlay, isMobile]);
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!showAddressOverlay) return;
+      const container = addressOverlayContentRef.current;
+      const inputEl = addressLine1Ref.current;
+      if (!container || !inputEl) return;
+      if (!container.contains(e.target) && !inputEl.contains(e.target)) {
+        setAddressSuggestions([]);
+        setAddressSuggestionsPos(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAddressOverlay]);
   const normalizeField = useCallback((f) => {
     const co = f.coordinates;
     let lng;
@@ -408,13 +468,14 @@ const EnhancedFarmMap = forwardRef(({
     const scope = String(scopeRaw || '').toLowerCase();
     if (scope === 'global') return true;
     const prodLocStr = productLocations.get(prod.id) || prod.location || '';
-    const userLocStr = userLocationName || existingDeliveryAddress || (currentUser?.location || user?.location || '');
     const p = extractCityCountry(prodLocStr);
+    if (orderForSomeoneElse) return true;
+    const userLocStr = userLocationName || (currentUser?.location || user?.location || '');
     const u = extractCityCountry(userLocStr);
     if (scope === 'country') return Boolean(p.country && u.country && p.country === u.country);
     if (scope === 'city') return Boolean(p.city && u.city && p.city === u.city);
-    return true;
-  }, [productLocations, userLocationName, existingDeliveryAddress, currentUser, user, extractCityCountry]);
+    return false;
+  }, [productLocations, orderForSomeoneElse, deliveryMode, newDeliveryAddress, existingDeliveryAddress, userLocationName, currentUser, user, extractCityCountry]);
 
   const triggerBurst = useCallback((product, qty) => {
     if (!mapRef.current || !product?.coordinates) return;
@@ -1106,6 +1167,170 @@ const EnhancedFarmMap = forwardRef(({
     return 'Not specified';
   };
 
+  const getHarvestDateObj = useCallback((prod) => {
+    const entry = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(prod.id ?? prod.field_id));
+    const list = Array.isArray(entry?.selected_harvests) ? entry.selected_harvests : [];
+    const explicit = entry?.selected_harvest_date;
+    const pick = (() => {
+      if (explicit) return explicit;
+      let best = null;
+      let bestTs = -Infinity;
+      for (const it of list) {
+        const raw = it?.date;
+        if (!raw) continue;
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+          const ts = d.getTime();
+          if (ts > bestTs) { bestTs = ts; best = raw; }
+        } else {
+          const s = String(raw);
+          const parts = s.split(/[-\/\s]/);
+          if (parts.length >= 3) {
+            const tryStr = `${parts[0]} ${parts[1]} ${parts[2]}`;
+            const d2 = new Date(tryStr);
+            if (!isNaN(d2.getTime())) {
+              const ts2 = d2.getTime();
+              if (ts2 > bestTs) { bestTs = ts2; best = tryStr; }
+            }
+          }
+        }
+      }
+      return best || null;
+    })();
+    if (!pick) return null;
+    try {
+      const dd = new Date(pick);
+      if (!isNaN(dd.getTime())) return dd;
+    } catch {}
+    return null;
+  }, [purchasedProducts]);
+
+  
+
+  const getDaysUntilHarvest = useCallback((prod) => {
+    const d = getHarvestDateObj(prod);
+    if (!d) return null;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const hDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffMs = hDay.getTime() - today.getTime();
+    return Math.round(diffMs / (24 * 60 * 60 * 1000));
+  }, [getHarvestDateObj]);
+
+  const getHarvestProgressInfo = useCallback((prod) => {
+    const days = getDaysUntilHarvest(prod);
+    if (days === null) return { progress: 0 };
+    let progress = 0.25;
+    if (days >= 4) progress = 0.25;
+    else if (days >= 1 && days <= 3) progress = 0.75;
+    else if (days === 0 || (days < 0 && days >= -4)) progress = 1.0;
+    else progress = 0.25;
+    return { progress };
+  }, [getDaysUntilHarvest]);
+
+  const getRingGradientByHarvest = useCallback((prod) => {
+    const d = getHarvestDateObj(prod);
+    const red = { start: '#F28F8F', end: '#EF4444' };
+    const yellow = { start: '#FAD27A', end: '#F59E0B' };
+    const green = { start: '#8CC76A', end: '#558403' };
+    if (!d) return red;
+    const days = getDaysUntilHarvest(prod);
+    if (days >= 4) return red;
+    if (days >= 1 && days <= 3) return yellow;
+    if (days >= 0) return green; // today (>=0 and <1)
+    if (days < 0 && days >= -4) return green; // within grace after
+    return red; // far future or far past
+  }, [getHarvestDateObj, getDaysUntilHarvest]);
+
+  const getPiePath = useCallback((radius, ratio) => {
+    const cx = radius;
+    const cy = radius;
+    const start = -Math.PI / 2;
+    const end = start + Math.max(0, Math.min(1, ratio)) * Math.PI * 2;
+    const x1 = cx + radius * Math.cos(start);
+    const y1 = cy + radius * Math.sin(start);
+    const x2 = cx + radius * Math.cos(end);
+    const y2 = cy + radius * Math.sin(end);
+    const largeArc = ratio > 0.5 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+  }, []);
+
+  const isHarvestReached = useCallback((prod) => {
+    const days = getDaysUntilHarvest(prod);
+    return days !== null && days <= 0;
+  }, [getDaysUntilHarvest]);
+
+  const isHarvestWithinGrace = useCallback((prod, days = 4) => {
+    const du = getDaysUntilHarvest(prod);
+    return du !== null && du <= 0 && du >= -days;
+  }, [getDaysUntilHarvest]);
+
+  // Show fric.gif only when purchased and selectedHarvestDate === today.
+  // Auto-hide after 6 seconds. Render above all marker content.
+  useEffect(() => {
+    if (!Array.isArray(filteredFarms) || filteredFarms.length === 0) return;
+    const newlyVisible = [];
+    filteredFarms.forEach((prod) => {
+      try {
+        const purchased = isProductPurchased(prod);
+        const du = getDaysUntilHarvest(prod);
+        if (purchased && du === 0 && !celebratedHarvestIdsRef.current.has(prod.id)) {
+          newlyVisible.push(prod.id);
+        }
+      } catch {}
+    });
+    if (newlyVisible.length === 0) return;
+    newlyVisible.forEach((pid) => {
+      celebratedHarvestIdsRef.current.add(pid);
+      setShowHarvestGifIds((prev) => {
+        const next = new Set(prev);
+        next.add(pid);
+        return next;
+      });
+      setTimeout(() => {
+        setShowHarvestGifIds((prev) => {
+          const next = new Set(prev);
+          next.delete(pid);
+          return next;
+        });
+      }, 6000);
+    });
+  }, [filteredFarms, isProductPurchased, getDaysUntilHarvest]);
+
+  const OrbitIcon = ({ mode, size, strokeW, iconSize }) => {
+    const ref = React.useRef(null);
+    React.useEffect(() => {
+      let id;
+      const r = (size / 2) - (strokeW / 2);
+      const start = performance.now();
+      const loop = (t) => {
+        const elapsed = (t - start) / 1000;
+        const angle = (elapsed / 6) * (Math.PI * 2);
+        const x = r * Math.cos(angle);
+        const y = r * Math.sin(angle);
+        if (ref.current) {
+          ref.current.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+        }
+        id = requestAnimationFrame(loop);
+      };
+      id = requestAnimationFrame(loop);
+      return () => cancelAnimationFrame(id);
+    }, [size, strokeW]);
+    const src = mode === 'pickup' ? '/icons/products/pickup.png' : '/icons/products/delivery.png';
+    return (
+      <div style={{ position: 'absolute', left: '50%', top: '50%', width: `${size}px`, height: `${size}px`, transform: 'translate(-50%, -50%)', zIndex: 20, pointerEvents: 'none' }}>
+        <img ref={ref} src={src} style={{ position: 'absolute', left: '50%', top: '50%', width: `${iconSize}px`, height: `${iconSize}px`, objectFit: 'contain', transform: 'translate(-50%, -50%)', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
+      </div>
+    );
+  };
+
+  const addShippingOrbit = useCallback((productMarker, mode) => {
+    const size = isMobile ? 46 : 60;
+    const strokeW = isMobile ? 4 : 5;
+    const iconSize = isMobile ? 16 : 25;
+    return <OrbitIcon mode={mode} size={size} strokeW={strokeW} iconSize={iconSize} />;
+  }, [isMobile]);
+
   const getShippingModes = (prod) => {
     const entry = purchasedProducts.find(p => (p.id ?? p.field_id) === (prod.id ?? prod.field_id));
     const fromEntry = Array.isArray(entry?.shipping_modes) ? entry.shipping_modes : [];
@@ -1435,7 +1660,7 @@ const EnhancedFarmMap = forwardRef(({
           for (const o of orders) {
             const fid = o.field_id || o.fieldId || o.field?.id;
             if (!fid) continue;
-            const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [] };
+            const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
             const qtyRaw = o.quantity ?? o.area_rented ?? o.area ?? 0;
             const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
             const field = o.field || farms.find(f => f.id === fid) || {};
@@ -1446,16 +1671,29 @@ const EnhancedFarmMap = forwardRef(({
             const sh = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
             const shs = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
             const added = sh.date || sh.label ? [...shs, sh] : shs;
-            const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+          const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+          const createdAt = o.created_at || o.createdAt || null;
+          const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+          const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+          const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
           byField.set(fid, {
-            id: fid,
-            name,
-            category,
-            total_area,
-            purchased_area: (prev.purchased_area || 0) + qty,
-            coordinates,
-            selected_harvests: uniq,
-            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })()
+              id: fid,
+              name,
+              category,
+              total_area,
+              purchased_area: (prev.purchased_area || 0) + qty,
+              coordinates,
+              selected_harvests: uniq,
+              delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
+              last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
+              last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
+              last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
+              last_order_purchased: (curTs >= prevTs)
+                ? ((o.purchased === true)
+                    || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                    || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+                : (prev.last_order_purchased === true)
           });
           }
           const list = Array.from(byField.values());
@@ -1474,6 +1712,14 @@ const EnhancedFarmMap = forwardRef(({
                 const combined = [...shPrev, ...shIncoming];
                 const s = new Set();
                 existing.selected_harvests = combined.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; });
+                const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
+                const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
+                if (prevTs > curTs) {
+                  existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
+                  existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
+                  existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
+                  existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+                }
               } else {
                 map.set(key, { ...p });
               }
@@ -1553,7 +1799,7 @@ const EnhancedFarmMap = forwardRef(({
         for (const o of orders) {
           const fid = o.field_id || o.fieldId || o.field?.id;
           if (!fid) continue;
-          const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [] };
+          const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
           const qtyRaw2 = o.quantity ?? o.area_rented ?? o.area ?? 0;
           const qty = typeof qtyRaw2 === 'string' ? parseFloat(qtyRaw2) : qtyRaw2;
           const field = o.field || farms.find(f => f.id === fid) || {};
@@ -1565,6 +1811,11 @@ const EnhancedFarmMap = forwardRef(({
           const shs2 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
           const added2 = sh2.date || sh2.label ? [...shs2, sh2] : shs2;
           const uniq2 = (() => { const s = new Set(); return added2.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+          const createdAt = o.created_at || o.createdAt || null;
+          const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+          const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+          const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
           byField.set(fid, {
             id: fid,
             name,
@@ -1574,7 +1825,15 @@ const EnhancedFarmMap = forwardRef(({
             coordinates,
             selected_harvests: uniq2,
             shipping_modes: (() => { const pm = Array.isArray(prev.shipping_modes) ? prev.shipping_modes : []; const m = (o.mode_of_shipping || o.shipping_method || '').trim(); const canon = m.toLowerCase() === 'pickup' ? 'Pickup' : (m.toLowerCase() === 'delivery' ? 'Delivery' : (m ? m : null)); const added = canon ? [...pm, canon] : pm; const s = new Set(); return added.filter(x => { const k = (x || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })(),
-            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })()
+            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
+            last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
+            last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
+            last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
+            last_order_purchased: (curTs >= prevTs)
+              ? ((o.purchased === true)
+                  || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                  || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+              : (prev.last_order_purchased === true)
           });
         }
         const list = Array.from(byField.values());
@@ -1598,6 +1857,14 @@ const EnhancedFarmMap = forwardRef(({
               const mCombined = [...mPrev, ...mIncoming];
               const ms = new Set();
               existing.shipping_modes = mCombined.filter(x => { const k = (x || '').toLowerCase(); if (ms.has(k)) return false; ms.add(k); return true; });
+              const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
+              const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
+              if (prevTs > curTs) {
+                existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
+                existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
+                existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
+                existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+              }
             } else {
               map.set(key, { ...p });
             }
@@ -1610,21 +1877,26 @@ const EnhancedFarmMap = forwardRef(({
           const res2 = await orderService.getBuyerOrders();
           const orders = res2?.data?.orders || [];
           const byField = new Map();
-          for (const o of orders) {
-            const fid = o.field_id || o.fieldId;
-            if (!fid) continue;
-            const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [] };
-            const qtyRaw3 = o.quantity ?? o.area_rented ?? o.area ?? 0;
-            const qty = typeof qtyRaw3 === 'string' ? parseFloat(qtyRaw3) : qtyRaw3;
-            const field = farms.find(f => f.id === fid) || {};
-            const name = field.name || o.product_name || o.name;
-            const category = field.subcategory || field.category || o.crop_type;
-            const total_area = field.total_area || 0;
-            const coordinates = field.coordinates;
-            const sh3 = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
-            const shs3 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
-            const added3 = sh3.date || sh3.label ? [...shs3, sh3] : shs3;
-            const uniq3 = (() => { const s = new Set(); return added3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+        for (const o of orders) {
+          const fid = o.field_id || o.fieldId;
+          if (!fid) continue;
+          const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
+          const qtyRaw3 = o.quantity ?? o.area_rented ?? o.area ?? 0;
+          const qty = typeof qtyRaw3 === 'string' ? parseFloat(qtyRaw3) : qtyRaw3;
+          const field = farms.find(f => f.id === fid) || {};
+          const name = field.name || o.product_name || o.name;
+          const category = field.subcategory || field.category || o.crop_type;
+          const total_area = field.total_area || 0;
+          const coordinates = field.coordinates;
+          const sh3 = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
+          const shs3 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
+          const added3 = sh3.date || sh3.label ? [...shs3, sh3] : shs3;
+          const uniq3 = (() => { const s = new Set(); return added3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+          const createdAt = o.created_at || o.createdAt || null;
+          const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+          const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+          const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
           byField.set(fid, {
             id: fid,
             name,
@@ -1634,9 +1906,17 @@ const EnhancedFarmMap = forwardRef(({
             coordinates,
             selected_harvests: uniq3,
             shipping_modes: (() => { const pm = Array.isArray(prev.shipping_modes) ? prev.shipping_modes : []; const m = (o.mode_of_shipping || o.shipping_method || '').trim(); const canon = m.toLowerCase() === 'pickup' ? 'Pickup' : (m.toLowerCase() === 'delivery' ? 'Delivery' : (m ? m : null)); const added = canon ? [...pm, canon] : pm; const s = new Set(); return added.filter(x => { const k = (x || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })(),
-            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })()
+            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
+            last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
+            last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
+            last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
+            last_order_purchased: (curTs >= prevTs)
+              ? ((o.purchased === true)
+                  || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                  || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+              : (prev.last_order_purchased === true)
           });
-          }
+        }
           const list = Array.from(byField.values());
           setPurchasedProducts(prev => {
             const map = new Map();
@@ -1658,6 +1938,14 @@ const EnhancedFarmMap = forwardRef(({
               const mCombined = [...mPrev, ...mIncoming];
               const ms = new Set();
               existing.shipping_modes = mCombined.filter(x => { const k = (x || '').toLowerCase(); if (ms.has(k)) return false; ms.add(k); return true; });
+              const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
+              const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
+              if (prevTs > curTs) {
+                existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
+                existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
+                existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
+                existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+              }
             } else {
               map.set(key, { ...p });
             }
@@ -1678,14 +1966,22 @@ const EnhancedFarmMap = forwardRef(({
     const mapRect = map.getContainer().getBoundingClientRect();
     const layerRect = deliveryFlyLayerRef.current?.getBoundingClientRect() || mapRect;
     farms.forEach(f => {
-      const modes = getShippingModes(f);
-      const hasDelivery = modes.some(m => String(m || '').toLowerCase() === 'delivery');
-      if (!hasDelivery) return;
+      const purchased = isProductPurchased(f);
+      if (!purchased) return;
+      if (!isHarvestWithinGrace(f, 4)) return;
+      const modes = getShippingModes(f).map(m => (m || '').toLowerCase());
+      const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
+      if (mode !== 'delivery') return;
+      const toDate = (val) => {
+        if (!val) return null;
+        if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+          const d0 = new Date(`${val}T00:00:00`);
+          if (!isNaN(d0.getTime())) return d0;
+        }
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? null : d;
+      };
       const entry = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(f.id));
-      const paRaw = entry?.purchased_area;
-      const pa = typeof paRaw === 'string' ? parseFloat(paRaw) : (paRaw || 0);
-      if (userType !== 'farmer' && !pa) return;
-      if (!isHarvestToday(f)) return;
       if (!f?.coordinates) return;
       if (deliveryAnimatedIdsRef.current.has(f.id)) return;
       deliveryAnimatedIdsRef.current.add(f.id);
@@ -1717,7 +2013,8 @@ const EnhancedFarmMap = forwardRef(({
         targetX = clamp(targetX, minCenterX, maxCenterX);
         targetY = clamp(targetY, minCenterY, maxCenterY);
         const id = `deliv-${f.id}-${Date.now()}`;
-        setDeliveryFlyCards(prev => [...prev, { id, product: f, rented: pa || 0, total: f.total_area || 0, x: baseXc, y: baseYc, tx: targetX, ty: targetY, stage: 'start' }]);
+        const rentedArea = (() => { const raw = entry?.purchased_area; return typeof raw === 'string' ? parseFloat(raw) : (raw || 0); })();
+        setDeliveryFlyCards(prev => [...prev, { id, product: f, rented: rentedArea, total: f.total_area || 0, x: baseXc, y: baseYc, tx: targetX, ty: targetY, stage: 'start' }]);
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             setDeliveryFlyCards(prev => prev.map(c => c.id === id ? { ...c, x: c.tx, y: c.ty, stage: 'fly' } : c));
@@ -1726,8 +2023,8 @@ const EnhancedFarmMap = forwardRef(({
               setTimeout(() => {
                 setDeliveryFlyCards(prev => prev.filter(c => c.id !== id));
                 setDeliveryTodayCards(prev => {
-                  const name = f.name || entry?.name || 'Field';
-                  const category = f.subcategory || f.category || entry?.category;
+                  const name = f.name || 'Field';
+                  const category = f.subcategory || f.category;
                   return [...prev, { id: f.id, name, category, product: f }];
                 });
               }, 120);
@@ -1942,7 +2239,7 @@ const EnhancedFarmMap = forwardRef(({
               anchor="center"
             >
             <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
-              {showHarvestGifIds.has(product.id) && (
+              {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
                 <img
                   src={'/icons/effects/fric.gif'}
                   style={{
@@ -1953,30 +2250,72 @@ const EnhancedFarmMap = forwardRef(({
                     height: `${harvestGifSize}px`,
                     transform: 'translate(-50%, -50%)',
                     pointerEvents: 'none',
-                    zIndex: 3,
+                    zIndex: 9999,
                     willChange: 'transform',
                   }}
                 />
               )}
-              {isHarvestToday(product) && (getShippingModes(product).some(m => ((m || '').toLowerCase().includes('pickup')))) && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    width: isMobile ? '34px' : '48px',
-                    height: isMobile ? '34px' : '48px',
-                    borderRadius: '50%',
-                    border: '2px solid #FF9800',
-                    boxShadow: '0 0 12px rgba(255,152,0,0.6), inset 0 0 8px rgba(255,152,0,0.4)',
-                    transform: 'translate(-50%, -50%)',
-                    animation: 'ringPulse 1.8s ease-in-out infinite',
-                    zIndex: -1,
-                    backgroundColor: 'transparent',
-                    pointerEvents: 'none'
-                  }}
-                />
-              )}
+              {isProductPurchased(product) && (() => {
+                const size = isMobile ? 46 : 60;
+                const strokeW = isMobile ? 4 : 5;
+                const innerR = isMobile ? 18 : 22;
+                const { progress } = getHarvestProgressInfo(product);
+                const grad = getRingGradientByHarvest(product);
+                const occ = getOccupiedArea(product);
+                const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
+                const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
+                const r = (size / 2) - (strokeW / 2);
+                const circumference = 2 * Math.PI * r;
+                const dash = Math.max(0, Math.min(circumference, progress * circumference));
+                const path = getPiePath(innerR, occRatio);
+                const cx = size / 2;
+                const cy = size / 2;
+                const ringGradId = `ringGrad-${product.id}`;
+                const glowId = `ringGlow-${product.id}`;
+                const rentGradId = `rentGrad-${product.id}`;
+                
+                return (
+                  <svg
+                    width={size}
+                    height={size}
+                    style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1 }}
+                  >
+                    <defs>
+                      <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor={grad.start} stopOpacity="0.95" />
+                        <stop offset="100%" stopColor={grad.end} stopOpacity="0.95" />
+                      </linearGradient>
+                      <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#FFD8A8" floodOpacity="0.45" />
+                      </filter>
+                      <radialGradient id={rentGradId} cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor="rgba(33,150,243,0.7)" />
+                        <stop offset="100%" stopColor="rgba(33,150,243,0.4)" />
+                      </radialGradient>
+                    </defs>
+                    <circle cx={cx} cy={cy} r={r} stroke={'rgba(255,255,255,0.30)'} strokeWidth={strokeW} fill="none" />
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={r}
+                      stroke={`url(#${ringGradId})`}
+                      strokeWidth={strokeW}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeDasharray={`${dash} ${circumference}`}
+                      strokeDashoffset={0}
+                      transform={`rotate(-90 ${cx} ${cy})`}
+                      filter={`url(#${glowId})`}
+                    />
+                    <path d={path} fill={`url(#${rentGradId})`} stroke={'rgba(33,150,243,0.85)'} strokeWidth={1.1} transform={`translate(${cx - innerR}, ${cy - innerR})`} />
+                  </svg>
+                );
+              })()}
+              {(isProductPurchased(product) && isHarvestWithinGrace(product, 4)) && (() => {
+                const modes = getShippingModes(product).map(m => (m || '').toLowerCase());
+                const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
+                return mode ? addShippingOrbit(product, mode) : null;
+              })()}
               <img
                 src={getProductImageSrc(product)}
                 alt={product.name || product.productName || 'Product'}
@@ -1993,6 +2332,8 @@ const EnhancedFarmMap = forwardRef(({
                   borderRadius: '50%',
                   objectFit: 'cover',
                   display: 'block',
+                  position: 'relative',
+                  zIndex: 5,
                   border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
                   filter: blinkingFarms.has(product.id) 
                     ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
@@ -2733,18 +3074,52 @@ const EnhancedFarmMap = forwardRef(({
                   color: '#ef4444',
                   fontWeight: 600,
                   fontSize: isMobile ? '9px' : '11px',
-                  textAlign: 'center',
-                  
+                  textAlign: 'left'
                 }}>
                   Delivery is unavailable at your location.
+                  <div style={{ marginTop: isMobile ? '4px' : '6px', color: '#ef4444', fontWeight: 600, textAlign: 'left', fontSize: isMobile ? '9px' : '11px' }}>
+                    {(() => {
+                      const scopeRaw = selectedProduct.shipping_scope || selectedProduct.shippingScope || 'Global';
+                      const scope = String(scopeRaw || '').toLowerCase();
+                      const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+                      const p = extractCityCountry(locStr);
+                      if (scope === 'city' && p.city) return `Delivery is only available in ${p.city}`;
+                      if (scope === 'country' && p.country) return `Delivery is only available in ${p.country}`;
+                      return '';
+                    })()}
+                  </div>
                 </div>
               )}
 
-              {selectedShipping === 'Delivery' && (
-                <div style={{ marginTop: isMobile ? '8px' : '10px' }}>
-                  <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
-                    Delivery Address:
-                  </div>
+              <div style={{ marginTop: isMobile ? '6px' : '8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={orderForSomeoneElse}
+                      onChange={(e) => setOrderForSomeoneElse(e.target.checked)}
+                      color="primary"
+                      size={isMobile ? 'small' : 'medium'}
+                      sx={{
+                        '& .MuiSvgIcon-root': { fontSize: isMobile ? 16 : 18 },
+                        '&.MuiCheckbox-root': { padding: isMobile ? '2px' : '4px' }
+                      }}
+                    />
+                  }
+                  label="Order for someone else"
+                  sx={{
+                    marginLeft: 0,
+                    '.MuiFormControlLabel-label': { fontSize: isMobile ? '10px' : '12px', fontWeight: 600, color: '#4a5568' }
+                  }}
+                />
+              </div>
+
+              
+
+            {selectedShipping === 'Delivery' && (
+              <div style={{ marginTop: isMobile ? '8px' : '10px' }}>
+                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
+                  Delivery Address:
+                </div>
                   <div style={{ display: 'flex', gap: '6px', marginBottom: isMobile ? '6px' : '8px' }}>
                     <div
                       role="button"
@@ -2912,20 +3287,21 @@ const EnhancedFarmMap = forwardRef(({
                   <TextField label="Phone" variant="outlined" size="small" fullWidth value={newDeliveryAddress.phone} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, phone: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
                 </div>
                 <div ref={addressLine1Ref} style={{ marginBottom: isMobile ? '8px' : '10px' }}>
-                  <TextField 
-                    label="Address line 1" 
-                    variant="outlined" 
-                    size="small" 
-                    fullWidth 
-                    value={newDeliveryAddress.line1} 
-                    onChange={e => {
-                      const v = e.target.value;
-                      setNewDeliveryAddress({ ...newDeliveryAddress, line1: v });
-                      if (addressSearchTimeoutRef.current) clearTimeout(addressSearchTimeoutRef.current);
-                      addressSearchTimeoutRef.current = setTimeout(() => { fetchAddressSuggestions(v); }, 300);
-                    }} 
-                    sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} 
-                  />
+                <TextField 
+                  label="Address line 1" 
+                  variant="outlined" 
+                  size="small" 
+                  fullWidth 
+                  value={newDeliveryAddress.line1} 
+                  onChange={e => {
+                    const v = e.target.value;
+                    setNewDeliveryAddress({ ...newDeliveryAddress, line1: v });
+                    if (addressSearchTimeoutRef.current) clearTimeout(addressSearchTimeoutRef.current);
+                    addressSearchTimeoutRef.current = setTimeout(() => { fetchAddressSuggestions(v); }, 300);
+                  }} 
+                  onBlur={() => { setAddressSuggestions([]); setAddressSuggestionsPos(null); }}
+                  sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} 
+                />
                 </div>
                 <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
                   <TextField label="Address line 2 (optional)" variant="outlined" size="small" fullWidth value={newDeliveryAddress.line2} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, line2: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
@@ -2938,7 +3314,28 @@ const EnhancedFarmMap = forwardRef(({
                 <TextField label="Country" variant="outlined" size="small" fullWidth value={newDeliveryAddress.country} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, country: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
                 {addressError && (<div style={{ color: '#ef4444', fontSize: isMobile ? '10px' : '12px', marginTop: isMobile ? '8px' : '10px', fontWeight: 600 }}>{addressError}</div>)}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
-                  <button onClick={() => { const summary = `${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`; setExistingDeliveryAddress(summary); setDeliveryMode('existing'); setShowAddressOverlay(false); }} style={{ backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '8px 12px' : '10px 14px', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', fontWeight: 600 }}>Save Address</button>
+                  <button onClick={() => {
+                    const scopeRaw = selectedProduct?.shipping_scope || selectedProduct?.shippingScope || 'Global';
+                    const scope = String(scopeRaw || '').toLowerCase();
+                    let valid = true;
+                    if (scope !== 'global') {
+                      const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+                      const p = extractCityCountry(locStr);
+                      if (scope === 'city') {
+                        const rCity = (newDeliveryAddress.city || '').trim().toLowerCase();
+                        valid = Boolean(p.city && rCity && p.city.toLowerCase() === rCity);
+                      } else if (scope === 'country') {
+                        const rCountry = (newDeliveryAddress.country || '').trim().toLowerCase();
+                        valid = Boolean(p.country && rCountry && p.country.toLowerCase() === rCountry);
+                      }
+                    }
+                    if (!valid) { setAddressError('Address is outside the delivery region.'); return; }
+                    const summary = `${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
+                    setExistingDeliveryAddress(summary);
+                    setDeliveryMode('existing');
+                    setShowAddressOverlay(false);
+                    setAddressError('');
+                  }} style={{ backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '8px 12px' : '10px 14px', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', fontWeight: 600 }}>Save Address</button>
                 </div>
                 {addressSuggestionsPos && addressSuggestions.length > 0 && (
                   <Paper 
@@ -3117,21 +3514,6 @@ const EnhancedFarmMap = forwardRef(({
       {/* Keyframes for animations */}
       <style>
         {`
-          @keyframes ringPulse {
-            0% {
-              transform: translate(-50%, -50%) scale(0.98);
-              opacity: 0.8;
-            }
-            50% {
-              transform: translate(-50%, -50%) scale(1.15);
-              opacity: 1;
-            }
-            100% {
-              transform: translate(-50%, -50%) scale(0.98);
-              opacity: 0.8;
-            }
-          }
-
           @keyframes glow-blink {
             0% { 
               filter: drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7));
@@ -3255,6 +3637,10 @@ const EnhancedFarmMap = forwardRef(({
             0% { box-shadow: 0 8px 24px rgba(255,152,0,0.16); }
             50% { box-shadow: 0 12px 32px rgba(255,152,0,0.28); }
             100% { box-shadow: 0 8px 24px rgba(255,152,0,0.16); }
+          }
+          @keyframes orbit-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
           }
         `}
       </style>
