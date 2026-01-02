@@ -98,12 +98,6 @@ Object.assign(storageService, {
     return [];
   },
 
-  // Farm orders (orders for farmer's products)
-  getFarmOrders: (userId = null) => {
-    console.warn('localStorage is deprecated. getFarmOrders called.');
-    return [];
-  },
-
   // User authentication methods
   setCurrentUser: (user) => {
     console.warn('localStorage is deprecated. setCurrentUser called.');

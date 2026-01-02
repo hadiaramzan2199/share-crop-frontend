@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -94,10 +94,11 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(style);
 }
 
-const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApply, fields = [], onFarmSelect, farmerCoins = 12500, onCreateField, onCreateFarm, userType = 'farmer' }, ref) => {
+const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApply, fields = [], onFarmSelect, farmerCoins = 12500, onCreateField, onCreateFarm, userType = 'farmer', onMenuClick }, ref) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const isAdmin = userType === 'admin';
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchAnchorEl, setSearchAnchorEl] = useState(null);
@@ -400,9 +401,29 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
   const menuItems = userType === 'farmer' ? farmerMenuItems : buyerMenuItems;
 
+  const appBarRef = useRef(null);
+
+  useEffect(() => {
+    const el = appBarRef.current;
+    if (!el) return;
+    const update = () => {
+      const h = el.offsetHeight || 0;
+      document.documentElement.style.setProperty('--app-header-height', `${h}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [pickupReadyCount, isMobile]);
+
   return (
     <>
       <AppBar 
+        ref={appBarRef}
         sx={{ 
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',
@@ -468,7 +489,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             <IconButton
               edge="start"
               color="inherit"
-              onClick={toggleDrawer}
+              onClick={onMenuClick ? onMenuClick : toggleDrawer}
               sx={{ 
                 mr: { xs: 0.5, sm: 1 },
                 p: { xs: 1, sm: 1.5 },
@@ -524,223 +545,207 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             justifyContent: 'flex-end',
             maxWidth: { xs: '70%', sm: 'auto' }
           }}>
-            {/* Search Section */}
-            <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              {/* Mobile Search Icon */}
-              {isMobile && (
-                <Box sx={{ position: 'relative' }}>
-                  <IconButton
-                    color="inherit"
-                    onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-                    size="small"
-                    sx={{ 
-                      backgroundColor: 'rgba(0,0,0,0.04)',
-                      '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
-                      '& .MuiSvgIcon-root': {
-                        fontSize: '18px'
-                      },
-                      p: 1
-                    }}
-                  >
-                    <Search />
-                  </IconButton>
-                  
-                  {/* Mobile Search Bar - positioned relative to search icon */}
-                  {mobileSearchOpen && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        minWidth: '280px',
-                        zIndex: 1000,
-                        mt: 1.5,
-                        ml: -16,
-                        animation: 'slideDown 0.2s ease-out'
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          backgroundColor: 'white',
-                          borderRadius: 20,
-                          px: 2,
-                          py: 0.5,
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                          border: '1px solid rgba(0,0,0,0.1)',
+            {!isAdmin && (
+              <>
+                {/* Search Section */}
+                <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  {/* Mobile Search Icon */}
+                  {isMobile && (
+                    <Box sx={{ position: 'relative' }}>
+                      <IconButton
+                        color="inherit"
+                        onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                        size="small"
+                        sx={{ 
+                          backgroundColor: 'rgba(0,0,0,0.04)',
+                          '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
+                          '& .MuiSvgIcon-root': {
+                            fontSize: '18px'
+                          },
+                          p: 1
                         }}
                       >
-                        <InputBase
-                          placeholder="Search fields, crops..."
-                          value={searchQuery}
-                          onChange={(e) => {
-                            const query = e.target.value;
-                            setSearchQuery(query);
-                            
-                            if (query.trim()) {
-                              // First apply filters, then search within filtered results
-                              let fieldsToSearch = applyFilters(fields);
-                              
-                              // Filter fields based on search query
-                              const filtered = fieldsToSearch.filter(field => {
-                                const searchTerm = query.toLowerCase();
-                                return (
-                                  // Handle field/product name variations
-                                  field.product_name?.toLowerCase().includes(searchTerm) ||
-                                  field.productName?.toLowerCase().includes(searchTerm) ||
-                                  field.name?.toLowerCase().includes(searchTerm) ||
-                                  // Handle categories
-                                  field.category?.toLowerCase().includes(searchTerm) ||
-                                  field.subcategory?.toLowerCase().includes(searchTerm) ||
-                                  // Handle farmer/owner
-                                  field.farmer?.toLowerCase().includes(searchTerm) ||
-                                  field.owner?.toLowerCase().includes(searchTerm) ||
-                                  // Handle descriptions
-                                  field.description?.toLowerCase().includes(searchTerm) ||
-                                  // Handle locations
-                                  field.location?.toLowerCase().includes(searchTerm) ||
-                                  // Handle farm name if available
-                                  field.farm_name?.toLowerCase().includes(searchTerm) ||
-                                  field.farmName?.toLowerCase().includes(searchTerm)
-                                );
-                              });
-                              setFilteredFields(filtered.slice(0, 5)); // Limit to 5 suggestions
-                              setSearchAnchorEl(e.currentTarget.parentElement);
-                            } else {
-                              // If no search query, clear suggestions
-                              setFilteredFields([]);
-                              setSearchAnchorEl(null);
-                            }
-                            
-                            if (onSearchChange) {
-                              onSearchChange(query);
-                            }
+                        <Search />
+                      </IconButton>
+                      
+                      {/* Mobile Search Bar - positioned relative to search icon */}
+                      {mobileSearchOpen && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            minWidth: '280px',
+                            zIndex: 1000,
+                            mt: 1.5,
+                            ml: -16,
+                            animation: 'slideDown 0.2s ease-out'
                           }}
-                          onFocus={(e) => {
-                            if (searchQuery.trim() && filteredFields.length > 0) {
-                              setSearchAnchorEl(e.currentTarget.parentElement);
-                            }
-                          }}
-                          sx={{ flex: 1, fontSize: '14px', }}
-                        />
-                      </Box>
+                        >
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              backgroundColor: 'white',
+                              borderRadius: 20,
+                              px: 2,
+                              py: 0.5,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                              border: '1px solid rgba(0,0,0,0.1)',
+                            }}
+                          >
+                            <InputBase
+                              placeholder="Search fields, crops..."
+                              value={searchQuery}
+                              onChange={(e) => {
+                                const query = e.target.value;
+                                setSearchQuery(query);
+                                
+                                if (query.trim()) {
+                                  let fieldsToSearch = applyFilters(fields);
+                                  
+                                  const filtered = fieldsToSearch.filter(field => {
+                                    const searchTerm = query.toLowerCase();
+                                    return (
+                                      field.product_name?.toLowerCase().includes(searchTerm) ||
+                                      field.productName?.toLowerCase().includes(searchTerm) ||
+                                      field.name?.toLowerCase().includes(searchTerm) ||
+                                      field.category?.toLowerCase().includes(searchTerm) ||
+                                      field.subcategory?.toLowerCase().includes(searchTerm) ||
+                                      field.farmer?.toLowerCase().includes(searchTerm) ||
+                                      field.owner?.toLowerCase().includes(searchTerm) ||
+                                      field.description?.toLowerCase().includes(searchTerm) ||
+                                      field.location?.toLowerCase().includes(searchTerm) ||
+                                      field.farm_name?.toLowerCase().includes(searchTerm) ||
+                                      field.farmName?.toLowerCase().includes(searchTerm)
+                                    );
+                                  });
+                                  setFilteredFields(filtered.slice(0, 5));
+                                  setSearchAnchorEl(e.currentTarget.parentElement);
+                                } else {
+                                  setFilteredFields([]);
+                                  setSearchAnchorEl(null);
+                                }
+                                
+                                if (onSearchChange) {
+                                  onSearchChange(query);
+                                }
+                              }}
+                              onFocus={(e) => {
+                                if (searchQuery.trim() && filteredFields.length > 0) {
+                                  setSearchAnchorEl(e.currentTarget.parentElement);
+                                }
+                              }}
+                              sx={{ flex: 1, fontSize: '14px', }}
+                            />
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {/* Desktop Search Bar */}
+                  {!isMobile && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        backgroundColor: 'rgba(0,0,0,0.04)',
+                        borderRadius: 20,
+                        px: 2,
+                        py: 0.5,
+                        minWidth: '220px',
+                        position: 'relative'
+                      }}
+                    >
+                    {!isMobile && <Search sx={{ color: 'grey.500', mr: 1, fontSize: '20px' }} />}
+                    <InputBase
+                      placeholder="Search fields, crops..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        const query = e.target.value;
+                        setSearchQuery(query);
+                        
+                        if (query.trim()) {
+                          let fieldsToSearch = applyFilters(fields);
+                          
+                          const filtered = fieldsToSearch.filter(field => {
+                            const searchTerm = query.toLowerCase();
+                            return (
+                              field.product_name?.toLowerCase().includes(searchTerm) ||
+                              field.productName?.toLowerCase().includes(searchTerm) ||
+                              field.name?.toLowerCase().includes(searchTerm) ||
+                              field.category?.toLowerCase().includes(searchTerm) ||
+                              field.subcategory?.toLowerCase().includes(searchTerm) ||
+                              field.farmer?.toLowerCase().includes(searchTerm) ||
+                              field.owner?.toLowerCase().includes(searchTerm) ||
+                              field.description?.toLowerCase().includes(searchTerm) ||
+                              field.location?.toLowerCase().includes(searchTerm) ||
+                              field.farm_name?.toLowerCase().includes(searchTerm) ||
+                              field.farmName?.toLowerCase().includes(searchTerm)
+                            );
+                          });
+                          setFilteredFields(filtered.slice(0, 5));
+                          setSearchAnchorEl(e.currentTarget.parentElement);
+                        } else {
+                          setFilteredFields([]);
+                          setSearchAnchorEl(null);
+                        }
+                        
+                        if (onSearchChange) {
+                          onSearchChange(query);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (searchQuery.trim() && filteredFields.length > 0) {
+                          setSearchAnchorEl(e.currentTarget.parentElement);
+                        }
+                      }}
+                      sx={{ flex: 1, fontSize: '14px' }}
+                    />
                     </Box>
                   )}
                 </Box>
-              )}
-              
-              {/* Desktop Search Bar */}
-              {!isMobile && (
-                <Box
+
+                {/* Filter Icon */}
+                <Badge 
+                  badgeContent={activeFilters.categories.length + activeFilters.subcategories.length}
+                  color="primary"
+                  invisible={activeFilters.categories.length + activeFilters.subcategories.length === 0}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: 'rgba(0,0,0,0.04)',
-                    borderRadius: 20,
-                    px: 2,
-                    py: 0.5,
-                    minWidth: '220px',
-                    position: 'relative'
-                  }}
-                >
-                {!isMobile && <Search sx={{ color: 'grey.500', mr: 1, fontSize: '20px' }} />}
-                <InputBase
-                  placeholder="Search fields, crops..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    const query = e.target.value;
-                    setSearchQuery(query);
-                    
-                    if (query.trim()) {
-                      // First apply filters, then search within filtered results
-                      let fieldsToSearch = applyFilters(fields);
-                      
-                      // Filter fields based on search query
-                      const filtered = fieldsToSearch.filter(field => {
-                        const searchTerm = query.toLowerCase();
-                        return (
-                          // Handle field/product name variations
-                          field.product_name?.toLowerCase().includes(searchTerm) ||
-                          field.productName?.toLowerCase().includes(searchTerm) ||
-                          field.name?.toLowerCase().includes(searchTerm) ||
-                          // Handle categories
-                          field.category?.toLowerCase().includes(searchTerm) ||
-                          field.subcategory?.toLowerCase().includes(searchTerm) ||
-                          // Handle farmer/owner
-                          field.farmer?.toLowerCase().includes(searchTerm) ||
-                          field.owner?.toLowerCase().includes(searchTerm) ||
-                          // Handle descriptions
-                          field.description?.toLowerCase().includes(searchTerm) ||
-                          // Handle locations
-                          field.location?.toLowerCase().includes(searchTerm) ||
-                          // Handle farm name if available
-                          field.farm_name?.toLowerCase().includes(searchTerm) ||
-                          field.farmName?.toLowerCase().includes(searchTerm)
-                        );
-                      });
-                      setFilteredFields(filtered.slice(0, 5)); // Limit to 5 suggestions
-                      setSearchAnchorEl(e.currentTarget.parentElement);
-                    } else {
-                      // If no search query, clear suggestions
-                      setFilteredFields([]);
-                      setSearchAnchorEl(null);
-                    }
-                    
-                    if (onSearchChange) {
-                      onSearchChange(query);
-                    }
-                  }}
-                  onFocus={(e) => {
-                    if (searchQuery.trim() && filteredFields.length > 0) {
-                      setSearchAnchorEl(e.currentTarget.parentElement);
-                    }
-                  }}
-                  sx={{ flex: 1, fontSize: '14px' }}
-                />
-                </Box>
-              )}
-            </Box>
-
-            {/* Filter Icon */}
-              <Badge 
-                badgeContent={activeFilters.categories.length + activeFilters.subcategories.length}
-                color="primary"
-                invisible={activeFilters.categories.length + activeFilters.subcategories.length === 0}
-                sx={{
-                  '& .MuiBadge-badge': {
-                    fontSize: '0.6rem',
-                    height: 16,
-                    minWidth: 16,
-                  }
-                }}
-              >
-                <IconButton
-                  color="inherit"
-                  onClick={(e) => setFilterAnchorEl(e.currentTarget)}
-                  size={isMobile ? "small" : "medium"}
-                  sx={{ 
-                    backgroundColor: 'rgba(0,0,0,0.04)',
-                    '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
-                    ...(filterAnchorEl && {
-                      backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                      color: 'primary.main'
-                    }),
-                    ...(activeFilters.categories.length + activeFilters.subcategories.length > 0 && {
-                      backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                      color: 'primary.main'
-                    }),
-                    '& .MuiSvgIcon-root': {
-                      fontSize: isMobile ? '18px' : '24px'
+                    '& .MuiBadge-badge': {
+                      fontSize: '0.6rem',
+                      height: 16,
+                      minWidth: 16,
                     }
                   }}
                 >
-                  <Tune />
-                </IconButton>
-              </Badge>
-
-              
+                  <IconButton
+                    color="inherit"
+                    onClick={(e) => setFilterAnchorEl(e.currentTarget)}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ 
+                      backgroundColor: 'rgba(0,0,0,0.04)',
+                      '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
+                      ...(filterAnchorEl && {
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        color: 'primary.main'
+                      }),
+                      ...(activeFilters.categories.length + activeFilters.subcategories.length > 0 && {
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        color: 'primary.main'
+                      }),
+                      '& .MuiSvgIcon-root': {
+                        fontSize: isMobile ? '18px' : '24px'
+                      }
+                    }}
+                  >
+                    <Tune />
+                  </IconButton>
+                </Badge>
+              </>
+            )}
 
               {/* Create Field Button - Only show for farmers */}
               {userType === 'farmer' && (
@@ -769,59 +774,61 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               )}
 
               {/* Farmer Coins */}
-              <Tooltip 
-                title={
-                  <Box sx={{ textAlign: 'center', py: 0.3 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.3, fontSize: '11px' }}>
-                      Farmer Coins Balance
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mb: 0.3, fontSize: '10px' }}>
-                      1 Farmer Coin = $100
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'success.light', fontSize: '10px' }}>
-                      You have {userCoins.toLocaleString()} coins = ${(userCoins * 100).toLocaleString()}
-                    </Typography>
-                  </Box>
-                }
-                arrow
-                placement="bottom"
-                componentsProps={{
-                  tooltip: {
-                    sx: {
-                      maxWidth: 180,
-                      fontSize: '10px',
-                      p: 1
-                    }
+              {!isAdmin && (
+                <Tooltip 
+                  title={
+                    <Box sx={{ textAlign: 'center', py: 0.3 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.3, fontSize: '11px' }}>
+                        Farmer Coins Balance
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block', mb: 0.3, fontSize: '10px' }}>
+                        1 Farmer Coin = $100
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'success.light', fontSize: '10px' }}>
+                        You have {userCoins.toLocaleString()} coins = ${(userCoins * 100).toLocaleString()}
+                      </Typography>
+                    </Box>
                   }
-                }}
-              >
-                <Chip
-                  icon={<span style={{ fontSize: isMobile ? '12px' : '14px' }}>🪙</span>}
-                  label={userCoins.toLocaleString()}
-                  variant="outlined"
-                  size={isMobile ? "small" : "medium"}
-                  sx={{ 
-                    fontWeight: 'bold',
-                    borderColor: '#FF9800',
-                    color: '#F57C00',
-                    backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                    cursor: 'pointer',
-                    height: isMobile ? 24 : 32,
-                    '& .MuiChip-label': {
-                      fontSize: isMobile ? '11px' : '12px',
-                      px: isMobile ? 0.5 : 1
-                    },
-                    '& .MuiChip-icon': {
-                      marginLeft: isMobile ? '4px' : '8px',
-                      marginRight: isMobile ? '-2px' : '-6px'
-                    },
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                      borderColor: '#F57C00',
+                  arrow
+                  placement="bottom"
+                  componentsProps={{
+                    tooltip: {
+                      sx: {
+                        maxWidth: 180,
+                        fontSize: '10px',
+                        p: 1
+                      }
                     }
                   }}
-                />
-              </Tooltip>
+                >
+                  <Chip
+                    icon={<span style={{ fontSize: isMobile ? '12px' : '14px' }}>🪙</span>}
+                    label={userCoins.toLocaleString()}
+                    variant="outlined"
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ 
+                      fontWeight: 'bold',
+                      borderColor: '#FF9800',
+                      color: '#F57C00',
+                      backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                      cursor: 'pointer',
+                      height: isMobile ? 24 : 32,
+                      '& .MuiChip-label': {
+                        fontSize: isMobile ? '11px' : '12px',
+                        px: isMobile ? 0.5 : 1
+                      },
+                      '& .MuiChip-icon': {
+                        marginLeft: isMobile ? '4px' : '8px',
+                        marginRight: isMobile ? '-2px' : '-6px'
+                      },
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                        borderColor: '#F57C00',
+                      }
+                    }}
+                  />
+                </Tooltip>
+              )}
 
               {/* Profile */}
               {!isMobile && (
@@ -881,6 +888,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
       </Dialog>
 
       {/* Collapsible Side Menu */}
+      {userType !== 'admin' && (
       <Drawer
         anchor="left"
         open={drawerOpen}
@@ -890,8 +898,8 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             width: isMobile ? 220 : 280,
             boxSizing: 'border-box',
             backgroundColor: 'background.paper',
-            top: isMobile ? 64 : 72,
-            height: isMobile ? 'calc(100% - 64px)' : 'calc(100% - 72px)',
+            top: 'var(--app-header-height)',
+            height: 'calc(100% - var(--app-header-height))',
             pt: 2,
           },
         }}
@@ -1024,6 +1032,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           </ListItem>
         </List>
       </Drawer>
+      )}
 
       {/* Search Dropdown */}
       <Popper

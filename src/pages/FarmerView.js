@@ -380,8 +380,8 @@ const FarmerView = () => {
       
       <Box sx={{
         flexGrow: 1,
-        mt: '64px',
-        height: 'calc(100vh - 64px)',
+        mt: 'var(--app-header-height)',
+        height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || location.pathname === '/farmer/messages' || location.pathname === '/farmer/currency' || location.pathname === '/farmer/settings') ? 'hidden' : 'auto',
         position: 'relative'
       }}>

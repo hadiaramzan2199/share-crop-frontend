@@ -145,8 +145,8 @@ const BuyerView = () => {
       
       <Box sx={{
         flexGrow: 1,
-        mt: '64px', // Account for fixed header height
-        height: 'calc(100vh - 64px)', // Subtract AppBar height from viewport
+        mt: 'var(--app-header-height)',
+        height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || isMessagesPage || isCurrencyPage || isSettingsPage) ? 'hidden' : 'auto', // No scroll for map, messages, currency, and settings pages, scroll for other pages
         position: 'relative'
       }}>

@@ -14,15 +14,19 @@ const api = axios.create({
   },
 });
 
+let authTokenProvider = null;
+export const setAuthTokenProvider = (provider) => {
+  authTokenProvider = typeof provider === 'function' ? provider : null;
+};
+
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
-    // localStorage interactions removed as it's deprecated.
-    // Authentication token will be managed by a future backend or in-memory for mock auth.
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = authTokenProvider ? authTokenProvider() : null;
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -32,13 +36,6 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // localStorage interactions removed as it's deprecated.
-      // Token and user data will be managed by a future backend or in-memory for mock auth.
-      // localStorage.removeItem('token');
-      // localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
     return Promise.reject(error);
   }
 );

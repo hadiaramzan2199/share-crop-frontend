@@ -6,8 +6,10 @@ import coinService from '../../services/coinService';
 import fieldsService from '../../services/fields';
 import { mockProductService } from '../../services/mockServices';
 import notificationsService from '../../services/notifications';
+import api from '../../services/api';
  
 import { mockOrderService } from '../../services/mockServices';
+import rentedFieldsService from '../../services/rentedFields';
 import CustomScaleBar from './CustomScaleBar';
 import ProductSummaryBar from './ProductSummaryBar';
 import { Map as MapboxMap, Marker, NavigationControl, FullscreenControl } from 'react-map-gl';
@@ -51,7 +53,10 @@ const EnhancedFarmMap = forwardRef(({
   farms: externalFarms,
   fields: externalFields,
   onEditField,
-  filters: externalFilters
+  filters: externalFilters,
+  height = '100vh',
+  embedded = false,
+  minimal = false
 }, ref) => {
   const mapRef = useRef();
   const { user: currentUser } = useAuth();
@@ -129,6 +134,7 @@ const EnhancedFarmMap = forwardRef(({
   const [showDeliveryPanel, setShowDeliveryPanel] = useState(false);
   const deliveryIconRef = useRef(null);
   const [deliveryPanelLeft, setDeliveryPanelLeft] = useState(54);
+  const [fieldOrderStats, setFieldOrderStats] = useState(new Map());
 
   useEffect(() => {
     setShowDeliveryPanel(false);
@@ -149,6 +155,155 @@ const EnhancedFarmMap = forwardRef(({
     if (!Number.isFinite(left)) left = 54;
     setDeliveryPanelLeft(Math.max(margin, Math.min(maxLeft, left)));
   }, [showDeliveryPanel, isMobile, viewState]);
+
+  const toFiniteNumber = useCallback((v) => {
+    const n = typeof v === 'string' ? parseFloat(v) : v;
+    return Number.isFinite(n) ? n : null;
+  }, []);
+
+  const normalizeNameKey = useCallback((s) => {
+    return String(s || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\w\s-]/g, '');
+  }, []);
+
+  const toISODate = useCallback((raw) => {
+    if (!raw) return null;
+    if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.trim())) return raw.trim();
+    try {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return typeof raw === 'string' ? raw : null;
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return typeof raw === 'string' ? raw : null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const useOrderStats = Boolean(minimal && userType === 'admin');
+    if (!useOrderStats) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      const nameToId = new Map(
+        (Array.isArray(farms) ? farms : [])
+          .filter(f => f?.id != null)
+          .map(f => [normalizeNameKey(f.name || f.product_name || f.title), String(f.id)])
+          .filter(([k]) => Boolean(k))
+      );
+
+      const unwrapList = (data) => {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.orders)) return data.orders;
+        if (Array.isArray(data?.items)) return data.items;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.result)) return data.result;
+        return [];
+      };
+
+      const tryGet = async (fn) => {
+        try {
+          const res = await fn();
+          const list = unwrapList(res?.data);
+          return list;
+        } catch {
+          return null;
+        }
+      };
+
+      const tryGetApi = async (path) => {
+        return tryGet(() => api.get(path));
+      };
+
+      let orders =
+        (await tryGetApi('/api/orders')) ??
+        (await tryGetApi('/api/admin/orders')) ??
+        (await tryGetApi('/api/orders/all')) ??
+        (await tryGetApi('/api/orders?scope=all')) ??
+        (await tryGet(() => orderService.getBuyerOrders())) ??
+        null;
+
+      if (!orders) {
+        const rentals =
+          (await tryGet(() => rentedFieldsService.getAll())) ??
+          null;
+        if (rentals) {
+          orders = rentals.map((r) => ({
+            field_id: r.field_id ?? r.fieldId ?? r.field?.id ?? r.fieldId,
+            field_name: r.field_name ?? r.fieldName ?? r.field?.name,
+            product_name: r.product_name ?? r.productName ?? r.field?.name,
+            name: r.name ?? r.field_name ?? r.field_name ?? r.fieldName,
+            quantity: r.quantity ?? r.area_rented ?? r.area ?? r.area_m2 ?? r.rented_area ?? r.rented_m2,
+            start_date: r.start_date ?? r.startDate ?? r.created_at ?? r.createdAt,
+            end_date: r.end_date ?? r.endDate,
+            status: r.status ?? 'active'
+          }));
+        }
+      }
+
+      if (!orders) {
+        const res2 = await mockOrderService.getBuyerOrders().catch(() => null);
+        orders = unwrapList(res2?.data);
+      }
+      if (!orders) orders = [];
+
+      const stats = new Map();
+      for (const o of orders) {
+        const status = String(o?.status || '').toLowerCase();
+        if (status === 'cancelled') continue;
+
+        const qty = toFiniteNumber(o?.quantity ?? o?.area_rented ?? o?.area ?? 0);
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+
+        const fidRaw = o?.field_id ?? o?.fieldId ?? o?.field?.id ?? o?.field?.field_id;
+        const fid = fidRaw != null ? String(fidRaw) : null;
+        const nameKey = normalizeNameKey(
+          o?.field_name ||
+          o?.field?.name ||
+          o?.product_name ||
+          o?.name ||
+          o?.fieldName ||
+          o?.productName
+        );
+        const key = fid || (nameKey ? nameToId.get(nameKey) : null);
+        if (!key) continue;
+
+        const prev = stats.get(key) || { rented_area: 0, start_date: null, end_date: null };
+        prev.rented_area += qty;
+
+        const start = toISODate(o?.start_date ?? o?.startDate);
+        const end = toISODate(o?.end_date ?? o?.endDate);
+        const prevStart = prev.start_date;
+        const prevEnd = prev.end_date;
+        const ts = (d) => {
+          if (!d) return null;
+          const dd = new Date(d);
+          return isNaN(dd.getTime()) ? null : dd.getTime();
+        };
+        const startTs = ts(start);
+        const prevStartTs = ts(prevStart);
+        if (start && (prevStartTs == null || (startTs != null && startTs < prevStartTs))) prev.start_date = start;
+
+        const endTs = ts(end);
+        const prevEndTs = ts(prevEnd);
+        if (end && (prevEndTs == null || (endTs != null && endTs > prevEndTs))) prev.end_date = end;
+
+        stats.set(key, prev);
+      }
+
+      if (cancelled) return;
+      setFieldOrderStats(stats);
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [minimal, userType, farms, normalizeNameKey, toFiniteNumber, toISODate]);
   const canonicalizeCategory = useCallback((raw) => {
     const s = raw ? raw.toString().trim() : '';
     let slug = s.toLowerCase().replace(/[\s_]+/g, '-');
@@ -1103,6 +1258,13 @@ const EnhancedFarmMap = forwardRef(({
   }, [purchasedFarms, purchasedProductIds]);
 
   const getOccupiedArea = (prod) => {
+    const useOrderStats = Boolean(minimal && userType === 'admin');
+    if (useOrderStats) {
+      const key = String(prod?.id ?? prod?.field_id ?? '');
+      const rented = fieldOrderStats.get(key)?.rented_area;
+      const rentedNum = typeof rented === 'string' ? parseFloat(rented) : rented;
+      if (Number.isFinite(rentedNum)) return Math.max(0, rentedNum);
+    }
     const occRaw = typeof prod?.occupied_area === 'string' ? parseFloat(prod.occupied_area) : prod?.occupied_area;
     const totalRaw = typeof (prod?.total_area ?? prod?.field_size) === 'string'
       ? parseFloat(prod?.total_area ?? prod?.field_size)
@@ -1122,6 +1284,14 @@ const EnhancedFarmMap = forwardRef(({
   };
 
   const getAvailableArea = (prod) => {
+    const useOrderStats = Boolean(minimal && userType === 'admin');
+    if (useOrderStats) {
+      const key = String(prod?.id ?? prod?.field_id ?? '');
+      const rented = fieldOrderStats.get(key)?.rented_area;
+      const rentedNum = typeof rented === 'string' ? parseFloat(rented) : rented;
+      const totalNum = typeof prod?.total_area === 'string' ? parseFloat(prod.total_area) : (prod?.total_area || 0);
+      if (Number.isFinite(totalNum) && Number.isFinite(rentedNum)) return Math.max(0, totalNum - rentedNum);
+    }
     const total = typeof prod.total_area === 'string' ? parseFloat(prod.total_area) : (prod.total_area || 0);
     const avail = typeof prod.available_area === 'string' ? parseFloat(prod.available_area) : prod.available_area;
     const occ = getOccupiedArea(prod);
@@ -1387,6 +1557,25 @@ const EnhancedFarmMap = forwardRef(({
     if (fallLabel && f) return [`${f} (${fallLabel})`];
     if (f) return [f];
     if (fallLabel) return [fallLabel];
+    const hdArr = prod.harvest_dates || prod.harvestDates;
+    if (Array.isArray(hdArr) && hdArr.length > 0) {
+      const seen = new Set();
+      const out = [];
+      for (const it of hdArr) {
+        const raw = (it && typeof it === 'object') ? (it.date ?? it.value ?? it.harvest_date) : it;
+        const label = (it && typeof it === 'object') ? (it.label ?? it.name ?? '') : '';
+        const dt = formatDate(raw);
+        const key = `${dt}|${String(label || '').trim().toLowerCase()}`;
+        if (!dt) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(label ? `${dt} (${label})` : dt);
+      }
+      if (out.length > 0) return out;
+    }
+    const single = prod.harvest_date || prod.harvestDate || prod.harvest_start_date || prod.harvestStartDate;
+    const singleFmt = formatDate(single);
+    if (singleFmt) return [singleFmt];
     return [];
   };
 
@@ -2048,8 +2237,13 @@ const EnhancedFarmMap = forwardRef(({
   useEffect(() => {
     if (selectedProduct) {
       if (isMapAnimatingRef.current) return;
-      popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-      setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+      const fixed = popupFixedRef.current;
+      if (fixed?.left != null && fixed?.top != null) {
+        setPopupPosition({ left: fixed.left, top: fixed.top, transform: fixed.transform || 'translate(-50%, -50%)' });
+      } else {
+        popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+        setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+      }
     } else {
       setPopupPosition(null);
       popupFixedRef.current = { left: null, top: null, transform: null };
@@ -2062,7 +2256,7 @@ const EnhancedFarmMap = forwardRef(({
   if (!MAPBOX_TOKEN) {
     return (
       <div style={{
-        height: '100vh', width: '100%', position: 'relative', display: 'flex',
+        height, width: '100%', position: 'relative', display: 'flex',
         alignItems: 'center', justifyContent: 'center', padding: '16px'
       }}>
         <div style={{
@@ -2081,8 +2275,216 @@ const EnhancedFarmMap = forwardRef(({
     );
   }
 
+  if (minimal) {
+    const points = (Array.isArray(filteredFarms) && filteredFarms.length > 0 ? filteredFarms : farms)
+      .filter(f => Array.isArray(f?.coordinates) && Number.isFinite(f.coordinates[0]) && Number.isFinite(f.coordinates[1]));
+    const containerStyle = embedded
+      ? { position: 'absolute', inset: 0 }
+      : { height, width: '100%', position: 'relative' };
+
+    return (
+      <div style={containerStyle}>
+        <MapboxMap
+          ref={mapRef}
+          {...viewState}
+          onMove={evt => setViewState(evt.viewState)}
+          attributionControl={false}
+          mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
+          style={{ position: 'absolute', inset: 0 }}
+          mapboxAccessToken={MAPBOX_TOKEN}
+          projection="globe"
+          onClick={() => {
+            setSelectedProduct(null);
+            setPopupPosition(null);
+            setInsufficientFunds(false);
+          }}
+          initialViewState={{
+            longitude: 12.5674,
+            latitude: 41.8719,
+            zoom: 0.5,
+          }}
+        >
+          {points.map((f) => (
+            <Marker
+              key={f.id ?? `${f.coordinates[0]}-${f.coordinates[1]}-${f.name ?? ''}`}
+              longitude={f.coordinates[0]}
+              latitude={f.coordinates[1]}
+              anchor="center"
+            >
+              <div
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedProduct(f);
+                  fetchLocationForProduct(f);
+                  const coords = f?.coordinates;
+                  if (mapRef.current && Array.isArray(coords) && coords.length >= 2) {
+                    const map = mapRef.current.getMap?.();
+                    const currentZoom = map && typeof map.getZoom === 'function' ? map.getZoom() : viewState.zoom;
+                    isMapAnimatingRef.current = true;
+                    if (map && typeof map.once === 'function') {
+                      map.once('moveend', () => {
+                        isMapAnimatingRef.current = false;
+                      });
+                    } else {
+                      setTimeout(() => { isMapAnimatingRef.current = false; }, 650);
+                    }
+                    mapRef.current.flyTo({ center: [coords[0], coords[1]], zoom: currentZoom, duration: 550, essential: true });
+                  }
+                  popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, calc(-100% - 14px))' };
+                  setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, calc(-100% - 14px))' });
+                }}
+                style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+              >
+                <img
+                  src={getProductIcon(f.subcategory || f.category)}
+                  alt={f.subcategory || f.category || 'Crop'}
+                  style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: 'transparent' }}
+                />
+              </div>
+            </Marker>
+          ))}
+        </MapboxMap>
+
+        {selectedProduct && popupPosition && (
+          <div
+            key={`popup-${selectedProduct.id ?? 'field'}`}
+            style={{
+              position: 'absolute',
+              left: popupPosition.left,
+              top: popupPosition.top,
+              transform: popupPosition.transform || 'translate(-50%, -50%)',
+              zIndex: 1000,
+              transition: 'left 450ms ease, top 450ms ease, transform 450ms ease',
+              animation: !popupPosition.transform ? 'cardSlideIn 600ms ease both' : undefined
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: isMobile ? '8px' : '12px',
+                padding: '0',
+                width: isMobile ? '235px' : '300px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                border: '1px solid #e9ecef',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{ position: 'relative', padding: isMobile ? '6px 12px 0' : '8px 16px 0' }}>
+                <div
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setInsufficientFunds(false);
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                    fontSize: isMobile ? '11px' : '13px',
+                    color: '#6c757d',
+                    width: isMobile ? '18px' : '22px',
+                    height: isMobile ? '18px' : '22px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    backgroundColor: '#f0f0f0',
+                    position: 'absolute',
+                    top: isMobile ? '5px' : '7px',
+                    right: isMobile ? '5px' : '7px',
+                    fontWeight: 'bold',
+                    zIndex: 10
+                  }}
+                >
+                  ✕
+                </div>
+              </div>
+
+              <div style={{ padding: isMobile ? '7px 10px 10px' : '8px 12px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '7px' : '9px', marginBottom: isMobile ? '8px' : '10px' }}>
+                  <div style={{
+                    width: isMobile ? '44px' : '52px',
+                    height: isMobile ? '44px' : '52px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: isMobile ? '4px' : '6px',
+                    flexShrink: 0,
+                    overflow: 'hidden'
+                  }}>
+                    <img
+                      src={getProductImageSrc(selectedProduct)}
+                      alt={selectedProduct.name || 'Product'}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.currentTarget.src = getProductIcon(selectedProduct?.subcategory || selectedProduct?.category); }}
+                    />
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '13px', lineHeight: 1.25 }}>
+                      {selectedProduct.name || selectedProduct.product_name || 'Field'}
+                    </div>
+                    {(selectedProduct.farmName || selectedProduct.farm_name) ? (
+                      <div style={{ fontSize: isMobile ? '8px' : '10px', color: '#28a745', marginTop: '2px', fontWeight: 500 }}>
+                        🏡 {selectedProduct.farmName || selectedProduct.farm_name}
+                      </div>
+                    ) : null}
+                    <div style={{ fontSize: isMobile ? '8px' : '10px', color: '#6c757d', marginTop: '2px' }}>
+                      ({selectedProduct.farmer_name || selectedProduct.farmerName || user?.name || 'Farmer Name'})
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z"/></svg>
+                      </span>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px', marginLeft: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {productLocations.get(selectedProduct.id) || selectedProduct.location || 'Unknown location'}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                      <span style={{ fontSize: isMobile ? '9px' : '11px' }}>🌤️</span>
+                      <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d' }}>
+                        {selectedProduct.weather || 'Not specified'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: isMobile ? '7px 0' : '9px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                  <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>
+                    Rented: {formatAreaInt(getOccupiedArea(selectedProduct))}m²
+                  </div>
+                  <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px' }}>
+                    Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V10h14v9z"/></svg>
+                    </span>
+                    <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>Harvest Dates</div>
+                  </div>
+                  <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px', textAlign: 'right', marginLeft: '10px' }}>
+                    {(() => {
+                      const list = getSelectedHarvestList(selectedProduct);
+                      const uniq = Array.from(new Set(list));
+                      return uniq.length ? uniq.join(', ') : 'Not specified';
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ height: '100vh', width: '100%', position: 'relative'}}>
+    <div style={{ height, width: '100%', position: 'relative'}}>
       <MapboxMap
         ref={mapRef}
         {...viewState}
@@ -2094,7 +2496,7 @@ const EnhancedFarmMap = forwardRef(({
               setInsufficientFunds(false);
             }}
         mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
-        style={{ width: '100%', height: '100%', marginTop: '-65px' }}
+        style={{ width: '100%', height: '100%', marginTop: embedded ? '0px' : '-65px' }}
         mapboxAccessToken={MAPBOX_TOKEN}
         projection="globe"
         initialViewState={{
@@ -2104,12 +2506,12 @@ const EnhancedFarmMap = forwardRef(({
         }}
       >
 
-        <NavigationControl position="top-right" style={{ marginTop: isMobile ? '80px' : '110px', marginRight: '10px' }} />
-        <FullscreenControl position="top-right" style={{ marginTop: isMobile ? '30px' : '35px', marginRight: '10px' }} />
+        <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
+        <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
         <div 
           style={{
             position: 'absolute',
-            top: isMobile ? '220px' : '265px',
+            top: embedded ? (isMobile ? '110px' : '120px') : (isMobile ? '220px' : '265px'),
             right: '10px',
             zIndex: 1
           }}

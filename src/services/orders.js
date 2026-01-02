@@ -4,6 +4,8 @@ export const orderService = {
   // Create a new order
   createOrder: (orderData) => api.post('/api/orders', orderData),
   
+  getAllOrders: (params) => api.get('/api/orders', { params }),
+
   // Get orders for buyer
   getBuyerOrders: () => api.get('/api/orders/my-orders'),
   
