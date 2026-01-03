@@ -44,7 +44,28 @@ const AdminUsers = () => {
   const [docsContent, setDocsContent] = useState(null);
   const [authError, setAuthError] = useState(false);
   const [feedback, setFeedback] = useState('');
- 
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    if (id) {
+      setHighlightedId(id);
+      const timer = setTimeout(() => {
+        setHighlightedId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if ((!loadingUsers || !loadingPending) && highlightedId) {
+      const el = document.getElementById(`row-${highlightedId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [loadingUsers, loadingPending, highlightedId]);
 
   useEffect(() => {
     let mounted = true;
@@ -183,7 +204,15 @@ const AdminUsers = () => {
                       ))
                     ) : (
                       farmers.map(u => (
-                        <TableRow key={u.id} hover>
+                        <TableRow 
+                          key={u.id} 
+                          id={`row-${u.id}`}
+                          hover
+                          sx={{ 
+                            backgroundColor: highlightedId === String(u.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                            transition: 'background-color 0.5s ease'
+                          }}
+                        >
                           <TableCell>{u.name}</TableCell>
                           <TableCell>{u.email}</TableCell>
                           <TableCell><RoleChip role={u.user_type} /></TableCell>
@@ -224,7 +253,15 @@ const AdminUsers = () => {
                       ))
                     ) : (
                       buyers.map(u => (
-                        <TableRow key={u.id} hover>
+                        <TableRow 
+                          key={u.id} 
+                          id={`row-${u.id}`}
+                          hover
+                          sx={{ 
+                            backgroundColor: highlightedId === String(u.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                            transition: 'background-color 0.5s ease'
+                          }}
+                        >
                           <TableCell>{u.name}</TableCell>
                           <TableCell>{u.email}</TableCell>
                           <TableCell><RoleChip role={u.user_type} /></TableCell>
@@ -270,7 +307,15 @@ const AdminUsers = () => {
                   </TableRow>
                 ) : (
                   pendingFarmers.map(f => (
-                    <TableRow key={f.id} hover>
+                    <TableRow 
+                      key={f.id} 
+                      id={`row-${f.id}`}
+                      hover
+                      sx={{ 
+                        backgroundColor: highlightedId === String(f.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                        transition: 'background-color 0.5s ease'
+                      }}
+                    >
                       <TableCell>{f.name}</TableCell>
                       <TableCell>{f.email}</TableCell>
                       <TableCell><StatusChip status={f.approval_status} /></TableCell>

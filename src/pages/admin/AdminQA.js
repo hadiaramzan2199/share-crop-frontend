@@ -32,6 +32,28 @@ const AdminQA = () => {
   const [remarksDraft, setRemarksDraft] = useState('');
   const [remarksSavingId, setRemarksSavingId] = useState(null);
   const [authError, setAuthError] = useState(false);
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    if (id) {
+      setHighlightedId(id);
+      const timer = setTimeout(() => {
+        setHighlightedId(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!loading && highlightedId) {
+      const el = document.getElementById(`row-${highlightedId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [loading, highlightedId]);
 
   useEffect(() => {
     let mounted = true;
@@ -148,7 +170,15 @@ const AdminQA = () => {
                   filtered.map(item => {
                     const nextStatuses = allowedTransitions[String(item.status || '').toLowerCase()] || [];
                     return (
-                      <TableRow key={item.id} hover>
+                      <TableRow 
+                        key={item.id} 
+                        id={`row-${item.id}`}
+                        hover
+                        sx={{ 
+                          backgroundColor: highlightedId === String(item.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                          transition: 'background-color 0.5s ease'
+                        }}
+                      >
                         <TableCell>{item.category || '—'}</TableCell>
                         <TableCell>{item.admin_remarks || '—'}</TableCell>
                         <TableCell><StatusChip status={item.status} /></TableCell>

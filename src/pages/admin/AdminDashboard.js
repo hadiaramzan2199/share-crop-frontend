@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Card, CardContent, Typography, Skeleton, Stack, Chip, TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody, Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { adminService } from '../../services/admin';
 import fieldsService from '../../services/fields';
 import { orderService } from '../../services/orders';
@@ -10,14 +10,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import dayjs from 'dayjs';
 import EnhancedFarmMap from '../../components/Map/EnhancedFarmMap';
 import { getProductIcon } from '../../utils/productIcons';
-import { DonutSmall, LocalFlorist, Public, NotificationsNone, ReportProblemOutlined, ReceiptLong, HowToReg, MapOutlined, ShowChart, PieChartOutline } from '@mui/icons-material';
+import { DonutSmall, LocalFlorist, Public, NotificationsNone, ReportProblemOutlined, ReceiptLong, HowToReg, MapOutlined, ShowChart, PieChartOutline, ArrowUpward, ArrowDownward } from '@mui/icons-material';
 
 const sectionGap = { xs: 2, sm: 3 };
-const pageSizes = { complaints: 3, transactions: 3, approvals: 4 };
+const pageSizes = { complaints: 3, transactions: 7, approvals: 4 };
 const cardSx = { borderRadius: 3, boxShadow: '0 6px 22px rgba(0,0,0,0.08)' };
 const cardContentSx = { p: { xs: 2, sm: 2.5 } };
 const cardTitleSx = { fontWeight: 800, color: 'text.primary' };
 const tableHeadCellSx = { fontWeight: 800, color: 'text.primary' };
+const tableBodyCellSx = { py: 0.75 };
 const eur = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const statTone = (key) => {
@@ -476,6 +477,7 @@ const HorizontalBarChart = ({ bars }) => {
   );
 };
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const location = useLocation();
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -838,6 +840,65 @@ const AdminDashboard = () => {
           });
         userEvents.forEach(u => { const d = dayjs(u.created_at || u.joined_at || u.createdAt || Date.now()).format('YYYY-MM-DD'); userByDay[d] = (userByDay[d] || 0) + 1; });
         const userPts = days.map(d => ({ x: d, y: userByDay[d] || 0 }));
+        const idToEmail = {};
+        const idToUser = {};
+        const nameToUser = {};
+        allUsers.forEach(u => {
+          const uid = String(u?.id ?? '').trim();
+          if (uid) idToUser[uid] = u;
+          const uname = String(u?.name ?? u?.full_name ?? '').trim().toLowerCase();
+          if (uname) nameToUser[uname] = u;
+          if (uid && u?.email) idToEmail[uid] = u.email;
+        });
+        const isEmail = (s) => /\S+@\S+\.\S+/.test(String(s || '').trim());
+        const userIds = Array.from(new Set(complaints.map(c => String(c?.user_id ?? c?.created_by ?? c?.user ?? c?.userId ?? '').trim()).filter(Boolean)));
+        const complaintEmails = Array.from(new Set(complaints.map(c => {
+          const e1 = c?.user_email ?? c?.email;
+          const e2 = isEmail(c?.user_name) ? c.user_name : null;
+          const e3 = isEmail(c?.created_by) ? c.created_by : null;
+          return e1 || e2 || e3 || null;
+        }).filter(Boolean).map(String)));
+        if (supabase && userIds.length > 0) {
+          try {
+            const { data: userRows, error: userErr } = await supabase.from('users').select('id,email,name').in('id', userIds);
+            if (!userErr && Array.isArray(userRows)) {
+              userRows.forEach(u => {
+                const uid = String(u?.id ?? '').trim();
+                if (uid) {
+                  idToUser[uid] = idToUser[uid] || u;
+                  if (u?.email) idToEmail[uid] = u.email;
+                  const uname = String(u?.name ?? '').trim().toLowerCase();
+                  if (uname) nameToUser[uname] = nameToUser[uname] || u;
+                }
+              });
+            }
+          } catch (_) {}
+        }
+        if (supabase && complaintEmails.length > 0) {
+          try {
+            const { data: userRows2, error: userErr2 } = await supabase.from('users').select('id,email,name').in('email', complaintEmails);
+            if (!userErr2 && Array.isArray(userRows2)) {
+              userRows2.forEach(u => {
+                const uid = String(u?.id ?? '').trim();
+                const email = String(u?.email ?? '').trim();
+                if (uid) idToUser[uid] = idToUser[uid] || u;
+                if (email) idToEmail[uid] = idToEmail[uid] || email;
+                const uname = String(u?.name ?? '').trim().toLowerCase();
+                if (uname) nameToUser[uname] = nameToUser[uname] || u;
+              });
+            }
+          } catch (_) {}
+        }
+        complaints = complaints.map(c => {
+          const uid = String(c?.user_id ?? c?.created_by ?? c?.user ?? c?.userId ?? '');
+          const rawEmail = c?.user_email ?? c?.email ?? null;
+          const byId = uid ? idToUser[uid] : null;
+          const byName = String(c?.user_name ?? c?.created_by ?? '').trim().toLowerCase();
+          const nameMatch = byName ? nameToUser[byName] : null;
+          const emailFromName = isEmail(c?.user_name) ? c.user_name : null;
+          const email = rawEmail || emailFromName || (byId?.email) || (nameMatch?.email) || null;
+          return { ...c, user_email: email };
+        });
         const complaintKinds = {};
         complaints.forEach(c => {
           const k = c.category || c.type || c.complaint_type || c.complaint_category || c.reason || 'Other';
@@ -1230,11 +1291,11 @@ const AdminDashboard = () => {
             <Card sx={{ ...cardSx, width: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
                 <CardHeader title="Recent Complaints" subtitle={pageLabel('complaints')} />
-                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, flex: 1, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
+                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'rgba(15, 23, 42, 0.02)' }}>
-                        <TableCell sx={tableHeadCellSx}>Title</TableCell>
+                        <TableCell sx={tableHeadCellSx}>Admin Remarks</TableCell>
                         <TableCell sx={tableHeadCellSx}>User</TableCell>
                         <TableCell sx={tableHeadCellSx}>Status</TableCell>
                       </TableRow>
@@ -1244,10 +1305,15 @@ const AdminDashboard = () => {
                         <TableEmptyRow colSpan={3} icon={ReportProblemOutlined} title="No complaints yet" subtitle="New complaints will show up here for quick review." />
                       ) : (
                         paged.complaints.map((c) => (
-                          <TableRow key={c.id} hover>
-                            <TableCell>{c.title || c.subject || 'Untitled'}</TableCell>
-                            <TableCell>{c.user_name || c.created_by || '—'}</TableCell>
-                            <TableCell>{c.status || '—'}</TableCell>
+                          <TableRow 
+                            key={c.id} 
+                            hover 
+                            sx={{ py: 0.5, cursor: 'pointer' }}
+                            onClick={() => navigate(`/admin/qa?id=${c.id}`)}
+                          >
+                            <TableCell sx={tableBodyCellSx}>{c.admin_remarks || c.message || c.description || c.details || c.title || c.subject || '—'}</TableCell>
+                            <TableCell sx={tableBodyCellSx}>{c.user_email || c.email || (/\S+@\S+\.\S+/.test(String(c.user_name||'')) ? c.user_name : '—')}</TableCell>
+                            <TableCell sx={tableBodyCellSx}>{c.status || '—'}</TableCell>
                           </TableRow>
                         ))
                       )}
@@ -1269,11 +1335,11 @@ const AdminDashboard = () => {
             <Card sx={{ ...cardSx, width: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
                 <CardHeader title="Recent Transactions" subtitle={pageLabel('transactions')} />
-                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, flex: 1, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
+                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'rgba(15, 23, 42, 0.02)' }}>
-                        <TableCell sx={tableHeadCellSx}>ID</TableCell>
+                        <TableCell sx={tableHeadCellSx}>Type</TableCell>
                         <TableCell sx={tableHeadCellSx}>Amount</TableCell>
                         <TableCell sx={tableHeadCellSx}>Date</TableCell>
                       </TableRow>
@@ -1283,10 +1349,27 @@ const AdminDashboard = () => {
                         <TableEmptyRow colSpan={3} icon={ReceiptLong} title="No transactions yet" subtitle="Recent payments and coin activity will appear here." />
                       ) : (
                         paged.transactions.map((t) => (
-                          <TableRow key={t.id} hover>
-                            <TableCell>{t.id}</TableCell>
-                            <TableCell>{t.amount || t.total || 0}</TableCell>
-                            <TableCell>{new Date(t.created_at || t.timestamp || Date.now()).toLocaleString()}</TableCell>
+                          <TableRow 
+                            key={t.id} 
+                            hover 
+                            sx={{ py: 0.5, cursor: 'pointer' }}
+                            onClick={() => navigate(`/admin/coins?id=${t.id}`)}
+                          >
+                            <TableCell sx={tableBodyCellSx}>
+                              {String(t.type || t.transaction_type || '').toLowerCase() === 'credit' ? (
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <ArrowDownward sx={{ color: 'success.main', fontSize: 18 }} />
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Credit</Typography>
+                                </Stack>
+                              ) : (
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <ArrowUpward sx={{ color: 'error.main', fontSize: 18 }} />
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Debit</Typography>
+                                </Stack>
+                              )}
+                            </TableCell>
+                            <TableCell sx={tableBodyCellSx}>{t.amount || t.total || 0}</TableCell>
+                            <TableCell sx={tableBodyCellSx}>{new Date(t.created_at || t.timestamp || Date.now()).toLocaleString()}</TableCell>
                           </TableRow>
                         ))
                       )}
@@ -1308,7 +1391,7 @@ const AdminDashboard = () => {
             <Card sx={{ ...cardSx, width: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ ...cardContentSx, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
                 <CardHeader title="Pending Approvals" subtitle={pageLabel('approvals')} />
-                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, flex: 1, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
+                <TableContainer component={Paper} elevation={0} sx={{ mt: 2, borderRadius: 2, border: '1px solid rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'rgba(15, 23, 42, 0.02)' }}>
@@ -1319,13 +1402,18 @@ const AdminDashboard = () => {
                     </TableHead>
                     <TableBody>
                       {paged.approvals.length === 0 ? (
-                        <TableEmptyRow colSpan={3} icon={HowToReg} title="No approvals pending" subtitle="New farmer requests will show up here for approval." />
+                        <TableEmptyRow colSpan={3} icon={HowToReg} title="No approvals pending" subtitle="New requests will appear here for review." />
                       ) : (
                         paged.approvals.map((a) => (
-                          <TableRow key={a.id} hover>
-                            <TableCell>{a.name || '—'}</TableCell>
-                            <TableCell>{a.email || '—'}</TableCell>
-                            <TableCell>{a.approval_status || 'pending'}</TableCell>
+                          <TableRow 
+                            key={a.id} 
+                            hover 
+                            sx={{ py: 0.5, cursor: 'pointer' }}
+                            onClick={() => navigate(`/admin/users?id=${a.id}`)}
+                          >
+                            <TableCell sx={tableBodyCellSx}>{a.name}</TableCell>
+                            <TableCell sx={tableBodyCellSx}>{a.email}</TableCell>
+                            <TableCell sx={tableBodyCellSx}>{a.approval_status || 'pending'}</TableCell>
                           </TableRow>
                         ))
                       )}
