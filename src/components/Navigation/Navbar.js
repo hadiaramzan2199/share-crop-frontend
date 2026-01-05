@@ -160,7 +160,7 @@ const Navbar = ({ user, onLogout }) => {
             {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
           </Avatar>
           <Typography variant="body2" sx={{ mr: 1 }}>
-            {user.name}
+            {user.name?.split(' ')[0] || user.name || 'User'}
           </Typography>
           <IconButton
             size="large"

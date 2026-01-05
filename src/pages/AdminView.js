@@ -12,8 +12,8 @@ const AdminView = () => {
 
   useEffect(() => {
     setSidebarOpen(false);
-    switchToRole('admin');
-  }, [switchToRole]);
+    // No need to force role - use actual logged-in user
+  }, []);
 
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>

@@ -22,7 +22,7 @@ import coinService from '../services/coinService';
 
 const BuyerView = () => {
   const location = useLocation();
-  const { user: currentUser, switchToRole } = useAuth();
+  const { user: currentUser, logout, switchToRole } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [farms, setFarms] = useState([]);
   const [fields, setFields] = useState([]);
@@ -44,10 +44,7 @@ const BuyerView = () => {
   const isCurrencyPage = location.pathname === '/buyer/currency';
   const isSettingsPage = location.pathname === '/buyer/settings';
 
-  // Force buyer role when component mounts
-  useEffect(() => {
-    switchToRole('buyer');
-  }, [switchToRole]);
+  // No need to force role - use actual logged-in user
 
   // Initialize user coins when user is available
   useEffect(() => {
@@ -142,6 +139,7 @@ const BuyerView = () => {
         onFarmSelect={handleFarmSelect}
         userType="buyer"
         user={currentUser}
+        onLogout={logout}
       />
       
       <Box sx={{

@@ -944,7 +944,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   whiteSpace: 'nowrap'
                 }}
               >
-                {user?.name || 'User'}
+                {user?.name?.split(' ')[0] || user?.name || 'User'}
               </Typography>
               <Chip
                 label={user?.user_type || 'User'}

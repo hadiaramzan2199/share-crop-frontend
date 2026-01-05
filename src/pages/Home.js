@@ -8,11 +8,29 @@ import {
   Card,
   CardContent,
   CardActions,
+  Stack,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { useEffect } from 'react';
 
 const Home = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
+
+  // Redirect authenticated users to their dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const userType = user.user_type?.toLowerCase();
+      if (userType === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (userType === 'farmer') {
+        navigate('/farmer', { replace: true });
+      } else if (userType === 'buyer') {
+        navigate('/buyer', { replace: true });
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -23,6 +41,39 @@ const Home = () => {
         <Typography variant="h5" color="text.secondary" paragraph>
           Connecting farmers and buyers for sustainable agriculture
         </Typography>
+        {!isAuthenticated && (
+          <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/login')}
+              sx={{
+                borderRadius: 2,
+                px: 4,
+                background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
+              }}
+            >
+              Sign In
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={() => navigate('/signup')}
+              sx={{
+                borderRadius: 2,
+                px: 4,
+                borderColor: '#4CAF50',
+                color: '#2E7D32',
+                '&:hover': {
+                  borderColor: '#2E7D32',
+                  bgcolor: 'rgba(76, 175, 80, 0.08)',
+                },
+              }}
+            >
+              Sign Up
+            </Button>
+          </Stack>
+        )}
       </Box>
 
       <Grid container spacing={4} justifyContent="center">

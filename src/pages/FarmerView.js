@@ -31,7 +31,7 @@ import coinService from '../services/coinService';
 
 const FarmerView = () => {
   const location = useLocation();
-  const { user, switchToRole } = useAuth();
+  const { user, logout, switchToRole } = useAuth();
   const { 
     addNotification, 
     notifications, 
@@ -55,10 +55,7 @@ const FarmerView = () => {
   const headerRef = useRef(null);
   const isMapPage = location.pathname === '/farmer' || location.pathname === '/farmer/';
 
-  // Force farmer role when component mounts
-  useEffect(() => {
-    switchToRole('farmer');
-  }, [switchToRole]);
+  // No need to force role - use actual logged-in user
 
   // Initialize user coins when user is available
   useEffect(() => {
@@ -375,6 +372,7 @@ const FarmerView = () => {
         onFarmSelect={handleFarmSelect}
         userType="farmer"
         user={user}
+        onLogout={logout}
         onCreateField={handleCreateField}
         onCreateFarm={handleCreateFarm}
       />

@@ -17,7 +17,11 @@ import {
   ListItemText,
   Divider,
   Stack,
-  Paper
+  Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Edit,
@@ -33,47 +37,200 @@ import {
   AccountBalance,
   CalendarToday
 } from '@mui/icons-material';
-import { authService } from '../services/auth';
-import { USER_ROLES } from '../utils/roles';
-import { useRole } from '../contexts/RoleContext';
+import { useAuth } from '../contexts/AuthContext';
+import { profileService } from '../services/profile';
+import { orderService } from '../services/orders';
+import { Alert, Snackbar, InputAdornment } from '@mui/material';
+import { Visibility, VisibilityOff, Lock } from '@mui/icons-material';
 
 const Profile = () => {
-  const { userRole } = useRole();
-  // Mock user data since we're using authService
+  const { user, updateUser } = useAuth();
   const [profile, setProfile] = useState({
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+92 300 1234567',
-    location: 'Lahore, Punjab, Pakistan',
-    joinDate: '2023-06-15',
-    bio: 'Agricultural enthusiast and sustainable farming advocate.',
+    name: '',
+    email: '',
+    phone: '',
+    location: '',
+    joinDate: '',
+    bio: '',
     avatar: null,
-    totalRentals: 12,
-    activeRentals: 3,
-    totalSpent: 45000,
-    preferredCrops: ['Wheat', 'Rice', 'Corn'],
-    verificationStatus: 'Verified'
+    user_type: '',
+    coins: 0,
+    email_verified: false,
+    totalRentals: 0,
+    activeRentals: 0,
+    totalSpent: 0,
+  });
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [passwordDialog, setPasswordDialog] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false,
   });
   
   const [editMode, setEditMode] = useState(false);
   const [editedProfile, setEditedProfile] = useState({ ...profile });
-  const [avatarDialog, setAvatarDialog] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Load user profile data
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user]);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get user profile
+      const profileResponse = await profileService.getProfile();
+      const userData = profileResponse.data?.user || user;
+      
+      // Get user stats based on role
+      let stats = {
+        totalRentals: 0,
+        activeRentals: 0,
+        totalSpent: 0,
+      };
+      
+      try {
+        if (userData.user_type === 'buyer') {
+          const ordersResponse = await orderService.getBuyerOrders();
+          const orders = ordersResponse.data || [];
+          stats.totalRentals = orders.length;
+          stats.activeRentals = orders.filter(o => ['pending', 'active', 'confirmed'].includes(o.status)).length;
+          stats.totalSpent = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+        } else if (userData.user_type === 'farmer') {
+          const ordersResponse = await orderService.getFarmerOrders(userData.id);
+          const orders = ordersResponse.data || [];
+          stats.totalRentals = orders.length;
+          stats.activeRentals = orders.filter(o => ['pending', 'active', 'confirmed'].includes(o.status)).length;
+          stats.totalSpent = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+        }
+      } catch (statsErr) {
+        console.warn('Could not load user stats:', statsErr);
+      }
+      
+      setProfile({
+        name: userData.name || '',
+        email: userData.email || '',
+        phone: '', // Not in current schema
+        location: '', // Not in current schema
+        joinDate: userData.created_at || '',
+        bio: '', // Not in current schema
+        avatar: null,
+        user_type: userData.user_type || '',
+        coins: userData.coins || 0,
+        email_verified: userData.email_verified || false,
+        ...stats,
+      });
+      
+      setEditedProfile({
+        name: userData.name || '',
+        email: userData.email || '',
+        phone: '',
+        location: '',
+        bio: '',
+      });
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setError('Failed to load profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEdit = () => {
     setEditedProfile({ ...profile });
     setEditMode(true);
   };
 
-  const handleSave = () => {
-    setProfile({ ...editedProfile });
-    setEditMode(false);
-    // Here you would save to backend
-    console.log('Profile updated:', editedProfile);
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      
+      // Only update name and email (phone, location, bio not in schema yet)
+      const updateData = {
+        name: editedProfile.name,
+        email: editedProfile.email,
+      };
+      
+      const response = await profileService.updateProfile(updateData);
+      const updatedUser = response.data?.user;
+      
+      if (updatedUser) {
+        // Update AuthContext
+        updateUser(updatedUser);
+        
+        // Update local profile
+        setProfile({
+          ...profile,
+          name: updatedUser.name,
+          email: updatedUser.email,
+        });
+        
+        setEditMode(false);
+        setSuccess('Profile updated successfully!');
+      }
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setError(err.response?.data?.error || 'Failed to update profile. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
     setEditedProfile({ ...profile });
     setEditMode(false);
+    setError(null);
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+    
+    if (passwordData.newPassword.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+    
+    try {
+      setChangingPassword(true);
+      setError(null);
+      
+      await profileService.changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      
+      setPasswordDialog(false);
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setSuccess('Password changed successfully!');
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setError(err.response?.data?.error || 'Failed to change password. Please try again.');
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -179,7 +336,7 @@ const Profile = () => {
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                 <Chip
-                  label={userRole}
+                  label={profile.user_type ? profile.user_type.charAt(0).toUpperCase() + profile.user_type.slice(1) : 'User'}
                   size="small"
                   sx={{ 
                     backgroundColor: 'rgba(255,255,255,0.2)',
@@ -187,36 +344,64 @@ const Profile = () => {
                     fontWeight: 500
                   }}
                 />
-                <Typography variant="body2" sx={{ opacity: 1, color: 'white' }}>
-                Member since {new Date(profile.joinDate).toLocaleDateString()}
-              </Typography>
+                {profile.email_verified && (
+                  <Chip
+                    label="Verified"
+                    size="small"
+                    sx={{ 
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      color: 'white',
+                      fontWeight: 500
+                    }}
+                  />
+                )}
+                {profile.joinDate && (
+                  <Typography variant="body2" sx={{ opacity: 1, color: 'white' }}>
+                    Member since {new Date(profile.joinDate).toLocaleDateString()}
+                  </Typography>
+                )}
               </Box>
-              <Typography variant="body1" sx={{ opacity: 1, color: 'white', maxWidth: 400 }}>
-              {profile.bio}
-            </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9, color: 'white', mt: 1 }}>
+                {profile.coins} Coins
+              </Typography>
             </Box>
             
-            <Box sx={{ alignSelf: 'flex-start' }}>
+            <Box sx={{ alignSelf: 'flex-start', display: 'flex', gap: 1 }}>
               {!editMode ? (
-                <Button 
-                  startIcon={<Edit />} 
-                  onClick={handleEdit}
-                  variant="contained"
-                  sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'white',
-                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.3)' },
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255,255,255,0.2)'
-                  }}
-                >
-                  Edit Profile
-                </Button>
+                <>
+                  <Button 
+                    startIcon={<Edit />} 
+                    onClick={handleEdit}
+                    variant="contained"
+                    sx={{
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      color: 'white',
+                      '&:hover': { backgroundColor: 'rgba(255,255,255,0.3)' },
+                      backdropFilter: 'blur(10px)',
+                      border: '1px solid rgba(255,255,255,0.2)'
+                    }}
+                  >
+                    Edit Profile
+                  </Button>
+                  <Button 
+                    startIcon={<Lock />} 
+                    onClick={() => setPasswordDialog(true)}
+                    variant="outlined"
+                    sx={{
+                      color: 'white',
+                      borderColor: 'rgba(255,255,255,0.5)',
+                      '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }
+                    }}
+                  >
+                    Change Password
+                  </Button>
+                </>
               ) : (
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button 
                     startIcon={<Save />} 
-                    onClick={handleSave} 
+                    onClick={handleSave}
+                    disabled={saving}
                     variant="contained"
                     sx={{
                       backgroundColor: 'white',
@@ -224,11 +409,12 @@ const Profile = () => {
                       '&:hover': { backgroundColor: 'grey.100' }
                     }}
                   >
-                    Save
+                    {saving ? 'Saving...' : 'Save'}
                   </Button>
                   <Button 
                     startIcon={<Cancel />} 
                     onClick={handleCancel}
+                    disabled={saving}
                     sx={{
                       color: 'white',
                       borderColor: 'rgba(255,255,255,0.5)',
@@ -338,76 +524,8 @@ const Profile = () => {
                 />
               </Grid>
               
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Phone Number"
-                  value={editMode ? editedProfile.phone : profile.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  disabled={!editMode}
-                  variant="outlined"
-                  InputProps={{
-                    startAdornment: (
-                      <Box sx={{ mr: 1, display: 'flex', color: 'text.secondary' }}>
-                        <Phone />
-                      </Box>
-                    )
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      backgroundColor: editMode ? 'white' : 'grey.50',
-                      fontSize: '0.875rem'
-                    }
-                  }}
-                />
-              </Grid>
-              
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Location"
-                  value={editMode ? editedProfile.location : profile.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!editMode}
-                  variant="outlined"
-                  InputProps={{
-                    startAdornment: (
-                      <Box sx={{ mr: 1, display: 'flex', color: 'text.secondary' }}>
-                        <LocationOn />
-                      </Box>
-                    )
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      backgroundColor: editMode ? 'white' : 'grey.50',
-                      fontSize: '0.875rem'
-                    }
-                  }}
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Bio"
-                  value={editMode ? editedProfile.bio : profile.bio}
-                  onChange={(e) => handleInputChange('bio', e.target.value)}
-                  disabled={!editMode}
-                  placeholder="Tell us about yourself..."
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      backgroundColor: editMode ? 'white' : 'grey.50',
-                      fontSize: '0.875rem'
-                    }
-                  }}
-                />
-              </Grid>
+              {/* Phone, Location, and Bio fields removed - not in current database schema */}
+              {/* These can be added later when the schema is extended */}
             </Grid>
           </Box>
         </CardContent>

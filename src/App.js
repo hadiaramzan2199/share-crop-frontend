@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import GlobalStyle from './styles/GlobalStyle';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -16,6 +16,9 @@ import AdminPayments from './pages/admin/AdminPayments';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import Home from './pages/Home';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
 
 
 const AppContent = () => {
@@ -26,17 +29,37 @@ const AppContent = () => {
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          
+          {/* Protected Farmer Routes */}
           <Route
             path="/farmer/*"
-            element={<FarmerView />}
+            element={
+              <ProtectedRoute allowedRoles={['farmer']}>
+                <FarmerView />
+              </ProtectedRoute>
+            }
           />
+          
+          {/* Protected Buyer Routes */}
           <Route
             path="/buyer/*"
-            element={<BuyerView />}
+            element={
+              <ProtectedRoute allowedRoles={['buyer']}>
+                <BuyerView />
+              </ProtectedRoute>
+            }
           />
+          
+          {/* Protected Admin Routes */}
           <Route
             path="/admin/*"
-            element={<AdminView />}
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminView />
+              </ProtectedRoute>
+            }
           >
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
@@ -46,6 +69,9 @@ const AppContent = () => {
             <Route path="audit" element={<AdminAudit />} />
             <Route path="analytics" element={<AdminAnalytics />} />
           </Route>
+          
+          {/* Catch all - redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Box>
     </Router>

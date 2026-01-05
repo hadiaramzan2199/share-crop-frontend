@@ -124,8 +124,14 @@ const MyFarms = () => {
 
   const fetchFarms = async () => {
     try {
-      // Fetch farms data from database
-      const farmsResponse = await farmsService.getAll();
+      // Fetch only farms owned by the current farmer (filtered by owner_id)
+      if (!user || !user.id) {
+        setMyFarms([]);
+        setMyFields([]);
+        return;
+      }
+
+      const farmsResponse = await farmsService.getAll(user.id);
       const rawFarms = farmsResponse.data || [];
       
       // Transform database farms to match the card display format
