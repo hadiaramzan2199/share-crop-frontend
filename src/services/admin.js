@@ -1,7 +1,7 @@
 import api from './api';
 
 export const adminService = {
-  getAllUsers: () => api.get('/api/users'),
+  getAllUsers: (includeStats = true) => api.get('/api/users', { params: { includeStats } }),
   getPendingFarmers: () => api.get('/api/admin/farmers/pending'),
   approveFarmer: (id) => api.patch(`/api/admin/farmers/${id}/approve`),
   rejectFarmer: (id, reason) => api.patch(`/api/admin/farmers/${id}/reject`, { reason }),

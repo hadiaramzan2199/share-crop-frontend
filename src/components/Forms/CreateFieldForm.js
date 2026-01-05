@@ -30,7 +30,6 @@ import {
 
 import {
   Close,
-  PhotoCamera,
   LocationOn,
   Add,
   Remove,
@@ -175,21 +174,6 @@ const StyledButton = styled(Button)(({ theme, isMobile }) => ({
   },
 }));
 
-const UploadBox = styled(Box)(({ theme }) => ({
-  border: '2px dashed #c8e6c9',
-  borderRadius: '16px',
-  padding: '40px 20px',
-  textAlign: 'center',
-  backgroundColor: '#f8fffe',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    borderColor: '#4caf50',
-    backgroundColor: '#f1f8e9',
-    transform: 'translateY(-2px)',
-    boxShadow: '0 8px 25px rgba(76, 175, 80, 0.15)',
-  },
-}));
 
 const CombinedInputContainer = styled(Box)(({ theme, isMobile }) => ({
   display: 'flex',
@@ -293,8 +277,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   };
 
   const [formData, setFormData] = useState({
-    image: null,
-    imagePreview: null,
+    selectedIcon: '',
     category: '',
     subcategory: '',
     productName: '',
@@ -355,13 +338,13 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       setFormData(prev => ({
         ...prev,
         ...initialData,
+        selectedIcon: initialData.icon ? initialData.icon.split('/').pop() : (initialData.image ? initialData.image.split('/').pop() : ''),
         productName: initialData.name || '',
         category: initialData.category || '',
         description: initialData.description || '',
         sellingPrice: initialData.price || '',
         latitude: initialData.latitude || '',
         longitude: initialData.longitude || '',
-        imagePreview: initialData.image || null,
         harvestDates: initialData.harvestDates || [{ date: '', label: '' }]
       }));
       // Set location address if coordinates exist
@@ -370,8 +353,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       }
     } else if (!editMode) {
       setFormData({
-        image: null,
-        imagePreview: null,
+        selectedIcon: '',
         category: '',
         productName: '',
         description: '',
@@ -459,19 +441,44 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     }
   };
 
-  const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setFormData(prev => ({
-          ...prev,
-          image: file,
-          imagePreview: e.target.result
-        }));
-      };
-      reader.readAsDataURL(file);
+  // Get available icons based on category
+  const getAvailableIcons = () => {
+    // For now, only fruits category has icons
+    // Later, we can add other categories like vegetables, grains, etc.
+    if (formData.category?.toLowerCase() === 'fruits') {
+      return [
+        'apple_green.png',
+        'apple_red.png',
+        'corn.png',
+        'eggplant.png',
+        'lemon.png',
+        'peach.png',
+        'strawberry.png',
+        'tangerine.png',
+        'tomato.png',
+        'watermelon.png'
+      ];
     }
+    // Default to fruits for now (for testing)
+    return [
+      'apple_green.png',
+      'apple_red.png',
+      'corn.png',
+      'eggplant.png',
+      'lemon.png',
+      'peach.png',
+      'strawberry.png',
+      'tangerine.png',
+      'tomato.png',
+      'watermelon.png'
+    ];
+  };
+
+  const getIconPath = (iconName) => {
+    if (!iconName) return '';
+    // Return the path relative to public folder
+    const category = formData.category?.toLowerCase() === 'fruits' ? 'fruits' : 'fruits';
+    return `/icons/products/${category}/${iconName}`;
   };
 
   const addDeliveryCharge = () => {
@@ -574,7 +581,8 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       price: parseFloat(formData.sellingPrice),
       latitude: parseFloat(formData.latitude),
       longitude: parseFloat(formData.longitude),
-      image: formData.imagePreview,
+      image: formData.selectedIcon ? getIconPath(formData.selectedIcon) : '',
+      icon: formData.selectedIcon ? getIconPath(formData.selectedIcon) : '',
       fieldSize: formData.fieldSize,
       fieldSizeUnit: formData.fieldSizeUnit,
       productionRate: formData.productionRate,
@@ -615,8 +623,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
   const handleClose = () => {
     setFormData({
-      image: null,
-      imagePreview: null,
+      selectedIcon: '',
       category: '',
       subcategory: '',
       productName: '',
@@ -676,49 +683,6 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
       <StyledDialogContent isMobile={isMobile}>
         <Box sx={{ width: '100%' }}>
-          {/* Image Upload Section */}
-          <FormSection sx={{ textAlign: 'center' }}>
-            <UploadBox
-              onClick={() => document.getElementById('image-upload').click()}
-              sx={{ mb: 2 }}
-            >
-              {formData.imagePreview ? (
-                <Box>
-                  <img 
-                    src={formData.imagePreview} 
-                    alt="Preview" 
-                    style={{ 
-                      maxWidth: '100%', 
-                      maxHeight: 200, 
-                      borderRadius: 12,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                    }} 
-                  />
-                  <Typography variant="body2" sx={{ mt: 2, color: '#4a5568' }}>
-                    Click to change image
-                  </Typography>
-                </Box>
-              ) : (
-                <Box>
-                  <PhotoCamera sx={{ fontSize: 48, color: '#4caf50', mb: 2 }} />
-                  <Typography variant="body1" sx={{ color: '#4a5568', mb: 1 }}>
-                    Click to upload
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#718096' }}>
-                    SVG, PNG, or JPG
-                  </Typography>
-                </Box>
-              )}
-              <input
-                id="image-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                style={{ display: 'none' }}
-              />
-            </UploadBox>
-          </FormSection>
-
           {/* Basic Information Section */}
           <FormSection>
             <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Basic Information</SectionTitle>
@@ -1011,6 +975,112 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                   </Select>
                 </StyledFormControl>
               </Grid>
+
+              {/* Product Icon Selector */}
+              {formData.category && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 500, color: 'text.primary' }}>
+                    Select Product Icon
+                  </Typography>
+                  <Box sx={{ 
+                    width: '100%',
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    bgcolor: 'background.paper',
+                    p: 2
+                  }}>
+                    <Box sx={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: { xs: 'repeat(5, 1fr)', sm: 'repeat(6, 1fr)', md: 'repeat(8, 1fr)' },
+                      gap: 1.5,
+                      width: '100%',
+                      maxWidth: '100%',
+                    }}>
+                      {getAvailableIcons().map((iconName) => {
+                        const iconPath = getIconPath(iconName);
+                        const isSelected = formData.selectedIcon === iconName;
+                        return (
+                          <Box
+                            key={iconName}
+                            onClick={() => handleInputChange('selectedIcon', iconName)}
+                            sx={{
+                              position: 'relative',
+                              width: '100%',
+                              aspectRatio: '1',
+                              maxWidth: { xs: 48, sm: 56, md: 64 },
+                              maxHeight: { xs: 48, sm: 56, md: 64 },
+                              minWidth: 0,
+                              minHeight: 0,
+                              border: isSelected ? '2px solid' : '1.5px solid',
+                              borderColor: isSelected ? '#4CAF50' : 'divider',
+                              borderRadius: 1.5,
+                              p: 0.75,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              bgcolor: isSelected ? 'rgba(76,175,80,0.1)' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxSizing: 'border-box',
+                              '&:hover': {
+                                borderColor: '#4CAF50',
+                                bgcolor: 'rgba(76,175,80,0.08)',
+                                transform: 'scale(1.05)',
+                              }
+                            }}
+                          >
+                            <Box
+                              component="img"
+                              src={iconPath}
+                              alt={iconName.replace('.png', '').replace('_', ' ')}
+                              sx={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                maxWidth: '100%',
+                                maxHeight: '100%',
+                                display: 'block',
+                              }}
+                            />
+                            {isSelected && (
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: -6,
+                                  right: -6,
+                                  width: 18,
+                                  height: 18,
+                                  borderRadius: '50%',
+                                  bgcolor: '#4CAF50',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'white',
+                                  fontSize: 10,
+                                  fontWeight: 'bold',
+                                  border: '2px solid white',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                  zIndex: 1,
+                                }}
+                              >
+                                ✓
+                              </Box>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                  {errors.selectedIcon && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                      {errors.selectedIcon}
+                    </Typography>
+                  )}
+                </Grid>
+              )}
 
               {/* Product Name */}
               <Grid item xs={12}>

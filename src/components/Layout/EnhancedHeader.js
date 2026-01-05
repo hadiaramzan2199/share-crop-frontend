@@ -48,7 +48,8 @@ import {
   AccountBalance,
   Add,
   HomeWork,
-  ExpandMore
+  ExpandMore,
+  ReportProblem
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
@@ -388,6 +389,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     { text: 'Messages', icon: <Message />, path: '/farmer/messages' },
     { text: 'Change Currency', icon: <CurrencyExchange />, path: '/farmer/currency' },
     { text: 'Settings', icon: <Settings />, path: '/farmer/settings' },
+    { text: 'Complaints', icon: <ReportProblem />, path: '/farmer/complaints' },
   ];
 
   const buyerMenuItems = [
@@ -397,6 +399,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     { text: 'Messages', icon: <Message />, path: '/buyer/messages' },
     { text: 'Change Currency', icon: <CurrencyExchange />, path: '/buyer/currency' },
     { text: 'Settings', icon: <Settings />, path: '/buyer/settings' },
+    { text: 'Complaints', icon: <ReportProblem />, path: '/buyer/complaints' },
   ];
 
   const menuItems = userType === 'farmer' ? farmerMenuItems : buyerMenuItems;

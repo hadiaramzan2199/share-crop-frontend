@@ -25,6 +25,7 @@ import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
 import Settings from './Settings';
+import Complaints from './Complaints';
 import api from '../services/api'; // Changed to default import
 import coinService from '../services/coinService';
 
@@ -489,6 +490,7 @@ const FarmerView = () => {
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
       

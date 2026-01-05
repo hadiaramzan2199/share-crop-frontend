@@ -13,6 +13,7 @@ import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
 import Settings from './Settings';
+import Complaints from './Complaints';
 import { useAuth } from '../contexts/AuthContext';
 import fieldsService from '../services/fields';
 import farmsService from '../services/farms';
@@ -171,6 +172,7 @@ const BuyerView = () => {
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
       
