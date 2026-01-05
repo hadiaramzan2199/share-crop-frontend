@@ -983,96 +983,83 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                     Select Product Icon
                   </Typography>
                   <Box sx={{ 
-                    width: '100%',
-                    maxWidth: '100%',
-                    overflow: 'hidden',
+                    display: 'grid', 
+                    gridTemplateColumns: { xs: 'repeat(5, 1fr)', sm: 'repeat(6, 1fr)', md: 'repeat(8, 1fr)' },
+                    gap: 1.5,
+                    p: 2,
                     border: '1px solid',
                     borderColor: 'divider',
                     borderRadius: 2,
-                    bgcolor: 'background.paper',
-                    p: 2
+                    bgcolor: 'background.paper'
                   }}>
-                    <Box sx={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: { xs: 'repeat(5, 1fr)', sm: 'repeat(6, 1fr)', md: 'repeat(8, 1fr)' },
-                      gap: 1.5,
-                      width: '100%',
-                      maxWidth: '100%',
-                    }}>
-                      {getAvailableIcons().map((iconName) => {
-                        const iconPath = getIconPath(iconName);
-                        const isSelected = formData.selectedIcon === iconName;
-                        return (
+                    {getAvailableIcons().map((iconName) => {
+                      const iconPath = getIconPath(iconName);
+                      const isSelected = formData.selectedIcon === iconName;
+                      return (
+                        <Box
+                          key={iconName}
+                          onClick={() => handleInputChange('selectedIcon', iconName)}
+                          sx={{
+                            position: 'relative',
+                            width: '100%',
+                            aspectRatio: '1',
+                            maxWidth: { xs: 50, sm: 60, md: 70 },
+                            maxHeight: { xs: 50, sm: 60, md: 70 },
+                            border: isSelected ? '2px solid' : '1.5px solid',
+                            borderColor: isSelected ? '#4CAF50' : 'divider',
+                            borderRadius: 1.5,
+                            p: 0.75,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            bgcolor: isSelected ? 'rgba(76,175,80,0.1)' : 'transparent',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            '&:hover': {
+                              borderColor: '#4CAF50',
+                              bgcolor: 'rgba(76,175,80,0.08)',
+                              transform: 'scale(1.08)',
+                            }
+                          }}
+                        >
                           <Box
-                            key={iconName}
-                            onClick={() => handleInputChange('selectedIcon', iconName)}
+                            component="img"
+                            src={iconPath}
+                            alt={iconName.replace('.png', '').replace('_', ' ')}
                             sx={{
-                              position: 'relative',
                               width: '100%',
-                              aspectRatio: '1',
-                              maxWidth: { xs: 48, sm: 56, md: 64 },
-                              maxHeight: { xs: 48, sm: 56, md: 64 },
-                              minWidth: 0,
-                              minHeight: 0,
-                              border: isSelected ? '2px solid' : '1.5px solid',
-                              borderColor: isSelected ? '#4CAF50' : 'divider',
-                              borderRadius: 1.5,
-                              p: 0.75,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease',
-                              bgcolor: isSelected ? 'rgba(76,175,80,0.1)' : 'transparent',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxSizing: 'border-box',
-                              '&:hover': {
-                                borderColor: '#4CAF50',
-                                bgcolor: 'rgba(76,175,80,0.08)',
-                                transform: 'scale(1.05)',
-                              }
+                              height: '100%',
+                              objectFit: 'contain',
+                              maxWidth: { xs: 36, sm: 44, md: 52 },
+                              maxHeight: { xs: 36, sm: 44, md: 52 },
                             }}
-                          >
+                          />
+                          {isSelected && (
                             <Box
-                              component="img"
-                              src={iconPath}
-                              alt={iconName.replace('.png', '').replace('_', ' ')}
                               sx={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'contain',
-                                maxWidth: '100%',
-                                maxHeight: '100%',
-                                display: 'block',
+                                position: 'absolute',
+                                top: -6,
+                                right: -6,
+                                width: 18,
+                                height: 18,
+                                borderRadius: '50%',
+                                bgcolor: '#4CAF50',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'white',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                                border: '2px solid white',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                               }}
-                            />
-                            {isSelected && (
-                              <Box
-                                sx={{
-                                  position: 'absolute',
-                                  top: -6,
-                                  right: -6,
-                                  width: 18,
-                                  height: 18,
-                                  borderRadius: '50%',
-                                  bgcolor: '#4CAF50',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: 'white',
-                                  fontSize: 10,
-                                  fontWeight: 'bold',
-                                  border: '2px solid white',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                                  zIndex: 1,
-                                }}
-                              >
-                                ✓
-                              </Box>
-                            )}
-                          </Box>
-                        );
-                      })}
-                    </Box>
+                            >
+                              ✓
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
                   </Box>
                   {errors.selectedIcon && (
                     <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
