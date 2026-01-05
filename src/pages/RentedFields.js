@@ -964,17 +964,17 @@ const RentedFields = () => {
                       </Typography>
                     </Box>
                     
-                    <Button 
+                      <Button 
                       variant="contained" 
                       fullWidth
-                      size="small" 
-                      startIcon={<Visibility />}
+                        size="small" 
+                        startIcon={<Visibility />}
                       onClick={() => handleFieldClick(field)}
-                      sx={{ 
-                        borderRadius: 1.5,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.75rem',
+                        sx={{ 
+                          borderRadius: 1.5,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
                         bgcolor: '#4caf50',
                         py: 0.75,
                         '&:hover': {
@@ -1022,9 +1022,9 @@ const RentedFields = () => {
                     fontWeight: 600,
                     px: 3,
                     py: 1,
-                    borderColor: '#e2e8f0',
-                    color: '#64748b',
-                    '&:hover': {
+                          borderColor: '#e2e8f0',
+                          color: '#64748b',
+                          '&:hover': {
                       borderColor: '#3b82f6',
                       color: '#3b82f6',
                       bgcolor: '#f8fafc'
@@ -1032,30 +1032,30 @@ const RentedFields = () => {
                   }}
                 >
                   View All Fields ({rentedFields.length})
-                </Button>
+                      </Button>
               </>
             ) : (
-              <Button 
+                      <Button 
                 variant="outlined" 
                 size="medium"
                 onClick={handleViewAllClick}
-                sx={{ 
+                        sx={{ 
                   borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 600,
+                          textTransform: 'none',
+                          fontWeight: 600,
                   px: 3,
                   py: 1,
                   borderColor: '#e2e8f0',
                   color: '#64748b',
-                  '&:hover': {
+                          '&:hover': {
                     borderColor: '#3b82f6',
                     color: '#3b82f6',
                     bgcolor: '#f8fafc'
-                  }
-                }}
-              >
+                          }
+                        }}
+                      >
                 Show Paginated View
-              </Button>
+                      </Button>
             )}
           </Box>
         )}
@@ -1065,7 +1065,7 @@ const RentedFields = () => {
       <Dialog
         open={fieldDetailOpen}
         onClose={handleCloseFieldDetail}
-        maxWidth="md"
+        maxWidth="sm"
         fullWidth
         PaperProps={{
           sx: {
@@ -1074,165 +1074,231 @@ const RentedFields = () => {
           }
         }}
       >
-        <DialogTitle sx={{ pb: 1 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+        <DialogTitle sx={{ pb: 2, borderBottom: '1px solid #e2e8f0' }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
                 {selectedField?.name || selectedField?.farmName}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 Rented Field Details
               </Typography>
+              {selectedField?.status && (
+                <Chip 
+                  label={selectedField.status} 
+                  color={getStatusColor(selectedField.status)}
+                  size="small"
+                  sx={{ 
+                    fontWeight: 600,
+                    height: 24,
+                    fontSize: '0.7rem'
+                  }}
+                />
+              )}
             </Box>
-            <IconButton onClick={handleCloseFieldDetail} sx={{ color: '#64748b' }}>
+            <IconButton 
+              onClick={handleCloseFieldDetail} 
+              sx={{ 
+                color: '#64748b',
+                '&:hover': { backgroundColor: '#f3f4f6' }
+              }}
+            >
               <Close />
             </IconButton>
-          </Stack>
+                    </Stack>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pt: 3 }}>
           {selectedField && (
             <Box>
-              {/* Field Information */}
-              <Grid container spacing={3} mb={3}>
-                <Grid item xs={12} md={6}>
-                  <Paper sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 2, minHeight: '80px', display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}>
-                      Field Information
+              {/* Field Information Section */}
+              <Paper sx={{ p: 2.5, backgroundColor: '#f8fafc', borderRadius: 2, mb: 2.5 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1e293b', fontSize: '0.95rem' }}>
+                  Field Information
+                </Typography>
+                <Stack spacing={2}>
+                  <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+                    <LocationOn sx={{ fontSize: 20, color: '#3b82f6', mt: 0.25 }} />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500, display: 'block', mb: 0.25 }}>
+                        Location
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#1e293b', fontWeight: 500 }}>
+                        {selectedField.location}
+                      </Typography>
+                  </Box>
+                  </Stack>
+
+                  <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+                    <Agriculture sx={{ fontSize: 20, color: '#10b981', mt: 0.25 }} />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500, display: 'block', mb: 0.25 }}>
+                        Crop Type
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#1e293b', fontWeight: 500 }}>
+                        {selectedField.cropType}
+                      </Typography>
+            </Box>
+                  </Stack>
+
+                  <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+                    <CalendarToday sx={{ fontSize: 20, color: '#f59e0b', mt: 0.25 }} />
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500, display: 'block', mb: 0.25 }}>
+                        Harvest Date
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#1e293b', fontWeight: 500 }}>
+                        {(() => {
+                          const items = Array.isArray(selectedField.selected_harvests) ? selectedField.selected_harvests : [];
+                          const format = (date) => {
+                            if (!date) return '';
+                            if (typeof date === 'string' && /\d{1,2}\s\w{3}\s\d{4}/.test(date)) return date;
+                            const d = new Date(date);
+                            if (isNaN(d.getTime())) return date;
+                            return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                          };
+                          if (items.length) {
+                            const mapped = items.map(it => {
+                              const dt = format(it.date);
+                              if (it.label && dt) return `${dt} (${it.label})`;
+                              if (dt) return dt;
+                              if (it.label) return it.label;
+                              return '';
+                            }).filter(Boolean);
+                            const uniq = Array.from(new Set(mapped));
+                            return uniq.join(', ') || 'Not specified';
+                          }
+                          return selectedField.selected_harvest_label || selectedField.selected_harvest_date || 'Not specified';
+                        })()}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Box sx={{ pt: 1, borderTop: '1px solid #e2e8f0' }}>
+                    <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500, display: 'block', mb: 1 }}>
+                      Area Details
                     </Typography>
-                    <Stack spacing={1.5} sx={{ flex: 1 }}>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <LocationOn sx={{ fontSize: 18, color: '#3b82f6' }} />
-                        <Typography variant="body2">{selectedField.location}</Typography>
-                      </Stack>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Agriculture sx={{ fontSize: 18, color: '#10b981' }} />
-                        <Typography variant="body2">Crop: {selectedField.cropType}</Typography>
-                      </Stack>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <CalendarToday sx={{ fontSize: 18, color: '#f59e0b' }} />
-                        <Typography variant="body2">
-                          Harvest: {(() => {
-                            const items = Array.isArray(selectedField.selected_harvests) ? selectedField.selected_harvests : [];
-                            const format = (date) => {
-                              if (!date) return '';
-                              if (typeof date === 'string' && /\d{1,2}\s\w{3}\s\d{4}/.test(date)) return date;
-                              const d = new Date(date);
-                              if (isNaN(d.getTime())) return date;
-                              return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-                            };
-                            if (items.length) {
-                              const mapped = items.map(it => {
-                                const dt = format(it.date);
-                                if (it.label && dt) return `${dt} (${it.label})`;
-                                if (dt) return dt;
-                                if (it.label) return it.label;
-                                return '';
-                              }).filter(Boolean);
-                              const uniq = Array.from(new Set(mapped));
-                              return uniq.join(', ') || 'Not specified';
-                            }
-                            return selectedField.selected_harvest_label || selectedField.selected_harvest_date || 'Not specified';
-                          })()}
+                    <Stack direction="row" spacing={2} flexWrap="wrap">
+                      <Typography variant="body2" sx={{ color: '#64748b' }}>
+                        Occupied: <span style={{ fontWeight: 600, color: '#1e293b' }}>{selectedField.area}</span>
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748b' }}>
+                        Available: <span style={{ fontWeight: 600, color: '#1e293b' }}>{selectedField.available_area}m²</span>
+                      </Typography>
+                      {selectedField.total_area && (
+                        <Typography variant="body2" sx={{ color: '#64748b' }}>
+                          Total: <span style={{ fontWeight: 600, color: '#1e293b' }}>{selectedField.total_area}m²</span>
                         </Typography>
-                      </Stack>
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                          Area Details
-                        </Typography>
-                        <Typography variant="body2">
-                          Occupied: {selectedField.area} • Available: {selectedField.available_area}m²
-                        </Typography>
-                        {selectedField.total_area && (
-                          <Typography variant="body2" color="text.secondary">
-                            Total: {selectedField.total_area}m²
-                          </Typography>
-                        )}
-                      </Box>
-                    </Stack>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Paper sx={{ p: 2, backgroundColor: '#f0fdf4', borderRadius: 2, minHeight: '80px', display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}>
-                      Rental Details
-                    </Typography>
-                    <Stack spacing={2.5} sx={{ flex: 1, justifyContent: 'space-between' }}>
-                      <Box>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                          <Typography variant="body2" color="text.secondary">Occupied Area</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{selectedField.progress}%</Typography>
-                        </Stack>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={selectedField.progress} 
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: '#e2e8f0',
-                            '& .MuiLinearProgress-bar': {
-                              backgroundColor: selectedField.progress === 100 ? '#10b981' : selectedField.progress > 50 ? '#3b82f6' : '#f59e0b',
-                              borderRadius: 4
-                            }
-                          }}
-                        />
-                      </Box>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">Monthly Rent</Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 700, color: '#059669' }}>
-                          {currencySymbols[userCurrency]}{(() => {
-                            const amount = parseFloat(selectedField.monthlyRent) || 0;
-                            return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                          })()}
-                        </Typography>
-                      </Stack>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">Status</Typography>
-                        <Chip 
-                          label={selectedField.status} 
-                          color={getStatusColor(selectedField.status)}
-                          size="small"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      </Stack>
-                      {selectedField.rentPeriod && (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2" color="text.secondary">Rent Period</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {selectedField.rentPeriod}
-                          </Typography>
-                        </Stack>
-                      )}
-                      {selectedField.farmer_name && (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2" color="text.secondary">Farmer</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {selectedField.farmer_name}
-                          </Typography>
-                        </Stack>
-                      )}
-                      {selectedField.shipping_modes && selectedField.shipping_modes.length > 0 && (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2" color="text.secondary">Shipping Mode</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {(() => {
-                              const modes = Array.isArray(selectedField.shipping_modes) ? selectedField.shipping_modes : [];
-                              const uniq = (() => { const s = new Set(); return modes.filter(m => { const k = (m || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })();
-                              return uniq.length ? uniq.join(', ') : 'Not specified';
-                            })()}
-                          </Typography>
-                        </Stack>
                       )}
                     </Stack>
-                  </Paper>
-                </Grid>
-              </Grid>
+                  </Box>
+                </Stack>
+              </Paper>
+
+              {/* Rental Details Section */}
+              <Paper sx={{ p: 2.5, backgroundColor: '#f0fdf4', borderRadius: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1e293b', fontSize: '0.95rem' }}>
+                  Rental Details
+                </Typography>
+                <Stack spacing={2.5}>
+                  <Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
+                        Occupied Area
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                        {selectedField.progress}%
+                      </Typography>
+                    </Stack>
+                    <LinearProgress 
+                      variant="determinate" 
+                      value={selectedField.progress} 
+                      sx={{
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: '#e2e8f0',
+                        '& .MuiLinearProgress-bar': {
+                          backgroundColor: selectedField.progress === 100 ? '#10b981' : selectedField.progress > 50 ? '#3b82f6' : '#f59e0b',
+                          borderRadius: 5
+                        }
+                      }}
+                    />
+                  </Box>
+
+                  <Divider />
+
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
+                      Monthly Rent
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, color: '#059669' }}>
+                      {currencySymbols[userCurrency]}{(() => {
+                        const amount = parseFloat(selectedField.monthlyRent) || 0;
+                        return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                      })()}
+                    </Typography>
+                  </Stack>
+
+                  {selectedField.rentPeriod && (
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
+                        Rent Period
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        {selectedField.rentPeriod}
+                      </Typography>
+                    </Stack>
+                  )}
+
+                  {selectedField.farmer_name && (
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
+                        Farmer
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        {selectedField.farmer_name}
+                      </Typography>
+                    </Stack>
+                  )}
+
+                  {selectedField.shipping_modes && selectedField.shipping_modes.length > 0 && (
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 500 }}>
+                        Shipping Mode
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                        {(() => {
+                          const modes = Array.isArray(selectedField.shipping_modes) ? selectedField.shipping_modes : [];
+                          const uniq = (() => { const s = new Set(); return modes.filter(m => { const k = (m || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })();
+                          return uniq.length ? uniq.join(', ') : 'Not specified';
+                        })()}
+                      </Typography>
+                    </Stack>
+                  )}
+                </Stack>
+              </Paper>
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 1 }}>
-          <Button onClick={handleCloseFieldDetail} variant="outlined" sx={{ borderRadius: 1.5 }}>
+        <DialogActions sx={{ p: 2.5, pt: 2, borderTop: '1px solid #e2e8f0' }}>
+            <Button 
+            onClick={handleCloseFieldDetail} 
+              variant="outlined" 
+              sx={{ 
+              borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+              px: 3,
+                borderColor: '#e2e8f0',
+                color: '#64748b',
+                '&:hover': {
+                borderColor: '#059669',
+                color: '#059669',
+                bgcolor: '#f0fdf4'
+              }
+            }}
+          >
             Close
-          </Button>
+            </Button>
         </DialogActions>
       </Dialog>
 
@@ -1258,7 +1324,7 @@ const RentedFields = () => {
               <Typography variant="body2" color="text.secondary">
                 Comprehensive overview of your rented fields
               </Typography>
-            </Box>
+          </Box>
             <IconButton onClick={handleCloseReport} sx={{ color: '#64748b' }}>
               <Close />
             </IconButton>
@@ -1360,7 +1426,7 @@ const RentedFields = () => {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
               Report generated on {new Date().toLocaleString()}
             </Typography>
-          </Box>
+      </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
           <Button 
