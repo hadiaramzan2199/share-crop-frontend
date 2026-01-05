@@ -42,7 +42,6 @@ import {
   Description,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import { getPurchasedFarms } from '../data/mockFarms';
 import storageService from '../services/storage';
 import { orderService } from '../services/orders';
 
@@ -254,16 +253,8 @@ const RentedFields = () => {
               }));
               setRentedFields(formattedFields);
             } else {
-              // Final fallback to mock data
-              const mockFields = getPurchasedFarms();
-              const formattedMockFields = mockFields.map((field, index) => ({
-                ...field,
-                monthlyRent: convertCurrency(field.monthlyRent, 'USD', userCurrency),
-                progress: Math.floor(((field.id || index) * 47) % 100) + 1, // Deterministic progress
-                rentPeriod: '6 months',
-                status: 'Active'
-              }));
-              setRentedFields(formattedMockFields);
+              // No fallback to mock data - just set empty array if no data
+              setRentedFields([]);
             }
           }
       } catch (error) {
@@ -763,7 +754,7 @@ const RentedFields = () => {
         </Grid>
 
         {/* Fields Grid */}
-        <Grid container spacing={2} sx={{ 
+        <Box sx={{ 
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
@@ -771,18 +762,18 @@ const RentedFields = () => {
             lg: 'repeat(3, 1fr)'
           },
           gap: 2,
-          alignItems: 'stretch'
+          alignItems: 'stretch',
+          width: '100%'
         }}>
           {displayedFields.map((field) => (
-            <Box key={field.id} sx={{ 
-              display: 'flex',
-              width: '100%'
-            }}>
               <Card 
+                key={field.id}
                 elevation={0}
                 sx={{ 
                   height: 420, // Fixed height for consistency
-                  width: '100%', // Full width of container
+                  minWidth: 0, // Prevent overflow
+                  maxWidth: '100%', // Ensure it doesn't exceed grid cell
+                  width: '100%', // Full width of grid cell
                   borderRadius: 2,
                   border: '1px solid #e2e8f0',
                   bgcolor: 'white',
@@ -790,6 +781,7 @@ const RentedFields = () => {
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
+                  overflow: 'hidden', // Prevent content overflow
                   '&:hover': {
                     transform: 'translateY(-2px)',
                     boxShadow: '0 8px 16px rgba(0,0,0,0.08)',
@@ -797,9 +789,17 @@ const RentedFields = () => {
                   }
                 }}
               >
-                <CardContent sx={{ p: 1, '&:last-child': { pb: 1 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <CardContent sx={{ 
+                  p: 0, 
+                  '&:last-child': { pb: 0 }, 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  minWidth: 0, // Prevent overflow
+                  width: '100%'
+                }}>
                   {/* Card Header */}
-                  <Box sx={{ p: 2, pb: 1.5 }}>
+                  <Box sx={{ p: 2, pb: 1.5, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
                       <Box sx={{ flex: 1 }}>
                         <Typography 
@@ -842,7 +842,7 @@ const RentedFields = () => {
                   <Divider sx={{ mx: 2 }} />
 
                   {/* Field Details */}
-                  <Box sx={{ p: 2, py: 1.5, flex: 1 }}>
+                  <Box sx={{ p: 2, py: 1.5, flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
                     <Stack spacing={1.5}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -944,7 +944,7 @@ const RentedFields = () => {
                   <Divider sx={{ mx: 2 }} />
 
                   {/* Card Footer */}
-                  <Box sx={{ p: 2, pt: 1.5, mt: 'auto' }}>
+                  <Box sx={{ p: 2, pt: 1.5, mt: 'auto', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography 
                         variant="h5" 
@@ -987,9 +987,8 @@ const RentedFields = () => {
                   </Box>
                 </CardContent>
               </Card>
-            </Box>
           ))}
-        </Grid>
+        </Box>
 
         {/* Pagination Controls */}
         {rentedFields.length > itemsPerPage && (
