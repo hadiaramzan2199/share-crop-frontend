@@ -892,7 +892,7 @@ const MyFarms = () => {
               </IconButton>
             </Stack>
           </DialogTitle>
-          <DialogContent>
+          <DialogContent sx={{ mt: 2 }}>
             {selectedFarm && (
               <Box>
                 {/* Farm Image */}

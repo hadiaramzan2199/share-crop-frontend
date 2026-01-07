@@ -15,7 +15,11 @@ export const complaintService = {
     const queryParams = {};
     if (params?.status) queryParams.status = params.status;
     if (params?.user_id) queryParams.user_id = params.user_id;
+    if (params?.complained_against_user_id) queryParams.complained_against_user_id = params.complained_against_user_id;
     return api.get('/api/complaints', { params: queryParams });
   },
+  
+  // Get complaints against a specific user (for admin)
+  getComplaintsAgainstUser: (userId) => api.get(`/api/complaints/against/${userId}`),
 };
 

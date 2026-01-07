@@ -1,8 +1,41 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Box, Alert, Slide, IconButton } from '@mui/material';
 import { Close } from '@mui/icons-material';
 
 const NotificationSystem = ({ notifications, onRemove }) => {
+  const timeoutRefs = useRef({});
+
+  const handleClose = (id, event) => {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    // Clear timeout if exists
+    if (timeoutRefs.current[id]) {
+      clearTimeout(timeoutRefs.current[id]);
+      delete timeoutRefs.current[id];
+    }
+    onRemove(id);
+  };
+
+  // Set up auto-close timeouts
+  useEffect(() => {
+    notifications.forEach((notification) => {
+      if (notification.duration && notification.duration > 0 && !timeoutRefs.current[notification.id]) {
+        timeoutRefs.current[notification.id] = setTimeout(() => {
+          handleClose(notification.id, null);
+        }, notification.duration);
+      }
+    });
+
+    // Cleanup function
+    return () => {
+      Object.values(timeoutRefs.current).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
+    };
+  }, [notifications]);
+
   return (
     <Box
       sx={{
@@ -26,12 +59,26 @@ const NotificationSystem = ({ notifications, onRemove }) => {
         >
           <Alert
             severity={notification.type || 'success'}
+            onClose={(event) => {
+              event?.stopPropagation();
+              event?.preventDefault();
+              handleClose(notification.id, event);
+            }}
             action={
               <IconButton
                 aria-label="close"
                 color="inherit"
                 size="small"
-                onClick={() => onRemove(notification.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  handleClose(notification.id, event);
+                }}
+                sx={{
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                  },
+                }}
               >
                 <Close fontSize="inherit" />
               </IconButton>
@@ -43,6 +90,10 @@ const NotificationSystem = ({ notifications, onRemove }) => {
               '& .MuiAlert-message': {
                 fontSize: '14px',
                 fontWeight: 500,
+              },
+              '& .MuiAlert-action': {
+                paddingTop: 0,
+                marginRight: 0,
               },
             }}
           >

@@ -4,6 +4,7 @@ import {
   Toolbar,
   Typography,
   IconButton,
+  Menu,
   MenuItem,
   Avatar,
   InputBase,
@@ -116,6 +117,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   const [pickupReadyCount, setPickupReadyCount] = useState(0);
   const [pickupPanelOpen, setPickupPanelOpen] = useState(false);
   const [pickupReadyList, setPickupReadyList] = useState([]);
+  const [userMenuAnchorEl, setUserMenuAnchorEl] = useState(null);
 
   // Get user-specific coins when user changes
   const loadUserCoins = async () => {
@@ -296,9 +298,18 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   };
 
   useEffect(() => {
+    let mounted = true;
+    let timeoutId = null;
+    
     const loadPickupReadyFromOrders = async () => {
       try {
-        if (!user || !user.id) { setPickupReadyCount(0); setPickupReadyList([]); return; }
+        if (!user || !user.id) { 
+          if (mounted) {
+            setPickupReadyCount(0); 
+            setPickupReadyList([]);
+          }
+          return; 
+        }
         const res = await orderService.getBuyerOrdersWithFields(user.id);
         const orders = Array.isArray(res?.data) ? res.data : (res?.data?.orders || []);
         const byField = new Map();
@@ -357,15 +368,28 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           if (mode !== 'pickup') return false;
           return withinGrace(last.selected_harvest_date, 4);
         }) : [];
-        setPickupReadyCount(ready.length);
-        setPickupReadyList(ready);
+        if (mounted) {
+          setPickupReadyCount(ready.length);
+          setPickupReadyList(ready);
+        }
       } catch {
-        setPickupReadyCount(0);
-        setPickupReadyList([]);
+        if (mounted) {
+          setPickupReadyCount(0);
+          setPickupReadyList([]);
+        }
       }
     };
-    loadPickupReadyFromOrders();
-  }, [fields, user]);
+    
+    // Debounce the API call - only call if user.id or fields.length changes, and wait 5 seconds
+    timeoutId = setTimeout(() => {
+      loadPickupReadyFromOrders();
+    }, 5000);
+    
+    return () => {
+      mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [user?.id, fields?.length]); // Only depend on user.id and fields.length, not entire objects
 
   const handleFilterClear = () => {
     setActiveFilters({ categories: [], subcategories: [], locations: [] });
@@ -427,6 +451,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     <>
       <AppBar 
         ref={appBarRef}
+        position="fixed"
         sx={{ 
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',
@@ -434,6 +459,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           boxShadow: '0 2px 20px rgba(0,0,0,0.1)',
           borderBottom: '1px solid rgba(0,0,0,0.05)',
           zIndex: 1300,
+          top: 0,
+          left: 0,
+          right: 0,
+          width: '100%',
         }}
       >
         {pickupReadyCount > 0 && (
@@ -833,18 +862,104 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                 </Tooltip>
               )}
 
-              {/* Profile */}
+              {/* Profile - Clickable Avatar with Menu */}
               {!isMobile && (
-                <Avatar 
-                  sx={{ 
-                    width: 36, 
-                    height: 36, 
-                    bgcolor: 'primary.main',
-                    fontSize: '14px'
-                  }}
-                >
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                </Avatar>
+                <>
+                  <Box
+                    onClick={(e) => setUserMenuAnchorEl(e.currentTarget)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      cursor: 'pointer',
+                      borderRadius: 2,
+                      px: 1,
+                      py: 0.5,
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      },
+                    }}
+                  >
+                    <Avatar 
+                      sx={{ 
+                        width: 36, 
+                        height: 36, 
+                        bgcolor: 'primary.main',
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </Avatar>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 500,
+                        color: 'text.primary',
+                        display: { xs: 'none', sm: 'block' }
+                      }}
+                    >
+                      {user?.name?.split(' ')[0] || user?.name || 'User'}
+                    </Typography>
+                  </Box>
+                  
+                  <Menu
+                    anchorEl={userMenuAnchorEl}
+                    open={Boolean(userMenuAnchorEl)}
+                    onClose={() => setUserMenuAnchorEl(null)}
+                    anchorOrigin={{
+                      vertical: 'bottom',
+                      horizontal: 'right',
+                    }}
+                    transformOrigin={{
+                      vertical: 'top',
+                      horizontal: 'right',
+                    }}
+                    PaperProps={{
+                      sx: {
+                        mt: 1,
+                        minWidth: 200,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        borderRadius: 2,
+                      }
+                    }}
+                  >
+                    <MenuItem disabled>
+                      <ListItemIcon>
+                        <Person fontSize="small" />
+                      </ListItemIcon>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {user?.name || 'User'}
+                      </Typography>
+                    </MenuItem>
+                    <Divider />
+                    <MenuItem
+                      onClick={() => {
+                        setUserMenuAnchorEl(null);
+                        navigate(userType === 'farmer' ? '/farmer/profile' : '/buyer/profile');
+                      }}
+                    >
+                      <ListItemIcon>
+                        <Person fontSize="small" />
+                      </ListItemIcon>
+                      View Profile
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        setUserMenuAnchorEl(null);
+                        if (onLogout) {
+                          onLogout();
+                        }
+                      }}
+                      sx={{ color: 'error.main' }}
+                    >
+                      <ListItemIcon>
+                        <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
+                      </ListItemIcon>
+                      Logout
+                    </MenuItem>
+                  </Menu>
+                </>
               )}
             </Box>
           </Toolbar>
@@ -1157,28 +1272,44 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               offset: [110, 5],
             },
           },
+          {
+            name: 'preventOverflow',
+            enabled: true,
+            options: {
+              boundary: 'viewport',
+              padding: 8,
+            },
+          },
         ]}
-        sx={{ zIndex: 1300 }}
+        sx={{ 
+          zIndex: 1400,
+          position: 'fixed !important',
+        }}
       >
         <ClickAwayListener onClickAway={() => setFilterAnchorEl(null)}>
           <Paper
             elevation={8}
             sx={{
               width: 260,
-              maxHeight: 400,
-              overflow: 'auto',
+              maxHeight: 'calc(100vh - 120px)',
+              overflowY: 'auto',
+              overflowX: 'hidden',
               border: '1px solid rgba(0,0,0,0.12)',
               borderRadius: 2,
               mt: 0.5,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            <Box sx={{ p: 2 }}>
-              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600, fontSize: '0.8rem', color: 'text.primary' }}>
+            <Box sx={{ p: 2, flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600, fontSize: '0.8rem', color: 'text.primary', flexShrink: 0 }}>
                 Filter Farms
               </Typography>
-              <Divider sx={{ mb: 2 }} />
+              <Divider sx={{ mb: 2, flexShrink: 0 }} />
               
               {/* Category and Subcategory Filters */}
+              <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
               <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, fontSize: '0.7rem', color: 'text.secondary' }}>
                 Categories
               </Typography>
@@ -1317,9 +1448,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   </Box>
                 );
               })()}
+              </Box>
 
               {/* Action Buttons */}
-              <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1, mt: 2, flexShrink: 0, pt: 2, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
                 <Button
                   variant="outlined"
                   size="small"

@@ -147,7 +147,9 @@ const BuyerView = () => {
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || isMessagesPage || isCurrencyPage || isSettingsPage) ? 'hidden' : 'auto', // No scroll for map, messages, currency, and settings pages, scroll for other pages
-        position: 'relative'
+        position: 'relative',
+        zIndex: 0,
+        isolation: 'isolate'
       }}>
         <Routes>
           <Route path="/" element={

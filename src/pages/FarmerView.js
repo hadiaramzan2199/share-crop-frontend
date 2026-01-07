@@ -382,7 +382,9 @@ const FarmerView = () => {
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || location.pathname === '/farmer/messages' || location.pathname === '/farmer/currency' || location.pathname === '/farmer/settings') ? 'hidden' : 'auto',
-        position: 'relative'
+        position: 'relative',
+        zIndex: 0,
+        isolation: 'isolate'
       }}>
         <Routes>
           <Route path="/" element={

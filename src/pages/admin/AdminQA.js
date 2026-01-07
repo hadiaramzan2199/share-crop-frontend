@@ -434,32 +434,44 @@ const AdminQA = () => {
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
-              <InputLabel>Status</InputLabel>
+              <InputLabel sx={{ fontSize: '0.8125rem' }}>Status</InputLabel>
                 <Select 
                   value={statusFilter} 
                   label="Status" 
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  sx={{ borderRadius: 2 }}
+                  sx={{ 
+                    borderRadius: 2,
+                    fontSize: '0.8125rem',
+                    '& .MuiSelect-select': {
+                      fontSize: '0.8125rem'
+                    }
+                  }}
                 >
-                  <MenuItem value="all">All Status</MenuItem>
-                <MenuItem value="open">Open</MenuItem>
-                <MenuItem value="in_review">In Review</MenuItem>
-                <MenuItem value="resolved">Resolved</MenuItem>
+                  <MenuItem value="all" sx={{ fontSize: '0.8125rem' }}>All Status</MenuItem>
+                <MenuItem value="open" sx={{ fontSize: '0.8125rem' }}>Open</MenuItem>
+                <MenuItem value="in_review" sx={{ fontSize: '0.8125rem' }}>In Review</MenuItem>
+                <MenuItem value="resolved" sx={{ fontSize: '0.8125rem' }}>Resolved</MenuItem>
               </Select>
             </FormControl>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
-                <InputLabel>Category</InputLabel>
+                <InputLabel sx={{ fontSize: '0.8125rem' }}>Category</InputLabel>
                 <Select 
                   value={categoryFilter} 
                   label="Category" 
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  sx={{ borderRadius: 2 }}
+                  sx={{ 
+                    borderRadius: 2,
+                    fontSize: '0.8125rem',
+                    '& .MuiSelect-select': {
+                      fontSize: '0.8125rem'
+                    }
+                  }}
                 >
-                  <MenuItem value="all">All Categories</MenuItem>
+                  <MenuItem value="all" sx={{ fontSize: '0.8125rem' }}>All Categories</MenuItem>
                   {categories.map(cat => (
-                    <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                    <MenuItem key={cat} value={cat} sx={{ fontSize: '0.8125rem' }}>{cat}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -838,14 +850,14 @@ const AdminQA = () => {
           py: 2.5
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <ReportProblem />
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>Complaint Details</Typography>
+            <ReportProblem sx={{ color: 'white' }} />
+            <Typography variant="h6" sx={{ fontWeight: 700, color: 'white' }}>Complaint Details</Typography>
           </Box>
           <IconButton onClick={closeDetail} sx={{ color: 'white' }}>
             <Close />
           </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
+        <DialogContent sx={{ pt: 4, mt: 2 }}>
           {detailItem ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {/* User Info */}

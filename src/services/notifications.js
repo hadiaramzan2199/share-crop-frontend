@@ -57,10 +57,14 @@ const notificationsService = {
 
   markAsRead: async (id) => {
     try {
-      const response = await api.patch(`/api/notifications/${id}/read`);
+      // Use POST instead of PATCH to avoid CORS issues
+      const response = await api.post(`/api/notifications/${id}/read`);
       return response.data;
     } catch (error) {
-      throw error;
+      // Silently fail if backend doesn't support this endpoint
+      // The notification will still be removed from UI
+      console.warn('Failed to mark notification as read on backend:', error);
+      return { success: false };
     }
   },
 };

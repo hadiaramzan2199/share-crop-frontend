@@ -2315,8 +2315,8 @@ const EnhancedFarmMap = forwardRef(({
     const points = (Array.isArray(filteredFarms) && filteredFarms.length > 0 ? filteredFarms : farms)
       .filter(f => Array.isArray(f?.coordinates) && Number.isFinite(f.coordinates[0]) && Number.isFinite(f.coordinates[1]));
     const containerStyle = embedded
-      ? { position: 'absolute', inset: 0 }
-      : { height, width: '100%', position: 'relative' };
+      ? { position: 'absolute', inset: 0, zIndex: 1 }
+      : { height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' };
 
     return (
       <div style={containerStyle}>
@@ -2520,7 +2520,7 @@ const EnhancedFarmMap = forwardRef(({
   }
 
   return (
-    <div style={{ height, width: '100%', position: 'relative'}}>
+    <div style={{ height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' }}>
       <MapboxMap
         ref={mapRef}
         {...viewState}

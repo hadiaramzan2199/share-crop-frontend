@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab } from '@mui/material';
+import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab } from '@mui/material';
 import { adminService } from '../../services/admin';
+import { complaintService } from '../../services/complaints';
 import { useLocation } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
@@ -19,6 +20,7 @@ import StarIcon from '@mui/icons-material/Star';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 
 const StatusChip = ({ status }) => {
   const colorMap = {
@@ -47,7 +49,7 @@ const ConfirmDialog = ({ open, title, content, onClose, onConfirm }) => (
   </Dialog>
 );
 
-const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
+const UserDetailsModal = ({ open, user, onClose, onViewDocuments, userComplaints }) => {
   if (!user) return null;
 
   const formatDate = (dateString) => {
@@ -125,7 +127,7 @@ const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
         </IconButton>
       </DialogTitle>
       
-      <DialogContent sx={{ pt: 3 }}>
+      <DialogContent sx={{ pt: 4, mt: 2 }}>
         <Grid container spacing={3}>
           {/* Basic Information */}
           <Grid item xs={12}>
@@ -195,16 +197,16 @@ const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
                 </Box>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                {user.is_active ? (
-                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
-                ) : (
-                  <CancelIcon sx={{ color: 'error.main', fontSize: 20 }} />
-                )}
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Account Status
-                  </Typography>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                  Account Status
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {user.is_active ? (
+                    <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20, flexShrink: 0 }} />
+                  ) : (
+                    <CancelIcon sx={{ color: 'error.main', fontSize: 20, flexShrink: 0 }} />
+                  )}
                   <Typography variant="body1" sx={{ fontWeight: 500, color: user.is_active ? 'success.main' : 'error.main' }}>
                     {user.is_active ? 'Active' : 'Inactive'}
                   </Typography>
@@ -227,18 +229,18 @@ const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
           </Grid>
 
           {/* Financial Information */}
-          <Grid item xs={12}>
+          <Grid item xs={12} sx={{ mt: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
               Financial Information
             </Typography>
             <Divider sx={{ mb: 2 }} />
             <Stack spacing={2}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Coins Balance
-                  </Typography>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                  Coins Balance
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
                   <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
                     {user.coins?.toLocaleString() || '0'}
                   </Typography>
@@ -254,60 +256,92 @@ const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
                 Farmer Statistics
               </Typography>
               <Divider sx={{ mb: 2 }} />
-              <Grid container spacing={2}>
-                {user.fields_count !== undefined && (
-                  <Grid item xs={6} sm={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(76,175,80,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <LocalOfferIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        {user.fields_count || 0}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Fields
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-                {user.orders_received !== undefined && (
-                  <Grid item xs={6} sm={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(33,150,243,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <ShoppingBagIcon sx={{ color: '#2196F3', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        {user.orders_received || 0}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Orders Received
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-                {user.total_revenue !== undefined && (
-                  <Grid item xs={6} sm={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(76,175,80,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <AttachMoneyIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        ${(user.total_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Total Revenue
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-                {user.avg_rating !== undefined && user.avg_rating !== null && (
-                  <Grid item xs={6} sm={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(255,152,0,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <StarIcon sx={{ color: '#FF9800', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        {user.avg_rating?.toFixed(1) || '0.0'}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Average Rating
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-              </Grid>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 2 }}>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: 'rgba(76,175,80,0.05)', 
+                  borderRadius: 2, 
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 130,
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}>
+                  <LocalOfferIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
+                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                    {user.fields_count ?? 0}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    Fields
+                  </Typography>
+                </Paper>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: 'rgba(33,150,243,0.05)', 
+                  borderRadius: 2, 
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 130,
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}>
+                  <ShoppingBagIcon sx={{ color: '#2196F3', fontSize: 28, mb: 1 }} />
+                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                    {user.orders_received ?? 0}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    Orders Received
+                  </Typography>
+                </Paper>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: 'rgba(76,175,80,0.05)', 
+                  borderRadius: 2, 
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 130,
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}>
+                  <AttachMoneyIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
+                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                    ${(user.total_revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    Total Revenue
+                  </Typography>
+                </Paper>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: 'rgba(255,152,0,0.05)', 
+                  borderRadius: 2, 
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 130,
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}>
+                  <StarIcon sx={{ color: '#FF9800', fontSize: 28, mb: 1 }} />
+                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                    {(user.avg_rating ?? 0).toFixed(1)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    Average Rating
+                  </Typography>
+                </Paper>
+              </Box>
             </Grid>
           )}
 
@@ -370,6 +404,78 @@ const UserDetailsModal = ({ open, user, onClose, onViewDocuments }) => {
             </Grid>
           )}
 
+          {/* Complaints Against User */}
+          <Grid item xs={12}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
+              Complaints Against User
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            {userComplaints?.[user.id]?.count > 0 ? (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <ReportProblemIcon sx={{ color: '#D32F2F', fontSize: 24 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#D32F2F' }}>
+                    {userComplaints[user.id].count} Complaint{userComplaints[user.id].count !== 1 ? 's' : ''}
+                  </Typography>
+                </Box>
+                <TableContainer component={Paper} sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {userComplaints[user.id].complaints.map((complaint) => (
+                        <TableRow key={complaint.id} hover>
+                          <TableCell>
+                            <Chip
+                              label={complaint.category || 'N/A'}
+                              size="small"
+                              sx={{ bgcolor: 'rgba(33, 150, 243, 0.1)', color: '#1565C0' }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <StatusChip status={complaint.status || 'open'} />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {formatDate(complaint.created_at)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                maxWidth: 200,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title={complaint.description}
+                            >
+                              {complaint.description || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <ReportProblemIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 1 }} />
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  No complaints against this user
+                </Typography>
+              </Box>
+            )}
+          </Grid>
+
           {/* User ID */}
           <Grid item xs={12}>
             <Divider sx={{ my: 1 }} />
@@ -414,6 +520,8 @@ const AdminUsers = () => {
   const [pendingSearch, setPendingSearch] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
+  const [userComplaints, setUserComplaints] = useState({}); // { userId: { count: number, complaints: [] } }
+  const [loadingComplaints, setLoadingComplaints] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -462,8 +570,35 @@ const AdminUsers = () => {
         if (mounted) setLoadingPending(false);
       }
     };
+    const loadComplaints = async () => {
+      try {
+        setLoadingComplaints(true);
+        const resp = await complaintService.getComplaints({});
+        if (!mounted) return;
+        const complaints = Array.isArray(resp.data) ? resp.data : [];
+        // Group complaints by complained_against_user_id
+        const complaintsByUser = {};
+        complaints.forEach(complaint => {
+          if (complaint.complained_against_user_id) {
+            const userId = complaint.complained_against_user_id;
+            if (!complaintsByUser[userId]) {
+              complaintsByUser[userId] = { count: 0, complaints: [] };
+            }
+            complaintsByUser[userId].count++;
+            complaintsByUser[userId].complaints.push(complaint);
+          }
+        });
+        setUserComplaints(complaintsByUser);
+      } catch (e) {
+        console.error('Error loading complaints:', e);
+      } finally {
+        if (mounted) setLoadingComplaints(false);
+      }
+    };
+
     loadUsers();
     loadPending();
+    loadComplaints();
     return () => { mounted = false; };
   }, []);
 
@@ -589,8 +724,19 @@ const AdminUsers = () => {
     setDocsLoading(true);
     setDocsContent(null);
     try {
-      const resp = await adminService.getFarmerDocuments(id);
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+      const resp = await Promise.race([
+        adminService.getFarmerDocuments(id),
+        timeoutPromise
+      ]);
       setDocsContent(resp.data?.documents || null);
+    } catch (err) {
+      console.error('Error loading documents:', err);
+      setDocsContent(null);
+      setFeedback(err.response?.data?.error || err.message || 'Failed to load documents');
     } finally {
       setDocsLoading(false);
     }
@@ -608,183 +754,202 @@ const AdminUsers = () => {
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={2} sx={{ mb: 1 }}>
-        <Grid item xs={6} sm={4} md={2.4}>
-          <Card sx={{ 
-            borderRadius: 2, 
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.2s',
-            '&:hover': { 
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
-            }
-          }}>
-            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ 
-                  p: 1, 
-                  borderRadius: 1.5, 
-                  bgcolor: 'rgba(102, 126, 234, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <PeopleIcon sx={{ fontSize: 24, color: '#667eea' }} />
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Total Users
-                </Typography>
+      <Box sx={{ 
+        display: 'grid', 
+        gridTemplateColumns: { 
+          xs: 'repeat(2, 1fr)', 
+          sm: 'repeat(3, 1fr)', 
+          md: 'repeat(5, 1fr)' 
+        }, 
+        gap: 2, 
+        mb: 1 
+      }}>
+        <Card sx={{ 
+          borderRadius: 2, 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          transition: 'all 0.2s',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          '&:hover': { 
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+          }
+        }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ 
+                p: 1, 
+                borderRadius: 1.5, 
+                bgcolor: 'rgba(102, 126, 234, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <PeopleIcon sx={{ fontSize: 24, color: '#667eea' }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-                {stats.total}
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Total Users
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={4} md={2.4}>
-          <Card sx={{ 
-            borderRadius: 2, 
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.2s',
-            '&:hover': { 
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
-            }
-          }}>
-            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ 
-                  p: 1, 
-                  borderRadius: 1.5, 
-                  bgcolor: 'rgba(76,175,80,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <AgricultureIcon sx={{ fontSize: 24, color: '#4CAF50' }} />
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Farmers
-                </Typography>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+              {stats.total}
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ 
+          borderRadius: 2, 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          transition: 'all 0.2s',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          '&:hover': { 
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+          }
+        }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ 
+                p: 1, 
+                borderRadius: 1.5, 
+                bgcolor: 'rgba(76,175,80,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AgricultureIcon sx={{ fontSize: 24, color: '#4CAF50' }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-                {stats.farmers}
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Farmers
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={4} md={2.4}>
-          <Card sx={{ 
-            borderRadius: 2, 
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.2s',
-            '&:hover': { 
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
-            }
-          }}>
-            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ 
-                  p: 1, 
-                  borderRadius: 1.5, 
-                  bgcolor: 'rgba(33,150,243,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <ShoppingCartIcon sx={{ fontSize: 24, color: '#2196F3' }} />
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Buyers
-                </Typography>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+              {stats.farmers}
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ 
+          borderRadius: 2, 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          transition: 'all 0.2s',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          '&:hover': { 
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+          }
+        }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ 
+                p: 1, 
+                borderRadius: 1.5, 
+                bgcolor: 'rgba(33,150,243,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <ShoppingCartIcon sx={{ fontSize: 24, color: '#2196F3' }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-                {stats.buyers}
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Buyers
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={4} md={2.4}>
-          <Card sx={{ 
-            borderRadius: 2, 
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.2s',
-            '&:hover': { 
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
-            }
-          }}>
-            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ 
-                  p: 1, 
-                  borderRadius: 1.5, 
-                  bgcolor: 'rgba(76,175,80,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <CheckCircleIcon sx={{ fontSize: 24, color: '#4CAF50' }} />
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Approved
-                </Typography>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+              {stats.buyers}
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ 
+          borderRadius: 2, 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          transition: 'all 0.2s',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          '&:hover': { 
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+          }
+        }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ 
+                p: 1, 
+                borderRadius: 1.5, 
+                bgcolor: 'rgba(76,175,80,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CheckCircleIcon sx={{ fontSize: 24, color: '#4CAF50' }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-                {stats.approved}
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Approved
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={4} md={2.4}>
-          <Card sx={{ 
-            borderRadius: 2, 
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            bgcolor: 'background.paper',
-            border: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.2s',
-            '&:hover': { 
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
-            }
-          }}>
-            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Box sx={{ 
-                  p: 1, 
-                  borderRadius: 1.5, 
-                  bgcolor: 'rgba(255,152,0,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <CancelIcon sx={{ fontSize: 24, color: '#FF9800' }} />
-                </Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  Pending
-                </Typography>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+              {stats.approved}
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ 
+          borderRadius: 2, 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          transition: 'all 0.2s',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          '&:hover': { 
+            transform: 'translateY(-2px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+          }
+        }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Box sx={{ 
+                p: 1, 
+                borderRadius: 1.5, 
+                bgcolor: 'rgba(255,152,0,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CancelIcon sx={{ fontSize: 24, color: '#FF9800' }} />
               </Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-                {stats.pending}
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Pending
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
+              {stats.pending}
+            </Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Main Content Card */}
       <Card sx={{ 
@@ -957,6 +1122,7 @@ const AdminUsers = () => {
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 200 }}>Email</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120, display: { xs: 'none', sm: 'table-cell' } }}>Coins</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Complaints</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -968,12 +1134,13 @@ const AdminUsers = () => {
                       <TableCell><Skeleton width={180} height={32} /></TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}><Skeleton width={80} height={32} /></TableCell>
                       <TableCell><Skeleton width={80} height={32} /></TableCell>
+                      <TableCell><Skeleton width={80} height={32} /></TableCell>
                       <TableCell><Skeleton width={100} height={32} /></TableCell>
                         </TableRow>
                       ))
                 ) : filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                    <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                         <PeopleIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5 }} />
                         <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 500 }}>
@@ -1019,9 +1186,31 @@ const AdminUsers = () => {
                             fontWeight: 600
                           }} 
                         />
-                      </TableCell>
+                          </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <StatusChip status={u.approval_status || (u.is_active ? 'approved' : 'pending')} />
+                      </TableCell>
+                      <TableCell sx={{ py: 2 }}>
+                        {userComplaints[u.id]?.count > 0 ? (
+                          <Chip
+                            icon={<ReportProblemIcon sx={{ fontSize: 16 }} />}
+                            label={userComplaints[u.id].count}
+                            size="small"
+                            sx={{
+                              bgcolor: 'rgba(244, 67, 54, 0.1)',
+                              color: '#D32F2F',
+                              border: '1px solid rgba(244, 67, 54, 0.2)',
+                              fontWeight: 600,
+                              '& .MuiChip-icon': {
+                                color: '#D32F2F'
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            0
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Button
@@ -1031,7 +1220,7 @@ const AdminUsers = () => {
                             e.stopPropagation();
                             setSelectedUser(u);
                           }}
-                          sx={{
+                          sx={{ 
                             textTransform: 'none',
                             fontWeight: 500,
                             minWidth: 100
@@ -1039,7 +1228,7 @@ const AdminUsers = () => {
                         >
                           View Details
                         </Button>
-                      </TableCell>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -1088,7 +1277,7 @@ const AdminUsers = () => {
             <Chip 
               label={`${filteredPendingFarmers.length} of ${pendingFarmers.length}`} 
               size="small" 
-              sx={{ 
+                          sx={{ 
                 bgcolor: 'rgba(255,152,0,0.1)', 
                 color: '#FF9800', 
                 fontWeight: 600,
@@ -1284,6 +1473,7 @@ const AdminUsers = () => {
         user={selectedUser}
         onClose={() => setSelectedUser(null)}
         onViewDocuments={openDocs}
+        userComplaints={userComplaints}
       />
 
       <Dialog 
@@ -1365,15 +1555,27 @@ const AdminUsers = () => {
       <Snackbar
         open={Boolean(feedback)}
         autoHideDuration={3000}
-        onClose={() => setFeedback('')}
-        message={feedback}
+        onClose={(event, reason) => {
+          if (reason === 'clickaway') {
+            return;
+          }
+          setFeedback('');
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{
           '& .MuiSnackbarContent-root': {
             borderRadius: 2,
           }
         }}
-      />
+      >
+        <Alert 
+          onClose={() => setFeedback('')} 
+          severity="success" 
+          sx={{ width: '100%' }}
+        >
+          {feedback}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

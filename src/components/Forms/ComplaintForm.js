@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -17,9 +17,12 @@ import {
   IconButton,
   useMediaQuery,
   useTheme,
+  Autocomplete,
+  InputAdornment,
 } from '@mui/material';
-import { ReportProblem, Send, Close } from '@mui/icons-material';
+import { ReportProblem, Send, Close, Search, Person } from '@mui/icons-material';
 import { complaintService } from '../../services/complaints';
+import { userService } from '../../services/users';
 
 const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId, onSuccess }) => {
   const theme = useTheme();
@@ -29,6 +32,11 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [complainedAgainstUser, setComplainedAgainstUser] = useState(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [onlyCurrentUserFound, setOnlyCurrentUserFound] = useState(false);
 
   const categories = [
     'Service',
@@ -40,6 +48,73 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
     'Order',
     'User',
   ];
+
+  // Search for users by name
+  const searchUsers = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setUserSearchResults([]);
+      return;
+    }
+
+    setSearchingUsers(true);
+    try {
+      const response = await userService.getUserNames(query.trim());
+      console.log('User search response:', response);
+      console.log('Response type:', typeof response);
+      console.log('Response.data:', response?.data);
+      
+      // Axios returns { data: [...] }, so response.data should be the array
+      let users = [];
+      if (response && response.data) {
+        if (Array.isArray(response.data)) {
+          users = response.data;
+        } else if (Array.isArray(response.data.data)) {
+          users = response.data.data;
+        }
+      } else if (Array.isArray(response)) {
+        users = response;
+      }
+      
+      console.log('Parsed users:', users);
+      console.log('Users count:', users.length);
+      
+      // Filter out current user (only if userId is provided)
+      const filteredUsers = userId 
+        ? users.filter(u => u && u.id && String(u.id) !== String(userId))
+        : users.filter(u => u && u.id);
+      
+      // Check if the only result was the current user
+      const wasOnlyCurrentUser = userId && users.length === 1 && filteredUsers.length === 0;
+      setOnlyCurrentUserFound(wasOnlyCurrentUser);
+      
+      console.log('Filtered users:', filteredUsers);
+      console.log('Filtered count:', filteredUsers.length);
+      console.log('Current userId:', userId);
+      console.log('Only current user found:', wasOnlyCurrentUser);
+      
+      setUserSearchResults(filteredUsers);
+    } catch (err) {
+      console.error('Error searching users:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      setUserSearchResults([]);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  // Debounced user search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (userSearchQuery) {
+        searchUsers(userSearchQuery);
+      } else {
+        setUserSearchResults([]);
+        setOnlyCurrentUserFound(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [userSearchQuery]);
 
   const handleSubmit = async () => {
     // Validation
@@ -63,6 +138,8 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
         // Only include target_id if it's provided (for field/order/user complaints)
         // For general complaints (service, quality, refund, etc.), don't send target_id
         ...(targetId && targetId.trim() !== '' ? { target_id: targetId } : {}),
+        // Include complained_against_user_id if a user is selected
+        ...(complainedAgainstUser?.id ? { complained_against_user_id: complainedAgainstUser.id } : {}),
         category: category || null,
         description: description.trim(),
       };
@@ -72,6 +149,9 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       setSuccess(true);
       setDescription('');
       setCategory('');
+      setComplainedAgainstUser(null);
+      setUserSearchQuery('');
+      setUserSearchResults([]);
       
       // Call success callback if provided
       if (onSuccess) {
@@ -99,6 +179,9 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       setSuccess(false);
       setDescription('');
       setCategory('');
+      setComplainedAgainstUser(null);
+      setUserSearchQuery('');
+      setUserSearchResults([]);
       onClose();
     }
   };
@@ -140,7 +223,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
           }}>
             <ReportProblem sx={{ fontSize: isMobile ? 24 : 28 }} />
           </Box>
-          <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 700 }}>
+          <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 700, color: 'white' }}>
             Submit a Complaint
           </Typography>
         </Box>
@@ -159,7 +242,8 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       <DialogContent sx={{ 
         pt: isMobile ? 2 : 3,
         px: isMobile ? 2 : 3,
-        pb: 2
+        pb: 2,
+        mt: 2
       }}>
         {targetName && (
           <Alert 
@@ -213,6 +297,126 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
         )}
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          {/* User Search - Complain Against User */}
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: 'text.primary' }}>
+              Complain Against User (Optional)
+            </Typography>
+            <Autocomplete
+              options={userSearchResults}
+              getOptionLabel={(option) => {
+                if (!option || typeof option !== 'object') return '';
+                if (option.user_type === 'admin') {
+                  return 'Share-Crop Administration';
+                }
+                return `${option.name || 'Unknown'} (${option.user_type || 'user'})`;
+              }}
+              isOptionEqualToValue={(option, value) => {
+                if (!option || !value) return false;
+                return option.id === value.id;
+              }}
+              getOptionSelected={(option, value) => {
+                if (!option || !value) return false;
+                return option.id === value.id;
+              }}
+              value={complainedAgainstUser}
+              onChange={(event, newValue) => {
+                setComplainedAgainstUser(newValue);
+              }}
+              onInputChange={(event, newInputValue) => {
+                setUserSearchQuery(newInputValue);
+              }}
+              loading={searchingUsers}
+              disabled={loading}
+              filterOptions={(x) => x} // Disable default filtering, we do it server-side
+              noOptionsText={
+                userSearchQuery.length < 2 
+                  ? "Type at least 2 characters to search" 
+                  : searchingUsers 
+                    ? "Searching..." 
+                    : onlyCurrentUserFound
+                      ? "You cannot complain against yourself"
+                      : "No users found"
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Search user by name..."
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      '& fieldset': {
+                        borderColor: 'rgba(0, 0, 0, 0.23)',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: '#4CAF50',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#2E7D32',
+                        borderWidth: 2,
+                      },
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: '#2E7D32',
+                    },
+                  }}
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start">
+                          <Search sx={{ color: 'text.secondary' }} />
+                        </InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              renderOption={(props, option) => {
+                const isAdmin = option.user_type === 'admin';
+                const primaryLabel = isAdmin ? 'Share-Crop Administration' : (option.name || 'Unknown');
+                const secondaryLabel = isAdmin ? null : (option.user_type || 'user');
+                return (
+                  <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Person sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {primaryLabel}
+                      </Typography>
+                      {secondaryLabel && (
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {secondaryLabel}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                );
+              }}
+              noOptionsText={userSearchQuery.length < 2 ? "Type at least 2 characters to search" : "No users found"}
+              sx={{ width: '100%' }}
+            />
+            {complainedAgainstUser && (
+              <Box sx={{ mt: 1, p: 1.5, bgcolor: 'rgba(33, 150, 243, 0.08)', borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Person sx={{ fontSize: 18, color: '#1976d2' }} />
+                <Typography variant="body2" sx={{ flex: 1 }}>
+                  Complaining against: <strong>{complainedAgainstUser.user_type === 'admin' ? 'Share-Crop Administration' : (complainedAgainstUser.name || 'Unknown')}</strong>
+                  {complainedAgainstUser.user_type !== 'admin' && ` (${complainedAgainstUser.user_type || 'user'})`}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setComplainedAgainstUser(null);
+                    setUserSearchQuery('');
+                  }}
+                  sx={{ color: 'text.secondary' }}
+                >
+                  <Close fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
+          </Box>
+
           <FormControl fullWidth>
             <InputLabel 
               sx={{

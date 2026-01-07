@@ -3,8 +3,8 @@ import api from './api';
 export const adminService = {
   getAllUsers: (includeStats = true) => api.get('/api/users', { params: { includeStats } }),
   getPendingFarmers: () => api.get('/api/admin/farmers/pending'),
-  approveFarmer: (id) => api.patch(`/api/admin/farmers/${id}/approve`),
-  rejectFarmer: (id, reason) => api.patch(`/api/admin/farmers/${id}/reject`, { reason }),
+  approveFarmer: (id) => api.post(`/api/admin/farmers/${id}/approve`),
+  rejectFarmer: (id, reason) => api.post(`/api/admin/farmers/${id}/reject`, { reason }),
   getFarmerDocuments: (id) => api.get(`/api/admin/farmers/${id}/documents`),
   getProductionConsistency: () => api.get('/api/admin/production/consistency'),
   getComplaints: (params) => api.get('/api/admin/qa/complaints', { params }),
