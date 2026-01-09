@@ -47,12 +47,12 @@ import {
   LocalShipping,
 } from '@mui/icons-material';
 import { orderService } from '../services/orders';
-import { mockOrderService } from '../services/mockServices';
-import storageService from '../services/storage';
+import { useAuth } from '../contexts/AuthContext';
 import Loader from '../components/Common/Loader';
 import ErrorMessage from '../components/Common/ErrorMessage';
 
 const Orders = () => {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,89 +61,59 @@ const Orders = () => {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    loadOrders();
-  }, []);
+    if (user) {
+      loadOrders();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   const loadOrders = async () => {
+    if (!user || !user.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      
-      // Get current user to determine if farmer or buyer
-      const currentUser = storageService.getCurrentUser();
-      const userType = currentUser?.type || 'buyer';
-      
-      // For both farmer and buyer, show orders placed by them as buyers
-      try {
-        const ordersResponse = await mockOrderService.getBuyerOrders();
-        const mockOrders = ordersResponse.data.orders || [];
-        
-        // Format mock orders to match expected structure
-        const formattedOrders = mockOrders.map(order => ({
-          id: order.id,
-          product_name: order.product_name || order.name,
-          buyer_name: userType === 'farmer' ? 'You (Farmer)' : 'Current User',
-          area_rented: order.area_rented || order.area,
-          total_cost: order.total_cost || order.cost,
-          status: order.status,
-          created_at: order.created_at || order.date,
-          farm_name: order.product_name || order.name,
-          crop_type: order.crop_type,
-          price_per_unit: order.price_per_unit,
-          location: order.location,
-          farmer_name: order.farmer_name,
-          delivery_date: order.end_date,
-          payment_status: order.status === 'completed' ? 'paid' : 'pending',
-          monthly_rent: order.monthly_rent,
-          progress: order.progress,
-          notes: order.notes
-        }));
-        
-        setOrders(formattedOrders);
-        setError(null);
-        setLoading(false);
-        return;
-      } catch (mockError) {
-        console.error('Failed to load mock orders:', mockError);
-      }
-      
-      // Fallback: Load orders from persistent storage
-      const storedOrders = storageService.getUserOrders();
-      
-      if (storedOrders && storedOrders.length > 0) {
-        // Convert stored orders to the expected format
-        const formattedOrders = storedOrders.map(order => ({
-          id: order.id,
-          product_name: order.productName || order.farmName || order.fieldName || 'Unknown Product',
-          buyer_name: userType === 'farmer' ? 'You (Farmer)' : 'Current User',
-          area_rented: order.quantity || order.areaRented || 0,
-          total_cost: order.totalCost || order.totalAmount || order.totalPrice || 0,
-          status: order.status || 'pending',
-          created_at: order.created_at || order.orderDate || order.createdAt || new Date().toISOString(),
-          farm_name: order.farmName || order.fieldName || 'Unknown Farm',
-          crop_type: order.cropType || order.productName || 'Field Purchase',
-          price_per_unit: order.pricePerKg || order.price || order.pricePerUnit || 0,
-          location: order.location || 'Unknown Location',
-          farmer_name: order.farmerName || 'Unknown Farmer',
-          delivery_date: order.deliveryDate || new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          payment_status: order.paymentStatus || 'pending'
-        }));
-        
-        setOrders(formattedOrders);
-        setError(null);
-        setLoading(false);
-        return;
-      }
-      
-      // Final fallback to empty array
-      setOrders([]);
       setError(null);
+      
+      // Use real API - getBuyerOrders uses /my-orders endpoint which filters by authenticated user
+      const response = await orderService.getBuyerOrders();
+      const apiOrders = response.data || [];
+      
+      // Format API orders to match expected structure
+      const formattedOrders = apiOrders.map(order => ({
+        id: order.id,
+        product_name: order.field_name || 'Unknown Field',
+        buyer_name: user.name || 'You',
+        area_rented: `${order.quantity || 0} m²`,
+        total_cost: order.total_price || 0,
+        status: order.status || 'pending',
+        created_at: order.created_at,
+        farm_name: order.field_name || 'Unknown Field',
+        crop_type: order.crop_type || 'Mixed',
+        price_per_unit: order.price_per_m2 || 0,
+        location: order.location || 'Unknown',
+        farmer_name: order.farmer_name || 'Unknown Farmer',
+        farmer_email: order.farmer_email || '',
+        delivery_date: order.selected_harvest_date || null,
+        payment_status: order.status === 'completed' ? 'paid' : 'pending',
+        mode_of_shipping: order.mode_of_shipping || 'delivery',
+        field_id: order.field_id,
+        notes: order.notes || ''
+      }));
+      
+      setOrders(formattedOrders);
     } catch (err) {
-      setError('Failed to load orders');
-      console.error('Orders error:', err);
+      console.error('Error loading orders:', err);
+      setError('Failed to load orders. Please try again.');
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleViewDetails = (order) => {
     setSelectedOrder(order);

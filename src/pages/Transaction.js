@@ -42,12 +42,19 @@ import {
   ArrowDownward,
   SwapHoriz,
 } from '@mui/icons-material';
+import { transactionsService } from '../services/transactions';
+import { useAuth } from '../contexts/AuthContext';
+import { orderService } from '../services/orders';
+import { CircularProgress, Alert } from '@mui/material';
 
 const Transaction = () => {
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [userCurrency, setUserCurrency] = useState('USD');
   const [tabValue, setTabValue] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Currency symbols mapping
   const currencySymbols = {
@@ -61,127 +68,79 @@ const Transaction = () => {
     'CHF': 'CHF'
   };
 
-  // Load user preferences
-  useEffect(() => {
-    // Removed localStorage.getItem('userPreferences') as localStorage is deprecated.
-    // User currency will default to 'USD' or be managed by a future backend.
-  }, []);
-
   // Load transaction data
   useEffect(() => {
-    const loadTransactions = () => {
-      const mockTransactions = [
-        {
-          id: 'TXN-001',
-          type: 'Income',
-          category: 'Farm Sale',
-          description: 'Sale of wheat to John Smith',
-          amount: 2160,
-          date: '2024-01-25',
-          status: 'Completed',
-          paymentMethod: 'Bank Transfer',
-          reference: 'ORD-001',
-          buyer: 'John Smith',
-          farmName: 'Green Valley Farm'
-        },
-        {
-          id: 'TXN-002',
-          type: 'Expense',
-          category: 'Seeds & Fertilizer',
-          description: 'Purchase of organic fertilizer',
-          amount: 900,
-          date: '2024-01-20',
-          status: 'Completed',
-          paymentMethod: 'Cash',
-          reference: 'INV-2024-001',
-          supplier: 'AgriSupply Co.',
-          farmName: 'Sunrise Orchards'
-        },
-        {
-          id: 'TXN-003',
-          type: 'Income',
-          category: 'Farm Sale',
-          description: 'Sale of rice to Michael Davis',
-          amount: 2880,
-          date: '2024-01-28',
-          status: 'Completed',
-          paymentMethod: 'Online Payment',
-          reference: 'ORD-003',
-          buyer: 'Michael Davis',
-          farmName: 'Golden Fields'
-        },
-        {
-          id: 'TXN-004',
-          type: 'Expense',
-          category: 'Equipment',
-          description: 'Irrigation system maintenance',
-          amount: 540,
-          date: '2024-01-22',
-          status: 'Completed',
-          paymentMethod: 'Bank Transfer',
-          reference: 'SRV-2024-005',
-          supplier: 'IrriTech Services',
-          farmName: 'Green Valley Farm'
-        },
-        {
-          id: 'TXN-005',
-          type: 'Income',
-          category: 'Farm Sale',
-          description: 'Sale of mango to Sarah Johnson',
-          amount: 2160,
-          date: '2024-01-30',
-          status: 'Pending',
-          paymentMethod: 'Bank Transfer',
-          reference: 'ORD-002',
-          buyer: 'Sarah Johnson',
-          farmName: 'Sunrise Orchards'
-        },
-        {
-          id: 'TXN-006',
-          type: 'Expense',
-          category: 'Labor',
-          description: 'Seasonal workers payment',
-          amount: 1260,
-          date: '2024-01-15',
-          status: 'Completed',
-          paymentMethod: 'Cash',
-          reference: 'PAY-2024-001',
-          supplier: 'Farm Workers',
-          farmName: 'Multiple Farms'
-        },
-        {
-          id: 'TXN-007',
-          type: 'Expense',
-          category: 'Utilities',
-          description: 'Electricity bill for farm operations',
-          amount: 288,
-          date: '2024-01-10',
-          status: 'Completed',
-          paymentMethod: 'Online Payment',
-          reference: 'ELEC-2024-001',
-          supplier: 'Power Company',
-          farmName: 'All Farms'
-        },
-        {
-          id: 'TXN-008',
-          type: 'Income',
-          category: 'Rental Income',
-          description: 'Land rental from tenant farmer',
-          amount: 1620,
-          date: '2024-01-05',
-          status: 'Completed',
-          paymentMethod: 'Bank Transfer',
-          reference: 'RENT-2024-001',
-          buyer: 'Local Farmer',
-          farmName: 'Organic Paradise'
-        }
-      ];
+    if (user) {
+      loadTransactions();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const loadTransactions = async () => {
+    if (!user || !user.id) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
       
-      setTransactions(mockTransactions);
-    };
-    
-    loadTransactions();
-  }, []);
+      // Fetch coin transactions
+      const coinTransactionsResponse = await transactionsService.getMyTransactions();
+      const coinTransactions = coinTransactionsResponse.data || [];
+      
+      // Fetch orders to map to transactions
+      let orders = [];
+      try {
+        if (user.user_type === 'buyer') {
+          const ordersResponse = await orderService.getBuyerOrders();
+          orders = ordersResponse.data || [];
+        } else if (user.user_type === 'farmer') {
+          const ordersResponse = await orderService.getFarmerOrders(user.id);
+          orders = ordersResponse.data || [];
+        }
+      } catch (orderErr) {
+        console.warn('Could not load orders for transactions:', orderErr);
+      }
+      
+      // Map coin transactions to transaction format
+      const mappedTransactions = coinTransactions.map((tx, index) => {
+        // Find related order if ref_type is 'orders'
+        const relatedOrder = tx.ref_type === 'orders' && tx.ref_id 
+          ? orders.find(o => o.id === tx.ref_id)
+          : null;
+        
+        return {
+          id: tx.id || `TXN-${String(index + 1).padStart(3, '0')}`,
+          type: tx.type === 'credit' ? 'Income' : 'Expense',
+          category: tx.reason || (tx.type === 'credit' ? 'Coin Credit' : 'Coin Debit'),
+          description: tx.reason || (tx.type === 'credit' ? 'Coins credited' : 'Coins debited'),
+          amount: tx.amount || 0,
+          date: tx.created_at ? new Date(tx.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          status: 'Completed',
+          paymentMethod: 'Coins',
+          reference: tx.ref_id || '',
+          balanceAfter: tx.balance_after || 0,
+          farmName: relatedOrder?.field_name || 'N/A',
+          buyer: relatedOrder?.buyer_name || '',
+          farmer: relatedOrder?.farmer_name || ''
+        };
+      });
+      
+      // Sort by date (newest first)
+      mappedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      setTransactions(mappedTransactions);
+    } catch (err) {
+      console.error('Error loading transactions:', err);
+      setError('Failed to load transactions. Please try again.');
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getTransactionIcon = (type) => {
     switch (type) {
@@ -260,6 +219,23 @@ const Transaction = () => {
   };
 
   const summary = getFinancialSummary();
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        <Button variant="contained" onClick={loadTransactions}>Retry</Button>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ 

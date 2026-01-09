@@ -29,6 +29,7 @@ import {
   CurrencyExchange,
   Settings,
   Close,
+  ReportProblem,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -61,6 +62,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
     { text: 'Products', icon: <Store />, path: '/farmer/products' },
     { text: 'Orders', icon: <ShoppingCart />, path: '/farmer/orders' },
     { text: 'Map View', icon: <Map />, path: '/farmer/map' },
+    { text: 'Complaints', icon: <ReportProblem />, path: '/farmer/complaints' },
   ];
 
   const buyerMenuItems = [
@@ -70,6 +72,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
     { text: 'Messages', icon: <Message />, path: '/buyer/messages' },
     { text: 'Change Currency', icon: <CurrencyExchange />, path: '/buyer/currency' },
     { text: 'Settings', icon: <Settings />, path: '/buyer/settings' },
+    { text: 'Complaints', icon: <ReportProblem />, path: '/buyer/complaints' },
   ];
 
   const menuItems = user.user_type === 'farmer' ? farmerMenuItems : buyerMenuItems;
@@ -165,7 +168,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
                 whiteSpace: 'nowrap',
               }}
             >
-              {user.name}
+              {user.name?.split(' ')[0] || user.name || 'User'}
             </Typography>
             <Chip
               label={user.user_type}

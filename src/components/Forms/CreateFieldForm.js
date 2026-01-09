@@ -30,7 +30,6 @@ import {
 
 import {
   Close,
-  PhotoCamera,
   LocationOn,
   Add,
   Remove,
@@ -119,6 +118,18 @@ const StyledTextField = styled(TextField)(({ theme, isMobile }) => ({
     '&.Mui-focused': {
       color: '#4caf50',
     },
+    '&.MuiInputLabel-shrink': {
+      backgroundColor: '#ffffff',
+      paddingLeft: '4px',
+      paddingRight: '4px',
+      transform: 'translate(14px, -9px) scale(0.75)',
+      '&.Mui-focused': {
+        color: '#4caf50',
+      },
+    },
+  },
+  '& .MuiOutlinedInput-notchedOutline': {
+    border: 'none',
   },
   '& .MuiFormHelperText-root': {
     fontSize: isMobile ? '10px' : '12px',
@@ -153,6 +164,18 @@ const StyledFormControl = styled(FormControl)(({ theme, isMobile }) => ({
     '&.Mui-focused': {
       color: '#4caf50',
     },
+    '&.MuiInputLabel-shrink': {
+      backgroundColor: '#ffffff',
+      paddingLeft: '4px',
+      paddingRight: '4px',
+      transform: 'translate(14px, -9px) scale(0.75)',
+      '&.Mui-focused': {
+        color: '#4caf50',
+      },
+    },
+  },
+  '& .MuiOutlinedInput-notchedOutline': {
+    border: 'none',
   },
   '& .MuiSelect-select': {
     paddingRight: '48px !important',
@@ -175,21 +198,6 @@ const StyledButton = styled(Button)(({ theme, isMobile }) => ({
   },
 }));
 
-const UploadBox = styled(Box)(({ theme }) => ({
-  border: '2px dashed #c8e6c9',
-  borderRadius: '16px',
-  padding: '40px 20px',
-  textAlign: 'center',
-  backgroundColor: '#f8fffe',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    borderColor: '#4caf50',
-    backgroundColor: '#f1f8e9',
-    transform: 'translateY(-2px)',
-    boxShadow: '0 8px 25px rgba(76, 175, 80, 0.15)',
-  },
-}));
 
 const CombinedInputContainer = styled(Box)(({ theme, isMobile }) => ({
   display: 'flex',
@@ -293,8 +301,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   };
 
   const [formData, setFormData] = useState({
-    image: null,
-    imagePreview: null,
+    selectedIcon: '',
     category: '',
     subcategory: '',
     productName: '',
@@ -355,13 +362,13 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       setFormData(prev => ({
         ...prev,
         ...initialData,
+        selectedIcon: initialData.icon ? initialData.icon.split('/').pop() : (initialData.image ? initialData.image.split('/').pop() : ''),
         productName: initialData.name || '',
         category: initialData.category || '',
         description: initialData.description || '',
         sellingPrice: initialData.price || '',
         latitude: initialData.latitude || '',
         longitude: initialData.longitude || '',
-        imagePreview: initialData.image || null,
         harvestDates: initialData.harvestDates || [{ date: '', label: '' }]
       }));
       // Set location address if coordinates exist
@@ -370,8 +377,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       }
     } else if (!editMode) {
       setFormData({
-        image: null,
-        imagePreview: null,
+        selectedIcon: '',
         category: '',
         productName: '',
         description: '',
@@ -459,19 +465,58 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     }
   };
 
-  const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setFormData(prev => ({
-          ...prev,
-          image: file,
-          imagePreview: e.target.result
-        }));
-      };
-      reader.readAsDataURL(file);
+  // Map subcategory names to icon filenames
+  const subcategoryToIconMap = {
+    'Green Apple': 'apple_green.png',
+    'Red Apple': 'apple_red.png',
+    'Corn': 'corn.png',
+    'Eggplant': 'eggplant.png',
+    'Lemon': 'lemon.png',
+    'Peach': 'peach.png',
+    'Strawberry': 'strawberry.png',
+    'Tangerine': 'tangerine.png',
+    'Tomato': 'tomato.png',
+    'Watermelon': 'watermelon.png',
+    // Additional subcategories with fallback icons
+    'Avocados': 'apple_green.png',
+    'Mango': 'peach.png',
+    'Grapes': 'strawberry.png',
+    'Banana': 'tangerine.png',
+    'Broccoli': 'eggplant.png',
+    'Capsicum': 'tomato.png',
+    'Carrot': 'tangerine.png',
+    'Onions': 'eggplant.png',
+    'Potatoes': 'corn.png',
+    'Salad Greens': 'eggplant.png',
+  };
+
+  // Get available icons based on selected subcategory
+  const getAvailableIcons = () => {
+    // Only show icon if subcategory is selected
+    if (!formData.subcategory) {
+      return [];
     }
+
+    // Get the icon for the selected subcategory
+    const iconName = subcategoryToIconMap[formData.subcategory];
+    
+    // If icon exists for this subcategory, return it as an array
+    if (iconName) {
+      return [iconName];
+    }
+
+    // If no icon mapping found, return empty array
+    return [];
+  };
+
+  const getIconPath = (iconName) => {
+    if (!iconName) return '';
+    // Determine category folder based on selected category
+    // Fruits and Vegetables both use the 'fruits' folder for now
+    const category = formData.category?.toLowerCase() === 'fruits' || formData.category?.toLowerCase() === 'vegetables' 
+      ? 'fruits' 
+      : 'fruits'; // Default to fruits folder
+    return `/icons/products/${category}/${iconName}`;
   };
 
   const addDeliveryCharge = () => {
@@ -574,7 +619,8 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       price: parseFloat(formData.sellingPrice),
       latitude: parseFloat(formData.latitude),
       longitude: parseFloat(formData.longitude),
-      image: formData.imagePreview,
+      image: formData.selectedIcon ? getIconPath(formData.selectedIcon) : '',
+      icon: formData.selectedIcon ? getIconPath(formData.selectedIcon) : '',
       fieldSize: formData.fieldSize,
       fieldSizeUnit: formData.fieldSizeUnit,
       productionRate: formData.productionRate,
@@ -615,8 +661,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
   const handleClose = () => {
     setFormData({
-      image: null,
-      imagePreview: null,
+      selectedIcon: '',
       category: '',
       subcategory: '',
       productName: '',
@@ -676,49 +721,6 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
       <StyledDialogContent isMobile={isMobile}>
         <Box sx={{ width: '100%' }}>
-          {/* Image Upload Section */}
-          <FormSection sx={{ textAlign: 'center' }}>
-            <UploadBox
-              onClick={() => document.getElementById('image-upload').click()}
-              sx={{ mb: 2 }}
-            >
-              {formData.imagePreview ? (
-                <Box>
-                  <img 
-                    src={formData.imagePreview} 
-                    alt="Preview" 
-                    style={{ 
-                      maxWidth: '100%', 
-                      maxHeight: 200, 
-                      borderRadius: 12,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                    }} 
-                  />
-                  <Typography variant="body2" sx={{ mt: 2, color: '#4a5568' }}>
-                    Click to change image
-                  </Typography>
-                </Box>
-              ) : (
-                <Box>
-                  <PhotoCamera sx={{ fontSize: 48, color: '#4caf50', mb: 2 }} />
-                  <Typography variant="body1" sx={{ color: '#4a5568', mb: 1 }}>
-                    Click to upload
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#718096' }}>
-                    SVG, PNG, or JPG
-                  </Typography>
-                </Box>
-              )}
-              <input
-                id="image-upload"
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                style={{ display: 'none' }}
-              />
-            </UploadBox>
-          </FormSection>
-
           {/* Basic Information Section */}
           <FormSection>
             <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Basic Information</SectionTitle>
@@ -943,8 +945,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
               </Grid>
 
               {/* Sub Category Dropdown */}
-              {/* Sub Category Dropdown */}
-              <Grid item xs={12}>
+              <Grid item xs={12} md={6}>
                 <StyledFormControl
                   fullWidth
                   error={!!errors.subcategory}
@@ -954,7 +955,17 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                   <InputLabel sx={{ fontWeight: 500 }}>Select Sub Category</InputLabel>
                   <Select
                     value={formData.subcategory || ''}  // Ensure value is never undefined
-                    onChange={(e) => handleInputChange('subcategory', e.target.value)}
+                    onChange={(e) => {
+                      const newSubcategory = e.target.value;
+                      handleInputChange('subcategory', newSubcategory);
+                      // Auto-select the icon for the selected subcategory
+                      const iconForSubcategory = subcategoryToIconMap[newSubcategory];
+                      if (iconForSubcategory) {
+                        handleInputChange('selectedIcon', iconForSubcategory);
+                      } else {
+                        handleInputChange('selectedIcon', '');
+                      }
+                    }}
                     label="Select Sub Category"
                     disabled={!formData.category || formData.category === 'Select Category'}
                     MenuProps={{
@@ -1012,8 +1023,110 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                 </StyledFormControl>
               </Grid>
 
-              {/* Product Name */}
-              <Grid item xs={12}>
+              {/* Product Icon Selector - Compact inline display below subcategory */}
+              {formData.subcategory && getAvailableIcons().length > 0 && (
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 1.5,
+                    height: '100%',
+                    pt: { xs: 0, md: 0 }
+                  }}>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 500, 
+                      color: 'text.primary',
+                      whiteSpace: 'nowrap',
+                      fontSize: '0.875rem',
+                      minWidth: 'fit-content'
+                    }}>
+                      Icon:
+                    </Typography>
+                    <Box sx={{ 
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      flex: 1
+                    }}>
+                      {getAvailableIcons().map((iconName) => {
+                        const iconPath = getIconPath(iconName);
+                        const isSelected = formData.selectedIcon === iconName;
+                        return (
+                          <Box
+                            key={iconName}
+                            onClick={() => handleInputChange('selectedIcon', iconName)}
+                            sx={{
+                              position: 'relative',
+                              width: { xs: 44, sm: 48, md: 52 },
+                              height: { xs: 44, sm: 48, md: 52 },
+                              border: isSelected ? '2px solid' : '1.5px solid',
+                              borderColor: isSelected ? '#4CAF50' : '#e0e0e0',
+                              borderRadius: 1.25,
+                              p: 0.5,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              bgcolor: isSelected ? 'rgba(76,175,80,0.08)' : '#fafafa',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              '&:hover': {
+                                borderColor: '#4CAF50',
+                                bgcolor: 'rgba(76,175,80,0.12)',
+                                transform: 'scale(1.08)',
+                              }
+                            }}
+                          >
+                            <Box
+                              component="img"
+                              src={iconPath}
+                              alt={iconName.replace('.png', '').replace('_', ' ')}
+                              sx={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'contain',
+                                maxWidth: { xs: 32, sm: 36, md: 40 },
+                                maxHeight: { xs: 32, sm: 36, md: 40 },
+                              }}
+                            />
+                            {isSelected && (
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  top: -4,
+                                  right: -4,
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: '50%',
+                                  bgcolor: '#4CAF50',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: 'white',
+                                  fontSize: 9,
+                                  fontWeight: 'bold',
+                                  border: '2px solid white',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                }}
+                              >
+                                ✓
+                              </Box>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                    {errors.selectedIcon && (
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                        {errors.selectedIcon}
+                      </Typography>
+                    )}
+                  </Box>
+                </Grid>
+              )}
+
+              {/* Product Name - Full width below subcategory and icon */}
+              <Grid item xs={12} sx={{ mt: { xs: 1, md: 1 } }}>
                 <StyledTextField
                   fullWidth
                   label="Product Name"
@@ -1026,12 +1139,10 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                 />
               </Grid>
 
-              {/* Product Description */}
-              <Grid item xs={12}>
+              {/* Product Description - Full width, under Product Name */}
+              <Grid item xs={12} sx={{ mt: { xs: 0, md: 0 } }}>
                 <StyledTextField
                   fullWidth
-                  multiline
-                  rows={isMobile ? 3 : 4}
                   label="Description"
                   placeholder="The Description of The Product"
                   value={formData.description}

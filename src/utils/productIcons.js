@@ -1,50 +1,50 @@
 export const productIcons = {
   // Original icon mappings (kebab-case)
-  'green-apple': '/icons/products/apple_green.png',
-  'red-apple': '/icons/products/apple_red.png',
-  'corn': '/icons/products/corn.png',
-  'eggplant': '/icons/products/eggplant.png',
-  'lemon': '/icons/products/lemon.png',
-  'peach': '/icons/products/peach.png',
-  'strawberry': '/icons/products/strawberry.png',
-  'tangerine': '/icons/products/tangerine.png',
-  'tomato': '/icons/products/tomato.png',
-  'watermelon': '/icons/products/watermelon.png',
+  'green-apple': '/icons/products/fruits/apple_green.png',
+  'red-apple': '/icons/products/fruits/apple_red.png',
+  'corn': '/icons/products/fruits/corn.png',
+  'eggplant': '/icons/products/fruits/eggplant.png',
+  'lemon': '/icons/products/fruits/lemon.png',
+  'peach': '/icons/products/fruits/peach.png',
+  'strawberry': '/icons/products/fruits/strawberry.png',
+  'tangerine': '/icons/products/fruits/tangerine.png',
+  'tomato': '/icons/products/fruits/tomato.png',
+  'watermelon': '/icons/products/fruits/watermelon.png',
   
   // Subcategory mappings (exact match from categoryData)
-  'Green Apple': '/icons/products/apple_green.png',
-  'Red Apple': '/icons/products/apple_red.png',
-  'Corn': '/icons/products/corn.png',
-  'Eggplant': '/icons/products/eggplant.png',
-  'Lemon': '/icons/products/lemon.png',
-  'Peach': '/icons/products/peach.png',
-  'Strawberry': '/icons/products/strawberry.png',
-  'Tangerine': '/icons/products/tangerine.png',
-  'Tomato': '/icons/products/tomato.png',
-  'Watermelon': '/icons/products/watermelon.png',
+  'Green Apple': '/icons/products/fruits/apple_green.png',
+  'Red Apple': '/icons/products/fruits/apple_red.png',
+  'Corn': '/icons/products/fruits/corn.png',
+  'Eggplant': '/icons/products/fruits/eggplant.png',
+  'Lemon': '/icons/products/fruits/lemon.png',
+  'Peach': '/icons/products/fruits/peach.png',
+  'Strawberry': '/icons/products/fruits/strawberry.png',
+  'Tangerine': '/icons/products/fruits/tangerine.png',
+  'Tomato': '/icons/products/fruits/tomato.png',
+  'Watermelon': '/icons/products/fruits/watermelon.png',
   
   // Additional subcategories with fallback icons
-  'Avocados': '/icons/products/apple_green.png',
-  'Mango': '/icons/products/peach.png',
-  'Grapes': '/icons/products/strawberry.png',
-  'Banana': '/icons/products/tangerine.png',
-  'Broccoli': '/icons/products/eggplant.png',
-  'Capsicum': '/icons/products/tomato.png',
-  'Carrot': '/icons/products/tangerine.png',
-  'Onions': '/icons/products/eggplant.png',
-  'Potatoes': '/icons/products/corn.png',
-  'Salad Greens': '/icons/products/eggplant.png',
+  'Avocados': '/icons/products/fruits/apple_green.png',
+  'Mango': '/icons/products/fruits/peach.png',
+  'Grapes': '/icons/products/fruits/strawberry.png',
+  'Banana': '/icons/products/fruits/tangerine.png',
+  'Broccoli': '/icons/products/fruits/eggplant.png',
+  'Capsicum': '/icons/products/fruits/tomato.png',
+  'Carrot': '/icons/products/fruits/tangerine.png',
+  'Onions': '/icons/products/fruits/eggplant.png',
+  'Potatoes': '/icons/products/fruits/corn.png',
+  'Salad Greens': '/icons/products/fruits/eggplant.png',
   
   // Category fallbacks
-  'vegetables': '/icons/products/tomato.png',
-  'fruits': '/icons/products/apple_green.png',
-  'Fruits': '/icons/products/apple_green.png',
-  'Vegetables': '/icons/products/tomato.png',
+  'vegetables': '/icons/products/fruits/tomato.png',
+  'fruits': '/icons/products/fruits/apple_green.png',
+  'Fruits': '/icons/products/fruits/apple_green.png',
+  'Vegetables': '/icons/products/fruits/tomato.png',
 };
 
 export const getProductIcon = (rawCategory) => {
   if (!rawCategory) {
-    return '/icons/products/apple_green.png';
+    return '/icons/products/fruits/apple_green.png';
   }
 
   const category = rawCategory.toString().trim();
@@ -62,7 +62,7 @@ export const getProductIcon = (rawCategory) => {
   }
 
   // Fallback to default
-  return '/icons/products/apple_green.png';
+  return '/icons/products/fruits/apple_green.png';
 };
 
 export const productCategories = [

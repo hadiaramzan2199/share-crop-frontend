@@ -18,4 +18,11 @@ export const userService = {
   
   // Add farm coins (deposit)
   deposit: (amount) => api.post('/api/users/deposit', { amount }),
+  
+  // Get user names only (for security - no sensitive data)
+  // This endpoint should only return: id, name, user_type
+  getUserNames: (searchQuery = '') => {
+    const params = searchQuery ? { search: searchQuery } : {};
+    return api.get('/api/users/names', { params });
+  },
 };

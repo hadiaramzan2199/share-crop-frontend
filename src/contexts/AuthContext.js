@@ -4,6 +4,7 @@ import { mockAuthService } from '../services/mockServices';
 import { USER_ROLES } from '../utils/roles';
 import axios from 'axios'; // Import axios
 import api, { setAuthTokenProvider } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || `http://${window.location.hostname}:5000`;
 
 const AuthContext = createContext(null);
@@ -20,6 +21,22 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Check for stored token
+        const storedToken = localStorage.getItem('authToken');
+        if (storedToken) {
+          setToken(storedToken);
+          // Verify token and get user
+          try {
+            const response = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+              headers: { Authorization: `Bearer ${storedToken}` },
+            });
+            setUser(response.data.user);
+          } catch (error) {
+            // Token invalid, clear it
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userRole');
+          }
+        }
       } catch (error) {
         console.error("Failed to initialize authentication", error);
       } finally {
@@ -37,8 +54,8 @@ export const AuthProvider = ({ children }) => {
       const { user: loggedInUser, token } = response.data;
       setUser(loggedInUser);
       setToken(token);
+      localStorage.setItem('authToken', token);
       localStorage.setItem('userRole', loggedInUser.user_type);
-      // In a real app, you'd store the token securely (e.g., httpOnly cookies)
       return loggedInUser;
     } catch (error) {
       console.error("Login failed", error);
@@ -48,36 +65,57 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('userRole');
-    // In a real app, you'd also clear any stored tokens
+  const signup = async (name, email, password, userType) => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+        name,
+        email,
+        password,
+        user_type: userType,
+      });
+      const { user: newUser, token } = response.data;
+      setUser(newUser);
+      setToken(token);
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userRole', newUser.user_type);
+      return newUser;
+    } catch (error) {
+      console.error("Signup failed", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const switchToRole = useCallback(async (role) => {
-    try {
-      const roleLower = String(role).toLowerCase();
-      const email = roleLower === USER_ROLES.FARMER
-        ? 'farmer@example.com'
-        : roleLower === USER_ROLES.ADMIN
-        ? 'admin@example.com'
-        : 'dummy@example.com';
-      const userResponse = await axios.get(`${API_BASE_URL}/api/users/email/${email}`);
-      setUser(userResponse.data);
-      try {
-        const loginResponse = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-          email,
-          password: 'mock_password',
-        });
-        setToken(loginResponse.data.token);
-      } catch (e) {
-        console.warn('Role switch login failed:', e);
-      }
-      localStorage.setItem('userRole', role);
-    } catch (error) {
-      console.error('Failed to switch role:', error);
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userRole');
+    // Redirect to home page after logout
+    if (window.location.pathname !== '/') {
+      window.location.href = '/';
     }
+  }, []);
+
+  const updateUser = useCallback((updatedUserData) => {
+    setUser((prevUser) => {
+      if (!prevUser) return updatedUserData;
+      return { ...prevUser, ...updatedUserData };
+    });
+    // Update userRole in localStorage if user_type changed
+    if (updatedUserData.user_type) {
+      localStorage.setItem('userRole', updatedUserData.user_type);
+    }
+  }, []);
+
+  // Removed switchToRole - now using real authentication
+  // Users should login/signup properly instead of switching to mock users
+  const switchToRole = useCallback(async (role) => {
+    // This function is kept for backward compatibility but does nothing
+    // Real authentication should be used instead
+    console.warn('switchToRole is deprecated. Please use proper login/signup.');
   }, []);
 
   const value = {
@@ -86,7 +124,9 @@ export const AuthProvider = ({ children }) => {
     loading,
     token,
     login,
+    signup,
     logout,
+    updateUser,
     switchToRole,
   };
 

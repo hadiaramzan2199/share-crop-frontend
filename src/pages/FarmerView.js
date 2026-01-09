@@ -25,12 +25,13 @@ import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
 import Settings from './Settings';
+import Complaints from './Complaints';
 import api from '../services/api'; // Changed to default import
 import coinService from '../services/coinService';
 
 const FarmerView = () => {
   const location = useLocation();
-  const { user, switchToRole } = useAuth();
+  const { user, logout, switchToRole } = useAuth();
   const { 
     addNotification, 
     notifications, 
@@ -54,10 +55,7 @@ const FarmerView = () => {
   const headerRef = useRef(null);
   const isMapPage = location.pathname === '/farmer' || location.pathname === '/farmer/';
 
-  // Force farmer role when component mounts
-  useEffect(() => {
-    switchToRole('farmer');
-  }, [switchToRole]);
+  // No need to force role - use actual logged-in user
 
   // Initialize user coins when user is available
   useEffect(() => {
@@ -374,6 +372,7 @@ const FarmerView = () => {
         onFarmSelect={handleFarmSelect}
         userType="farmer"
         user={user}
+        onLogout={logout}
         onCreateField={handleCreateField}
         onCreateFarm={handleCreateFarm}
       />
@@ -383,7 +382,9 @@ const FarmerView = () => {
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || location.pathname === '/farmer/messages' || location.pathname === '/farmer/currency' || location.pathname === '/farmer/settings') ? 'hidden' : 'auto',
-        position: 'relative'
+        position: 'relative',
+        zIndex: 0,
+        isolation: 'isolate'
       }}>
         <Routes>
           <Route path="/" element={
@@ -489,6 +490,7 @@ const FarmerView = () => {
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
       

@@ -97,6 +97,7 @@ const EnhancedFarmMap = forwardRef(({
   const [orderForSomeoneElse, setOrderForSomeoneElse] = useState(false);
   const [recipientCity, setRecipientCity] = useState('');
   const [recipientCountry, setRecipientCountry] = useState('');
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [addressError, setAddressError] = useState('');
   const [showAddressOverlay, setShowAddressOverlay] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
@@ -361,7 +362,10 @@ const EnhancedFarmMap = forwardRef(({
       const purchased_area = Math.min(o?.purchased_area || 0, total_area || Infinity);
       final.set(k, { id: k, category, purchased_area, total_area });
     });
-    return Array.from(final.values());
+    return Array.from(final.values()).filter(item => {
+      const purchasedArea = typeof item.purchased_area === 'string' ? parseFloat(item.purchased_area) : (item.purchased_area || 0);
+      return Number.isFinite(purchasedArea) && purchasedArea > 0;
+    });
   }, [purchasedProducts, farms, canonicalizeCategory]);
   const getCenterFromCoords = useCallback((coordinates) => {
     if (!coordinates || coordinates.length === 0) return [viewState.longitude, viewState.latitude];
@@ -512,6 +516,18 @@ const EnhancedFarmMap = forwardRef(({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showAddressOverlay]);
+  // Helper function to check if an item should be filtered out based on occupied area
+  // Only filter out items where we explicitly know occupied area is 0
+  // If occupied area is undefined/null, we should still show the item
+  const shouldFilterOutByOccupiedArea = useCallback((f) => {
+    const occRaw = f.occupied_area ?? f.purchased_area ?? f.area_occupied ?? f.occupied_m2 ?? f.occupied ?? f.area_rented ?? f.rented_area;
+    // If no occupied area field exists at all, don't filter it out
+    if (occRaw === undefined || occRaw === null) return false;
+    const occupied = typeof occRaw === 'string' ? parseFloat(occRaw) : occRaw;
+    // Only filter out if we have a valid number that is exactly 0
+    return Number.isFinite(occupied) && occupied === 0;
+  }, []);
+
   const normalizeField = useCallback((f) => {
     const co = f.coordinates;
     let lng;
@@ -1017,8 +1033,9 @@ const EnhancedFarmMap = forwardRef(({
       const normalizedExternal = externalFields.map(normalizeField);
       const hasCoords = normalizedExternal.some(f => Array.isArray(f.coordinates) && Number.isFinite(f.coordinates[0]) && Number.isFinite(f.coordinates[1]));
       if (hasCoords) {
+        const filteredExternal = normalizedExternal.filter(f => !shouldFilterOutByOccupiedArea(f));
         setFarms(normalizedExternal);
-        setFilteredFarms(normalizedExternal);
+        setFilteredFarms(filteredExternal);
         setSelectedIcons(new Set());
         normalizedExternal.forEach(f => { if (f.isPurchased) stablePurchasedIdsRef.current.add(f.id); });
       } else {
@@ -1061,8 +1078,9 @@ const EnhancedFarmMap = forwardRef(({
           
           // Set fields directly (purchase status managed via API)
           allFields.forEach(f => { if (f.isPurchased) stablePurchasedIdsRef.current.add(f.id); });
+          const filteredFields = allFields.filter(f => !shouldFilterOutByOccupiedArea(f));
           setFarms(allFields);
-          setFilteredFarms(allFields);
+          setFilteredFarms(filteredFields);
           
           if (mapRef.current && allFields.length > 0) {
             const validFarms = allFields.filter(farm => farm.coordinates);
@@ -1096,8 +1114,9 @@ const EnhancedFarmMap = forwardRef(({
           try {
             const response = await mockProductService.getProducts();
             const products = (response.data.products || []).map(normalizeField);
+            const filteredProducts = products.filter(f => !shouldFilterOutByOccupiedArea(f));
             setFarms(products);
-            setFilteredFarms(products);
+            setFilteredFarms(filteredProducts);
             if (onFarmsLoad) {
               onFarmsLoad(products);
             }
@@ -1134,7 +1153,7 @@ const EnhancedFarmMap = forwardRef(({
     if (!searchQuery || searchQuery.trim() === '') {
       console.log('🔍 SEARCH FILTER DEBUG - No search query, setting filteredFarms to all farms:', farms.length);
       if (farms.length === 0 && lastNonEmptyFarmsRef.current.length > 0) {
-        let base = lastNonEmptyFarmsRef.current;
+        let base = lastNonEmptyFarmsRef.current.filter(f => !shouldFilterOutByOccupiedArea(f));
         if (selectedIcons && selectedIcons.size > 0) {
           base = base.filter(f => {
             const icon = getProductIcon(f.subcategory || f.category);
@@ -1143,7 +1162,7 @@ const EnhancedFarmMap = forwardRef(({
         }
         setFilteredFarms(base);
       } else {
-        let base = farms;
+        let base = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
         if (selectedIcons && selectedIcons.size > 0) {
           base = base.filter(f => {
             const icon = getProductIcon(f.subcategory || f.category);
@@ -1156,6 +1175,7 @@ const EnhancedFarmMap = forwardRef(({
       // Filter farms based on search query
       const searchTerm = searchQuery.toLowerCase();
       let filtered = farms.filter(farm => {
+        if (shouldFilterOutByOccupiedArea(farm)) return false;
         return (
           farm.name?.toLowerCase().includes(searchTerm) ||
           farm.category?.toLowerCase().includes(searchTerm) ||
@@ -1183,7 +1203,15 @@ const EnhancedFarmMap = forwardRef(({
     const cats = Array.isArray(externalFilters.categories) ? externalFilters.categories : [];
     const subs = Array.isArray(externalFilters.subcategories) ? externalFilters.subcategories : [];
     if (cats.length === 0 && subs.length === 0) {
-      setFilteredFarms(farms);
+      let filtered = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
+      // Also apply selectedIcons filter if any icons are selected
+      if (selectedIcons && selectedIcons.size > 0) {
+        filtered = filtered.filter(f => {
+          const icon = getProductIcon(f.subcategory || f.category);
+          return selectedIcons.has(icon);
+        });
+      }
+      setFilteredFarms(filtered);
       return;
     }
     const toKey = (raw) => {
@@ -1223,7 +1251,8 @@ const EnhancedFarmMap = forwardRef(({
     };
     const catKeys = new Set(cats.map(toKey));
     const subKeys = new Set(subs.map(toKey));
-    const filtered = farms.filter(f => {
+    let filtered = farms.filter(f => {
+      if (shouldFilterOutByOccupiedArea(f)) return false;
       const cat = toKey(f.category);
       const sub = toKey(f.subcategory || f.product_name || f.productName);
       const catMatch = catKeys.size > 0 ? (catKeys.has(cat) || [...catKeys].some(k => cat.includes(k) || sub.includes(k))) : true;
@@ -1233,8 +1262,15 @@ const EnhancedFarmMap = forwardRef(({
       }
       return catMatch;
     });
+    // Also apply selectedIcons filter if any icons are selected
+    if (selectedIcons && selectedIcons.size > 0) {
+      filtered = filtered.filter(f => {
+        const icon = getProductIcon(f.subcategory || f.category);
+        return selectedIcons.has(icon);
+      });
+    }
     setFilteredFarms(filtered);
-  }, [externalFilters, farms]);
+  }, [externalFilters, farms, selectedIcons]);
 
   const isPurchased = useCallback((productId) => {
     const farm = farms.find(f => f.id === productId);
@@ -2279,8 +2315,8 @@ const EnhancedFarmMap = forwardRef(({
     const points = (Array.isArray(filteredFarms) && filteredFarms.length > 0 ? filteredFarms : farms)
       .filter(f => Array.isArray(f?.coordinates) && Number.isFinite(f.coordinates[0]) && Number.isFinite(f.coordinates[1]));
     const containerStyle = embedded
-      ? { position: 'absolute', inset: 0 }
-      : { height, width: '100%', position: 'relative' };
+      ? { position: 'absolute', inset: 0, zIndex: 1 }
+      : { height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' };
 
     return (
       <div style={containerStyle}>
@@ -2484,7 +2520,7 @@ const EnhancedFarmMap = forwardRef(({
   }
 
   return (
-    <div style={{ height, width: '100%', position: 'relative'}}>
+    <div style={{ height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' }}>
       <MapboxMap
         ref={mapRef}
         {...viewState}
@@ -2508,6 +2544,76 @@ const EnhancedFarmMap = forwardRef(({
 
         <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
         <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
+        
+        {/* Current Location Marker with Pulsing Animation */}
+        {currentLocation && (
+          <Marker
+            longitude={currentLocation.longitude}
+            latitude={currentLocation.latitude}
+            anchor="center"
+          >
+            <div style={{ position: 'relative', width: '40px', height: '40px' }}>
+              {/* Pulsing circles */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(66, 133, 244, 0.3)',
+                  animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(66, 133, 244, 0.4)',
+                  animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.5s',
+                }}
+              />
+              {/* Blue location icon */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  backgroundColor: '#4285F4',
+                  border: '3px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                  zIndex: 10,
+                }}
+              />
+              {/* Inner dot */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: 'white',
+                  zIndex: 11,
+                }}
+              />
+            </div>
+          </Marker>
+        )}
+        
         <div 
           style={{
             position: 'absolute',
@@ -2522,11 +2628,13 @@ const EnhancedFarmMap = forwardRef(({
                 navigator.geolocation.getCurrentPosition(
                   (pos) => {
                     const { latitude, longitude } = pos.coords;
+                    setCurrentLocation({ latitude, longitude });
                     if (mapRef.current) {
                       mapRef.current.flyTo({ center: [longitude, latitude], zoom: 10, duration: 1000, essential: true});
                     }
                   },
                   () => {
+                    setCurrentLocation(null);
                     if (mapRef.current) {
                       mapRef.current.flyTo({ center: [15, 45], zoom: 2, duration: 1000, essential: true });
                     }
@@ -3881,7 +3989,7 @@ const EnhancedFarmMap = forwardRef(({
 
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Progress</div>
+                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Occupied area</div>
                 <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>{Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%</div>
             </div>
               <div style={{ height: isMobile ? '6px' : '8px', borderRadius: '4px', backgroundColor: '#e9ecef', overflow: 'hidden' }}>
@@ -4043,6 +4151,16 @@ const EnhancedFarmMap = forwardRef(({
           @keyframes orbit-spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+          }
+          @keyframes locationPulse {
+            0% {
+              transform: translate(-50%, -50%) scale(1);
+              opacity: 1;
+            }
+            100% {
+              transform: translate(-50%, -50%) scale(2);
+              opacity: 0;
+            }
           }
         `}
       </style>

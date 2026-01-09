@@ -13,6 +13,7 @@ import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
 import Settings from './Settings';
+import Complaints from './Complaints';
 import { useAuth } from '../contexts/AuthContext';
 import fieldsService from '../services/fields';
 import farmsService from '../services/farms';
@@ -21,7 +22,7 @@ import coinService from '../services/coinService';
 
 const BuyerView = () => {
   const location = useLocation();
-  const { user: currentUser, switchToRole } = useAuth();
+  const { user: currentUser, logout, switchToRole } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [farms, setFarms] = useState([]);
   const [fields, setFields] = useState([]);
@@ -43,10 +44,7 @@ const BuyerView = () => {
   const isCurrencyPage = location.pathname === '/buyer/currency';
   const isSettingsPage = location.pathname === '/buyer/settings';
 
-  // Force buyer role when component mounts
-  useEffect(() => {
-    switchToRole('buyer');
-  }, [switchToRole]);
+  // No need to force role - use actual logged-in user
 
   // Initialize user coins when user is available
   useEffect(() => {
@@ -141,6 +139,7 @@ const BuyerView = () => {
         onFarmSelect={handleFarmSelect}
         userType="buyer"
         user={currentUser}
+        onLogout={logout}
       />
       
       <Box sx={{
@@ -148,7 +147,9 @@ const BuyerView = () => {
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
         overflow: (isMapPage || isMessagesPage || isCurrencyPage || isSettingsPage) ? 'hidden' : 'auto', // No scroll for map, messages, currency, and settings pages, scroll for other pages
-        position: 'relative'
+        position: 'relative',
+        zIndex: 0,
+        isolation: 'isolate'
       }}>
         <Routes>
           <Route path="/" element={
@@ -171,6 +172,7 @@ const BuyerView = () => {
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
       

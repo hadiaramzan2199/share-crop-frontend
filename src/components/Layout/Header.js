@@ -292,7 +292,7 @@ const Header = ({ user, onLogout }) => {
                   </Avatar>
                   <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', lineHeight: 1.2, fontSize: { sm: '0.875rem', md: '0.9rem' } }}>
-                      {user.name || 'User'}
+                      {user.name?.split(' ')[0] || user.name || 'User'}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'capitalize', fontSize: { sm: '0.75rem', md: '0.8rem' } }}>
                       {user.user_type}

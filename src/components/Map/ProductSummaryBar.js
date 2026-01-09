@@ -66,7 +66,10 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
         });
       }
     });
-    return Array.from(byIcon.values());
+    return Array.from(byIcon.values()).filter(product => {
+      const purchasedArea = typeof product.purchased_area === 'string' ? parseFloat(product.purchased_area) : (product.purchased_area || 0);
+      return Number.isFinite(purchasedArea) && purchasedArea > 0;
+    });
   }, [purchasedProducts]);
 
   React.useEffect(() => {
