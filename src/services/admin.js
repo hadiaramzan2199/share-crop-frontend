@@ -2,6 +2,7 @@ import api from './api';
 
 export const adminService = {
   getAllUsers: (includeStats = true) => api.get('/api/users', { params: { includeStats } }),
+  getUserByIdWithStats: (id) => api.get(`/api/users/${id}/stats`),
   getPendingFarmers: () => api.get('/api/admin/farmers/pending'),
   approveFarmer: (id) => api.post(`/api/admin/farmers/${id}/approve`),
   rejectFarmer: (id, reason) => api.post(`/api/admin/farmers/${id}/reject`, { reason }),

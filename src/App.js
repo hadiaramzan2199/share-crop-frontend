@@ -10,6 +10,7 @@ import BuyerView from './pages/BuyerView';
 import AdminView from './pages/AdminView';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
+import UserDetailPage from './pages/admin/UserDetailPage';
 import AdminQA from './pages/admin/AdminQA';
 import AdminCoins from './pages/admin/AdminCoins';
 import AdminPayments from './pages/admin/AdminPayments';
@@ -31,7 +32,7 @@ const AppContent = () => {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          
+
           {/* Protected Farmer Routes */}
           <Route
             path="/farmer/*"
@@ -41,7 +42,7 @@ const AppContent = () => {
               </ProtectedRoute>
             }
           />
-          
+
           {/* Protected Buyer Routes */}
           <Route
             path="/buyer/*"
@@ -51,7 +52,7 @@ const AppContent = () => {
               </ProtectedRoute>
             }
           />
-          
+
           {/* Protected Admin Routes */}
           <Route
             path="/admin/*"
@@ -63,13 +64,14 @@ const AppContent = () => {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="users/:id" element={<UserDetailPage />} />
             <Route path="qa" element={<AdminQA />} />
             <Route path="coins" element={<AdminCoins />} />
             <Route path="payments" element={<AdminPayments />} />
             <Route path="audit" element={<AdminAudit />} />
             <Route path="analytics" element={<AdminAnalytics />} />
           </Route>
-          
+
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,10 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  Container,
   Box,
-  Card,
-  CardContent,
   TextField,
   Button,
   Typography,
@@ -23,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 const Signup = () => {
   const navigate = useNavigate();
   const { signup } = useAuth();
+  const videoRef = useRef(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +30,14 @@ const Signup = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(err => {
+        console.log('Video autoplay prevented:', err);
+      });
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -75,35 +81,172 @@ const Signup = () => {
   };
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 4, mb: 4 }}>
-      <Card sx={{ borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-        <CardContent sx={{ p: 4 }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        background: '#f5f7fa',
+      }}
+    >
+      {/* Left Side - Fixed Video */}
+      <Box
+        sx={{
+          flex: { xs: 0, md: '0 0 50%' },
+          display: { xs: 'none', md: 'block' },
+          width: '50%',
+          height: '100vh',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          overflow: 'hidden',
+          zIndex: 0,
+        }}
+      >
+        <Box
+          component="video"
+          ref={videoRef}
+          autoPlay
+          loop
+          muted
+          playsInline
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center',
+            display: 'block',
+          }}
+        >
+          <source src="/assets/signup.mp4" type="video/mp4" />
+        </Box>
+        {/* ShareCrop Logo Overlay */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10,
+            textAlign: 'center',
+          }}
+        >
+          <Typography
+            variant="h2"
+            sx={{
+              fontWeight: 800,
+              fontSize: { md: '3rem', lg: '4.5rem' },
+              background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 50%, #66BB6A 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: '-0.02em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1.5,
+              lineHeight: 1.2,
+              textShadow: `
+                -2px -2px 0 rgba(255, 255, 255, 0.8),
+                2px -2px 0 rgba(255, 255, 255, 0.8),
+                -2px 2px 0 rgba(255, 255, 255, 0.8),
+                2px 2px 0 rgba(255, 255, 255, 0.8),
+                0 0 8px rgba(255, 255, 255, 0.6),
+                0 0 12px rgba(76, 175, 80, 0.5)
+              `,
+            }}
+          >
+            <span style={{ 
+              fontSize: '1.2em',
+            }}>🌱</span>
+            ShareCrop
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              mt: 2,
+              color: '#ffffff',
+              fontSize: { md: '1rem', lg: '1.2rem' },
+              fontWeight: 600,
+              letterSpacing: '0.5px',
+              textShadow: `
+                0 0 6px rgba(255, 255, 255, 0.7),
+                0 0 10px rgba(76, 175, 80, 0.5),
+                2px 2px 4px rgba(0, 0, 0, 0.3)
+              `,
+            }}
+          >
+            Connect Farmers & Buyers
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Right Side - Scrollable Signup Form */}
+      <Box
+        sx={{
+          flex: { xs: 1, md: '0 0 50%' },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: { xs: 3, md: '0 60px 0 40px' },
+          background: '#f5f7fa',
+          minHeight: '100vh',
+          marginLeft: { xs: 0, md: '50%' },
+          overflowY: 'auto',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: 450,
+            background: '#ffffff',
+            borderRadius: 3,
+            padding: { xs: 4, sm: 5, md: 5 },
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            borderTop: '4px solid #4CAF50',
+          }}
+        >
+          {/* Header */}
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Box
               sx={{
-                bgcolor: 'rgba(76, 175, 80, 0.1)',
+                bgcolor: '#4CAF50',
                 borderRadius: 2,
-                p: 2,
+                width: 48,
+                height: 48,
                 display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 mb: 2,
               }}
             >
-              <PersonAdd sx={{ fontSize: 40, color: '#4CAF50' }} />
+              <PersonAdd sx={{ fontSize: 24, color: '#ffffff' }} />
             </Box>
-            <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 1 }}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+                color: '#212121',
+                mb: 1,
+                fontSize: '1.75rem',
+              }}
+            >
               Create Account
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
               Join ShareCrop and start your journey
             </Typography>
           </Box>
 
+          {/* Error Alert */}
           {error && (
             <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
               {error}
             </Alert>
           )}
 
+          {/* Signup Form */}
           <Box component="form" onSubmit={handleSubmit}>
             <TextField
               fullWidth
@@ -113,22 +256,80 @@ const Signup = () => {
               required
               margin="normal"
               autoComplete="name"
-              sx={{ mb: 2 }}
+              sx={{
+                mb: 2.5,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
             />
 
             <TextField
               fullWidth
-              label="Email"
+              label="Email Address"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               margin="normal"
               autoComplete="email"
-              sx={{ mb: 2 }}
+              sx={{
+                mb: 2.5,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
             />
 
-            <FormControl fullWidth margin="normal" sx={{ mb: 2 }}>
+            <FormControl 
+              fullWidth 
+              margin="normal" 
+              sx={{ 
+                mb: 2.5,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
+            >
               <InputLabel>I am a</InputLabel>
               <Select
                 value={userType}
@@ -157,13 +358,37 @@ const Signup = () => {
                     <IconButton
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
+                      sx={{
+                        color: 'text.secondary',
+                        '&:hover': {
+                          color: '#4CAF50',
+                        },
+                      }}
                     >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
-              sx={{ mb: 2 }}
+              sx={{
+                mb: 2.5,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
             />
 
             <TextField
@@ -181,13 +406,37 @@ const Signup = () => {
                     <IconButton
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       edge="end"
+                      sx={{
+                        color: 'text.secondary',
+                        '&:hover': {
+                          color: '#4CAF50',
+                        },
+                      }}
                     >
                       {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
-              sx={{ mb: 3 }}
+              sx={{
+                mb: 3,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
             />
 
             <Button
@@ -198,19 +447,29 @@ const Signup = () => {
               disabled={loading}
               sx={{
                 py: 1.5,
-                mb: 2,
+                mb: 3,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
+                fontSize: '0.9375rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                bgcolor: '#4CAF50',
+                boxShadow: 'none',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
+                  bgcolor: '#2E7D32',
+                  boxShadow: 'none',
+                },
+                '&:disabled': {
+                  bgcolor: '#4CAF50',
+                  opacity: 0.7,
                 },
               }}
+              endIcon={!loading && <PersonAdd />}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
             </Button>
 
-            <Box sx={{ textAlign: 'center', mt: 3 }}>
-              <Typography variant="body2" color="text.secondary">
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
                 Already have an account?{' '}
                 <Link
                   to="/login"
@@ -225,9 +484,9 @@ const Signup = () => {
               </Typography>
             </Box>
           </Box>
-        </CardContent>
-      </Card>
-    </Container>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

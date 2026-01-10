@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab } from '@mui/material';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
 import EmailIcon from '@mui/icons-material/Email';
@@ -49,457 +49,12 @@ const ConfirmDialog = ({ open, title, content, onClose, onConfirm }) => (
   </Dialog>
 );
 
-const UserDetailsModal = ({ open, user, onClose, onViewDocuments, userComplaints }) => {
-  if (!user) return null;
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  const userTypeColor = user.user_type?.toLowerCase() === 'farmer' 
-    ? { bg: 'rgba(76,175,80,0.1)', color: '#2E7D32' }
-    : user.user_type?.toLowerCase() === 'buyer'
-    ? { bg: 'rgba(33,150,243,0.1)', color: '#1565C0' }
-    : { bg: 'rgba(158,158,158,0.1)', color: '#616161' };
-
-  return (
-    <Dialog 
-      open={open} 
-      onClose={onClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 3,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-        }
-      }}
-    >
-      <DialogTitle sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        pb: 1,
-        background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
-        color: 'white',
-        position: 'relative'
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 56, height: 56 }}>
-            <PersonIcon sx={{ fontSize: 32 }} />
-          </Avatar>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-              {user.name || 'Unknown User'}
-            </Typography>
-            <Chip 
-              label={user.user_type || 'Unknown'} 
-              size="small"
-              sx={{ 
-                bgcolor: 'rgba(255,255,255,0.2)', 
-                color: 'white',
-                fontWeight: 600,
-                textTransform: 'capitalize'
-              }} 
-            />
-          </Box>
-        </Box>
-        <IconButton 
-          onClick={onClose} 
-          sx={{ 
-            color: 'white',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      
-      <DialogContent sx={{ pt: 4, mt: 2 }}>
-        <Grid container spacing={3}>
-          {/* Basic Information */}
-          <Grid item xs={12}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-              Basic Information
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Stack spacing={2}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Email Address
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                    {user.email || 'N/A'}
-                  </Typography>
-                </Box>
-              </Box>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <PersonIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    User Type
-                  </Typography>
-                  <Chip 
-                    label={user.user_type || 'Unknown'} 
-                    size="small"
-                    sx={{ 
-                      bgcolor: userTypeColor.bg, 
-                      color: userTypeColor.color,
-                      fontWeight: 600,
-                      textTransform: 'capitalize'
-                    }} 
-                  />
-                </Box>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <CalendarTodayIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Created At
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                    {formatDate(user.created_at)}
-                  </Typography>
-                </Box>
-              </Box>
-            </Stack>
-          </Grid>
-
-          {/* Account Status */}
-          <Grid item xs={12}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-              Account Status
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Stack spacing={2}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Approval Status
-                  </Typography>
-                  <StatusChip status={user.approval_status || (user.is_active ? 'approved' : 'pending')} />
-                </Box>
-              </Box>
-
-              <Box>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                  Account Status
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {user.is_active ? (
-                    <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20, flexShrink: 0 }} />
-                  ) : (
-                    <CancelIcon sx={{ color: 'error.main', fontSize: 20, flexShrink: 0 }} />
-                  )}
-                  <Typography variant="body1" sx={{ fontWeight: 500, color: user.is_active ? 'success.main' : 'error.main' }}>
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </Typography>
-                </Box>
-              </Box>
-
-              {user.approval_reason && (
-                <Box>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                    Approval Reason
-                  </Typography>
-                  <Paper sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {user.approval_reason}
-                    </Typography>
-                  </Paper>
-                </Box>
-              )}
-            </Stack>
-          </Grid>
-
-          {/* Financial Information */}
-          <Grid item xs={12} sx={{ mt: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-              Financial Information
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                  Coins Balance
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AccountBalanceWalletIcon sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    {user.coins?.toLocaleString() || '0'}
-                  </Typography>
-                </Box>
-              </Box>
-            </Stack>
-          </Grid>
-
-          {/* Farmer Statistics */}
-          {user.user_type?.toLowerCase() === 'farmer' && (
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-                Farmer Statistics
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 2 }}>
-                <Paper sx={{ 
-                  p: 2, 
-                  bgcolor: 'rgba(76,175,80,0.05)', 
-                  borderRadius: 2, 
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: 130,
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}>
-                  <LocalOfferIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                    {user.fields_count ?? 0}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Fields
-                  </Typography>
-                </Paper>
-                <Paper sx={{ 
-                  p: 2, 
-                  bgcolor: 'rgba(33,150,243,0.05)', 
-                  borderRadius: 2, 
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: 130,
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}>
-                  <ShoppingBagIcon sx={{ color: '#2196F3', fontSize: 28, mb: 1 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                    {user.orders_received ?? 0}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Orders Received
-                  </Typography>
-                </Paper>
-                <Paper sx={{ 
-                  p: 2, 
-                  bgcolor: 'rgba(76,175,80,0.05)', 
-                  borderRadius: 2, 
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: 130,
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}>
-                  <AttachMoneyIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                    ${(user.total_revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Total Revenue
-                  </Typography>
-                </Paper>
-                <Paper sx={{ 
-                  p: 2, 
-                  bgcolor: 'rgba(255,152,0,0.05)', 
-                  borderRadius: 2, 
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  minHeight: 130,
-                  width: '100%',
-                  boxSizing: 'border-box'
-                }}>
-                  <StarIcon sx={{ color: '#FF9800', fontSize: 28, mb: 1 }} />
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                    {(user.avg_rating ?? 0).toFixed(1)}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Average Rating
-                  </Typography>
-                </Paper>
-              </Box>
-            </Grid>
-          )}
-
-          {/* Buyer Statistics */}
-          {user.user_type?.toLowerCase() === 'buyer' && (
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-                Buyer Statistics
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Grid container spacing={2}>
-                {user.orders_placed !== undefined && (
-                  <Grid item xs={6}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(33,150,243,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <ShoppingBagIcon sx={{ color: '#2196F3', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        {user.orders_placed || 0}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Orders Placed
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-                {user.total_spent !== undefined && (
-                  <Grid item xs={6}>
-                    <Paper sx={{ p: 2, bgcolor: 'rgba(76,175,80,0.05)', borderRadius: 2, textAlign: 'center' }}>
-                      <AttachMoneyIcon sx={{ color: '#4CAF50', fontSize: 28, mb: 1 }} />
-                      <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                        ${(user.total_spent || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        Total Spent
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Documents */}
-          {user.user_type?.toLowerCase() === 'farmer' && (
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-                Documents
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Button
-                variant="outlined"
-                startIcon={<VisibilityIcon />}
-                onClick={() => {
-                  onViewDocuments(user.id);
-                  onClose();
-                }}
-                sx={{ mt: 1 }}
-              >
-                View Documents
-              </Button>
-            </Grid>
-          )}
-
-          {/* Complaints Against User */}
-          <Grid item xs={12}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: 'text.primary', fontSize: '1.1rem' }}>
-              Complaints Against User
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            {userComplaints?.[user.id]?.count > 0 ? (
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <ReportProblemIcon sx={{ color: '#D32F2F', fontSize: 24 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#D32F2F' }}>
-                    {userComplaints[user.id].count} Complaint{userComplaints[user.id].count !== 1 ? 's' : ''}
-                  </Typography>
-                </Box>
-                <TableContainer component={Paper} sx={{ maxHeight: 300, overflow: 'auto' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: 'grey.50' }}>
-                        <TableCell sx={{ fontWeight: 600 }}>Category</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {userComplaints[user.id].complaints.map((complaint) => (
-                        <TableRow key={complaint.id} hover>
-                          <TableCell>
-                            <Chip
-                              label={complaint.category || 'N/A'}
-                              size="small"
-                              sx={{ bgcolor: 'rgba(33, 150, 243, 0.1)', color: '#1565C0' }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <StatusChip status={complaint.status || 'open'} />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {formatDate(complaint.created_at)}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                maxWidth: 200,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}
-                              title={complaint.description}
-                            >
-                              {complaint.description || 'N/A'}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            ) : (
-              <Box sx={{ textAlign: 'center', py: 3 }}>
-                <ReportProblemIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 1 }} />
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  No complaints against this user
-                </Typography>
-              </Box>
-            )}
-          </Grid>
-
-          {/* User ID */}
-          <Grid item xs={12}>
-            <Divider sx={{ my: 1 }} />
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-              User ID
-            </Typography>
-            <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary', wordBreak: 'break-all' }}>
-              {user.id}
-            </Typography>
-          </Grid>
-        </Grid>
-      </DialogContent>
-      
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} variant="contained" color="primary" fullWidth>
-          Close
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
+// UserDetailsModal has been replaced by UserDetailPage route
+const STUB_MODE = true; // Placeholder to maintain file structure if needed
 
 const AdminUsers = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [users, setUsers] = useState([]);
   const [loadingPending, setLoadingPending] = useState(true);
@@ -520,7 +75,7 @@ const AdminUsers = () => {
   const [pendingSearch, setPendingSearch] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
-  const [userComplaints, setUserComplaints] = useState({}); // { userId: { count: number, complaints: [] } }
+  const [userComplaints, setUserComplaints] = useState({ made: {}, against: {} }); // { made: { userId: { count, complaints } }, against: { userId: { count, complaints } } }
   const [loadingComplaints, setLoadingComplaints] = useState(false);
 
   useEffect(() => {
@@ -576,19 +131,30 @@ const AdminUsers = () => {
         const resp = await complaintService.getComplaints({});
         if (!mounted) return;
         const complaints = Array.isArray(resp.data) ? resp.data : [];
-        // Group complaints by complained_against_user_id
-        const complaintsByUser = {};
+
+        // Group complaints by creator and by target
+        const madeByUser = {};
+        const againstUser = {};
+
         complaints.forEach(complaint => {
+          // Complaints created BY this user
+          if (complaint.created_by) {
+            const uid = complaint.created_by;
+            if (!madeByUser[uid]) madeByUser[uid] = { count: 0, complaints: [] };
+            madeByUser[uid].count++;
+            madeByUser[uid].complaints.push(complaint);
+          }
+
+          // Complaints filed AGAINST this user
           if (complaint.complained_against_user_id) {
-            const userId = complaint.complained_against_user_id;
-            if (!complaintsByUser[userId]) {
-              complaintsByUser[userId] = { count: 0, complaints: [] };
-            }
-            complaintsByUser[userId].count++;
-            complaintsByUser[userId].complaints.push(complaint);
+            const targetUid = complaint.complained_against_user_id;
+            if (!againstUser[targetUid]) againstUser[targetUid] = { count: 0, complaints: [] };
+            againstUser[targetUid].count++;
+            againstUser[targetUid].complaints.push(complaint);
           }
         });
-        setUserComplaints(complaintsByUser);
+
+        setUserComplaints({ made: madeByUser, against: againstUser });
       } catch (e) {
         console.error('Error loading complaints:', e);
       } finally {
@@ -612,7 +178,7 @@ const AdminUsers = () => {
     }
   }, [users, loadingUsers, loadingPending, pendingFarmers.length]);
 
- 
+
 
   const farmers = useMemo(() => users.filter(u => String(u.user_type).toLowerCase() === 'farmer'), [users]);
   const buyers = useMemo(() => users.filter(u => String(u.user_type).toLowerCase() === 'buyer'), [users]);
@@ -625,16 +191,16 @@ const AdminUsers = () => {
   // Filter current users
   const filteredUsers = useMemo(() => {
     let filtered = currentUsers;
-    
+
     // Search filter
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(u => 
+      filtered = filtered.filter(u =>
         (u.name || '').toLowerCase().includes(searchLower) ||
         (u.email || '').toLowerCase().includes(searchLower)
       );
     }
-    
+
     // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(u => {
@@ -642,7 +208,7 @@ const AdminUsers = () => {
         return status.toLowerCase() === statusFilter.toLowerCase();
       });
     }
-    
+
     return filtered;
   }, [currentUsers, searchQuery, statusFilter]);
 
@@ -652,7 +218,7 @@ const AdminUsers = () => {
     const approved = allUsers.filter(u => (u.approval_status || (u.is_active ? 'approved' : 'pending')).toLowerCase() === 'approved').length;
     const pending = allUsers.filter(u => (u.approval_status || (u.is_active ? 'approved' : 'pending')).toLowerCase() === 'pending').length;
     const rejected = allUsers.filter(u => (u.approval_status || (u.is_active ? 'approved' : 'pending')).toLowerCase() === 'rejected').length;
-    
+
     return {
       total: allUsers.length,
       farmers: farmers.length,
@@ -666,16 +232,16 @@ const AdminUsers = () => {
   // Filter pending farmers
   const filteredPendingFarmers = useMemo(() => {
     let filtered = pendingFarmers;
-    
+
     // Search filter
     if (pendingSearch) {
       const searchLower = pendingSearch.toLowerCase();
-      filtered = filtered.filter(f => 
+      filtered = filtered.filter(f =>
         (f.name || '').toLowerCase().includes(searchLower) ||
         (f.email || '').toLowerCase().includes(searchLower)
       );
     }
-    
+
     return filtered;
   }, [pendingFarmers, pendingSearch]);
 
@@ -725,7 +291,7 @@ const AdminUsers = () => {
     setDocsContent(null);
     try {
       // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Request timeout')), 10000)
       );
       const resp = await Promise.race([
@@ -754,18 +320,18 @@ const AdminUsers = () => {
       )}
 
       {/* Stats Cards */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { 
-          xs: 'repeat(2, 1fr)', 
-          sm: 'repeat(3, 1fr)', 
-          md: 'repeat(5, 1fr)' 
-        }, 
-        gap: 2, 
-        mb: 1 
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: {
+          xs: 'repeat(2, 1fr)',
+          sm: 'repeat(3, 1fr)',
+          md: 'repeat(5, 1fr)'
+        },
+        gap: 2,
+        mb: 1
       }}>
-        <Card sx={{ 
-          borderRadius: 2, 
+        <Card sx={{
+          borderRadius: 2,
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           bgcolor: 'background.paper',
           border: '1px solid',
@@ -774,16 +340,16 @@ const AdminUsers = () => {
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          '&:hover': { 
+          '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }
         }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(102, 126, 234, 0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -801,8 +367,8 @@ const AdminUsers = () => {
             </Typography>
           </CardContent>
         </Card>
-        <Card sx={{ 
-          borderRadius: 2, 
+        <Card sx={{
+          borderRadius: 2,
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           bgcolor: 'background.paper',
           border: '1px solid',
@@ -811,16 +377,16 @@ const AdminUsers = () => {
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          '&:hover': { 
+          '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }
         }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(76,175,80,0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -838,8 +404,8 @@ const AdminUsers = () => {
             </Typography>
           </CardContent>
         </Card>
-        <Card sx={{ 
-          borderRadius: 2, 
+        <Card sx={{
+          borderRadius: 2,
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           bgcolor: 'background.paper',
           border: '1px solid',
@@ -848,16 +414,16 @@ const AdminUsers = () => {
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          '&:hover': { 
+          '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }
         }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(33,150,243,0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -875,8 +441,8 @@ const AdminUsers = () => {
             </Typography>
           </CardContent>
         </Card>
-        <Card sx={{ 
-          borderRadius: 2, 
+        <Card sx={{
+          borderRadius: 2,
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           bgcolor: 'background.paper',
           border: '1px solid',
@@ -885,16 +451,16 @@ const AdminUsers = () => {
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          '&:hover': { 
+          '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }
         }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(76,175,80,0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -912,8 +478,8 @@ const AdminUsers = () => {
             </Typography>
           </CardContent>
         </Card>
-        <Card sx={{ 
-          borderRadius: 2, 
+        <Card sx={{
+          borderRadius: 2,
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           bgcolor: 'background.paper',
           border: '1px solid',
@@ -922,16 +488,16 @@ const AdminUsers = () => {
           width: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          '&:hover': { 
+          '&:hover': {
             transform: 'translateY(-2px)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }
         }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(255,152,0,0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -952,9 +518,9 @@ const AdminUsers = () => {
       </Box>
 
       {/* Main Content Card */}
-      <Card sx={{ 
-        borderRadius: 3, 
-        boxShadow: '0 4px 20px rgba(0,0,0,0.08)', 
+      <Card sx={{
+        borderRadius: 3,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         width: '100%',
         border: '1px solid',
         borderColor: 'divider',
@@ -962,8 +528,8 @@ const AdminUsers = () => {
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
           {/* Tabs */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs 
-              value={tabValue} 
+            <Tabs
+              value={tabValue}
               onChange={(e, newValue) => {
                 setTabValue(newValue);
                 setSearchQuery('');
@@ -986,7 +552,7 @@ const AdminUsers = () => {
                 },
               }}
             >
-              <Tab 
+              <Tab
                 icon={<AgricultureIcon />}
                 iconPosition="start"
                 label={
@@ -996,7 +562,7 @@ const AdminUsers = () => {
                 }
                 sx={{ minWidth: { xs: 80, sm: 160 } }}
               />
-              <Tab 
+              <Tab
                 icon={<ShoppingCartIcon />}
                 iconPosition="start"
                 label={
@@ -1010,10 +576,10 @@ const AdminUsers = () => {
           </Box>
 
           {/* Search and Filter Bar */}
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 2, 
-            mb: 3, 
+          <Box sx={{
+            display: 'flex',
+            gap: 2,
+            mb: 3,
             flexDirection: { xs: 'column', sm: 'row' },
             alignItems: { xs: 'stretch', sm: 'center' }
           }}>
@@ -1029,7 +595,7 @@ const AdminUsers = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ 
+              sx={{
                 flex: 1,
                 '& .MuiOutlinedInput-root': {
                   '&:hover fieldset': {
@@ -1091,23 +657,23 @@ const AdminUsers = () => {
                 <MenuItem value="desc">Descending</MenuItem>
               </Select>
             </FormControl>
-            <Chip 
-              label={`${filteredUsers.length} of ${currentUsers.length} shown`} 
-              size="small" 
-              sx={{ 
-                bgcolor: tabValue === 0 ? 'rgba(76,175,80,0.1)' : 'rgba(33,150,243,0.1)', 
-                color: tabValue === 0 ? '#2E7D32' : '#1565C0', 
+            <Chip
+              label={`${filteredUsers.length} of ${currentUsers.length} shown`}
+              size="small"
+              sx={{
+                bgcolor: tabValue === 0 ? 'rgba(76,175,80,0.1)' : 'rgba(33,150,243,0.1)',
+                color: tabValue === 0 ? '#2E7D32' : '#1565C0',
                 fontWeight: 600,
                 height: 40,
                 alignSelf: { xs: 'flex-start', sm: 'center' }
-              }} 
+              }}
             />
           </Box>
 
           {/* Table */}
-          <TableContainer 
-            component={Paper} 
-            sx={{ 
+          <TableContainer
+            component={Paper}
+            sx={{
               borderRadius: 2,
               overflow: 'auto',
               border: '1px solid',
@@ -1115,29 +681,30 @@ const AdminUsers = () => {
               maxHeight: { xs: '60vh', md: '70vh' }
             }}
           >
-              <Table stickyHeader>
-                  <TableHead>
+            <Table stickyHeader>
+              <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 150 }}>Name</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 200 }}>Email</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120, display: { xs: 'none', sm: 'table-cell' } }}>Coins</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Complaints</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Against</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Made</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {loadingUsers ? (
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {loadingUsers ? (
                   [...Array(8)].map((_, i) => (
-                        <TableRow key={i}>
+                    <TableRow key={i}>
                       <TableCell><Skeleton width={120} height={32} /></TableCell>
                       <TableCell><Skeleton width={180} height={32} /></TableCell>
                       <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}><Skeleton width={80} height={32} /></TableCell>
                       <TableCell><Skeleton width={80} height={32} /></TableCell>
                       <TableCell><Skeleton width={80} height={32} /></TableCell>
                       <TableCell><Skeleton width={100} height={32} /></TableCell>
-                        </TableRow>
-                      ))
+                    </TableRow>
+                  ))
                 ) : filteredUsers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
@@ -1147,8 +714,8 @@ const AdminUsers = () => {
                           {currentUsers.length === 0 ? `No ${tabValue === 0 ? 'farmers' : 'buyers'} found` : 'No users match your search/filter'}
                         </Typography>
                         {(searchQuery || statusFilter !== 'all') && (
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             onClick={() => {
                               setSearchQuery('');
                               setStatusFilter('all');
@@ -1163,38 +730,38 @@ const AdminUsers = () => {
                   </TableRow>
                 ) : (
                   filteredUsers.map(u => (
-                        <TableRow 
-                          key={u.id} 
-                          id={`row-${u.id}`}
-                          sx={{ 
-                            backgroundColor: highlightedId === String(u.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
-                            transition: 'all 0.2s ease',
-                            '&:hover': {
-                              backgroundColor: tabValue === 0 ? 'rgba(76,175,80,0.04)' : 'rgba(33,150,243,0.04)',
-                            }
-                          }}
+                    <TableRow
+                      key={u.id}
+                      id={`row-${u.id}`}
+                      sx={{
+                        backgroundColor: highlightedId === String(u.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: tabValue === 0 ? 'rgba(76,175,80,0.04)' : 'rgba(33,150,243,0.04)',
+                        }
+                      }}
                     >
                       <TableCell sx={{ py: 2, fontWeight: 500 }}>{u.name || 'N/A'}</TableCell>
                       <TableCell sx={{ py: 2 }}>{u.email || 'N/A'}</TableCell>
                       <TableCell sx={{ py: 2, display: { xs: 'none', sm: 'table-cell' } }}>
-                        <Chip 
-                          label={u.coins?.toLocaleString() || '0'} 
-                          size="small" 
-                          sx={{ 
-                            bgcolor: 'rgba(33,150,243,0.1)', 
+                        <Chip
+                          label={u.coins?.toLocaleString() || '0'}
+                          size="small"
+                          sx={{
+                            bgcolor: 'rgba(33,150,243,0.1)',
                             color: '#1565C0',
                             fontWeight: 600
-                          }} 
+                          }}
                         />
-                          </TableCell>
+                      </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <StatusChip status={u.approval_status || (u.is_active ? 'approved' : 'pending')} />
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
-                        {userComplaints[u.id]?.count > 0 ? (
+                        {userComplaints.against[u.id]?.count > 0 ? (
                           <Chip
                             icon={<ReportProblemIcon sx={{ fontSize: 16 }} />}
-                            label={userComplaints[u.id].count}
+                            label={userComplaints.against[u.id].count}
                             size="small"
                             sx={{
                               bgcolor: 'rgba(244, 67, 54, 0.1)',
@@ -1207,9 +774,23 @@ const AdminUsers = () => {
                             }}
                           />
                         ) : (
-                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                            0
-                          </Typography>
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>0</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ py: 2 }}>
+                        {userComplaints.made[u.id]?.count > 0 ? (
+                          <Chip
+                            label={userComplaints.made[u.id].count}
+                            size="small"
+                            sx={{
+                              bgcolor: 'rgba(102, 126, 234, 0.1)',
+                              color: '#5a67d8',
+                              border: '1px solid rgba(102, 126, 234, 0.2)',
+                              fontWeight: 600
+                            }}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>0</Typography>
                         )}
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
@@ -1218,9 +799,9 @@ const AdminUsers = () => {
                           size="small"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedUser(u);
+                            navigate(`/admin/users/${u.id}`);
                           }}
-                          sx={{ 
+                          sx={{
                             textTransform: 'none',
                             fontWeight: 500,
                             minWidth: 100
@@ -1228,36 +809,36 @@ const AdminUsers = () => {
                         >
                           View Details
                         </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
 
-      <Card sx={{ 
-        borderRadius: 3, 
+      <Card sx={{
+        borderRadius: 3,
         boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         border: '1px solid',
         borderColor: 'divider',
         mt: 3
       }}>
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             mb: 3,
             flexWrap: 'wrap',
             gap: 2
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box sx={{ 
-                p: 1, 
-                borderRadius: 1.5, 
+              <Box sx={{
+                p: 1,
+                borderRadius: 1.5,
                 bgcolor: 'rgba(255,152,0,0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -1274,22 +855,22 @@ const AdminUsers = () => {
                 </Typography>
               </Box>
             </Box>
-            <Chip 
-              label={`${filteredPendingFarmers.length} of ${pendingFarmers.length}`} 
-              size="small" 
-                          sx={{ 
-                bgcolor: 'rgba(255,152,0,0.1)', 
-                color: '#FF9800', 
+            <Chip
+              label={`${filteredPendingFarmers.length} of ${pendingFarmers.length}`}
+              size="small"
+              sx={{
+                bgcolor: 'rgba(255,152,0,0.1)',
+                color: '#FF9800',
                 fontWeight: 600,
                 height: 32
-              }} 
+              }}
             />
           </Box>
 
           {/* Search Bar */}
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 2, 
+          <Box sx={{
+            display: 'flex',
+            gap: 2,
             mb: 3,
             flexDirection: { xs: 'column', sm: 'row' },
             alignItems: { xs: 'stretch', sm: 'center' }
@@ -1306,7 +887,7 @@ const AdminUsers = () => {
                   </InputAdornment>
                 ),
               }}
-                          sx={{ 
+              sx={{
                 flex: 1,
                 '& .MuiOutlinedInput-root': {
                   '&:hover fieldset': {
@@ -1330,9 +911,9 @@ const AdminUsers = () => {
           </Box>
 
           {/* Table */}
-          <TableContainer 
-            component={Paper} 
-            sx={{ 
+          <TableContainer
+            component={Paper}
+            sx={{
               borderRadius: 2,
               overflow: 'auto',
               border: '1px solid',
@@ -1368,8 +949,8 @@ const AdminUsers = () => {
                           {pendingFarmers.length === 0 ? 'No pending approvals' : 'No farmers match your search'}
                         </Typography>
                         {pendingSearch && (
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             onClick={() => setPendingSearch('')}
                             sx={{ mt: 1 }}
                           >
@@ -1382,16 +963,16 @@ const AdminUsers = () => {
                 ) : (
                   filteredPendingFarmers.map(f => {
                     return (
-                    <TableRow 
-                      key={f.id} 
-                      id={`row-${f.id}`}
-                      sx={{ 
-                        backgroundColor: highlightedId === String(f.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
-                        transition: 'all 0.2s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(255,152,0,0.04)',
-                        }
-                      }}
+                      <TableRow
+                        key={f.id}
+                        id={`row-${f.id}`}
+                        sx={{
+                          backgroundColor: highlightedId === String(f.id) ? 'rgba(255, 235, 59, 0.35)' : 'inherit',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: 'rgba(255,152,0,0.04)',
+                          }
+                        }}
                       >
                         <TableCell sx={{ py: 2, fontWeight: 500 }}>{f.name || 'N/A'}</TableCell>
                         <TableCell sx={{ py: 2 }}>{f.email || 'N/A'}</TableCell>
@@ -1400,15 +981,15 @@ const AdminUsers = () => {
                         </TableCell>
                         <TableCell sx={{ py: 2 }}>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            <Button 
-                              variant="contained" 
-                              color="success" 
-                              size="small" 
+                            <Button
+                              variant="contained"
+                              color="success"
+                              size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setApproveId(f.id);
                               }}
-                              sx={{ 
+                              sx={{
                                 minWidth: 90,
                                 textTransform: 'none',
                                 fontWeight: 600
@@ -1416,15 +997,15 @@ const AdminUsers = () => {
                             >
                               Approve
                             </Button>
-                            <Button 
-                              variant="outlined" 
-                              color="error" 
-                              size="small" 
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setRejectId(f.id);
                               }}
-                              sx={{ 
+                              sx={{
                                 minWidth: 90,
                                 textTransform: 'none',
                                 fontWeight: 600
@@ -1432,9 +1013,9 @@ const AdminUsers = () => {
                             >
                               Reject
                             </Button>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
@@ -1468,16 +1049,10 @@ const AdminUsers = () => {
         </DialogActions>
       </Dialog>
 
-      <UserDetailsModal
-        open={Boolean(selectedUser)}
-        user={selectedUser}
-        onClose={() => setSelectedUser(null)}
-        onViewDocuments={openDocs}
-        userComplaints={userComplaints}
-      />
+      {/* Modal removed - navigating to UserDetailPage instead */}
 
-      <Dialog 
-        open={Boolean(docsUserId)} 
+      <Dialog
+        open={Boolean(docsUserId)}
         onClose={() => setDocsUserId(null)}
         maxWidth="md"
         fullWidth
@@ -1488,19 +1063,19 @@ const AdminUsers = () => {
           }
         }}
       >
-        <DialogTitle sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <DialogTitle sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           pb: 1
         }}>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             Farmer Documents
           </Typography>
-          <IconButton 
-            onClick={() => setDocsUserId(null)} 
+          <IconButton
+            onClick={() => setDocsUserId(null)}
             size="small"
-            sx={{ 
+            sx={{
               '&:hover': { bgcolor: 'grey.100' }
             }}
           >
@@ -1515,27 +1090,27 @@ const AdminUsers = () => {
               <Skeleton width="80%" height={40} />
             </Box>
           ) : docsContent ? (
-            <Paper 
-              sx={{ 
-                p: 2, 
-                bgcolor: 'grey.50', 
+            <Paper
+              sx={{
+                p: 2,
+                bgcolor: 'grey.50',
                 borderRadius: 2,
                 maxHeight: 400,
                 overflow: 'auto'
               }}
             >
-              <Box 
-                component="pre" 
-                sx={{ 
-                  whiteSpace: 'pre-wrap', 
-                  fontFamily: 'monospace', 
+              <Box
+                component="pre"
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'monospace',
                   fontSize: 13,
                   margin: 0,
                   color: 'text.primary'
                 }}
               >
                 {JSON.stringify(docsContent, null, 2)}
-            </Box>
+              </Box>
             </Paper>
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -1568,9 +1143,9 @@ const AdminUsers = () => {
           }
         }}
       >
-        <Alert 
-          onClose={() => setFeedback('')} 
-          severity="success" 
+        <Alert
+          onClose={() => setFeedback('')}
+          severity="success"
           sx={{ width: '100%' }}
         >
           {feedback}
