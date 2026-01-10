@@ -66,6 +66,7 @@ const AdminSidebar = ({ user, onLogout, open, onClose }) => {
 
         <Box sx={{ display: 'flex', alignItems: 'center', mb: isMobile ? 1.5 : 2 }}>
           <Avatar
+            src={user.profile_image_url}
             sx={{
               mr: isMobile ? 1.5 : 2,
               bgcolor: 'primary.main',
@@ -74,7 +75,7 @@ const AdminSidebar = ({ user, onLogout, open, onClose }) => {
               fontSize: isMobile ? '0.9rem' : '1rem',
             }}
           >
-            {user.name?.charAt(0)?.toUpperCase() || 'U'}
+            {!user.profile_image_url && (user.name?.charAt(0)?.toUpperCase() || 'U')}
           </Avatar>
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography

@@ -59,10 +59,10 @@ const Navbar = ({ user, onLogout }) => {
   };
 
   return (
-    <AppBar 
-      position="static" 
-      sx={{ 
-        backgroundColor: 'white', 
+    <AppBar
+      position="static"
+      sx={{
+        backgroundColor: 'white',
         color: 'primary.main',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       }}
@@ -112,7 +112,7 @@ const Navbar = ({ user, onLogout }) => {
           icon={<span>🪙</span>}
           label="1,250 Coins"
           variant="outlined"
-          sx={{ 
+          sx={{
             mr: 2,
             fontWeight: 'bold',
             borderColor: 'warning.main',
@@ -149,15 +149,16 @@ const Navbar = ({ user, onLogout }) => {
         {/* User Menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
           <Avatar
-            sx={{ 
-              width: 32, 
-              height: 32, 
+            src={user.profile_image_url}
+            sx={{
+              width: 32,
+              height: 32,
               mr: 1,
               backgroundColor: 'primary.main',
               fontSize: '14px',
             }}
           >
-            {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            {!user.profile_image_url && (user.name ? user.name.charAt(0).toUpperCase() : 'U')}
           </Avatar>
           <Typography variant="body2" sx={{ mr: 1 }}>
             {user.name?.split(' ')[0] || user.name || 'User'}

@@ -40,8 +40,10 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { profileService } from '../services/profile';
 import { orderService } from '../services/orders';
-import { Alert, Snackbar, InputAdornment } from '@mui/material';
-import { Visibility, VisibilityOff, Lock } from '@mui/icons-material';
+import { Alert, Snackbar, InputAdornment, LinearProgress, CircularProgress } from '@mui/material';
+import { Visibility, VisibilityOff, Lock, CloudUpload, Description, Delete as DeleteIcon, OpenInNew } from '@mui/icons-material';
+import supabase from '../services/supabase';
+import { userDocumentsService } from '../services/userDocuments';
 
 const Profile = () => {
   const { user, updateUser } = useAuth();
@@ -56,11 +58,14 @@ const Profile = () => {
     user_type: '',
     coins: 0,
     email_verified: false,
-    totalRentals: 0,
-    activeRentals: 0,
     totalSpent: 0,
+    profile_image_url: null,
   });
-  
+
+  const [documents, setDocuments] = useState([]);
+  const [docLoading, setDocLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -75,11 +80,29 @@ const Profile = () => {
     new: false,
     confirm: false,
   });
-  
+
   const [editMode, setEditMode] = useState(false);
   const [editedProfile, setEditedProfile] = useState({ ...profile });
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUserDocuments();
+    }
+  }, [user]);
+
+  const loadUserDocuments = async () => {
+    try {
+      setDocLoading(true);
+      const response = await userDocumentsService.getUserDocuments(user.id);
+      setDocuments(response.data || []);
+    } catch (err) {
+      console.error('Error loading documents:', err);
+    } finally {
+      setDocLoading(false);
+    }
+  };
 
   // Load user profile data
   useEffect(() => {
@@ -92,18 +115,18 @@ const Profile = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Get user profile
       const profileResponse = await profileService.getProfile();
       const userData = profileResponse.data?.user || user;
-      
+
       // Get user stats based on role
       let stats = {
         totalRentals: 0,
         activeRentals: 0,
         totalSpent: 0,
       };
-      
+
       try {
         if (userData.user_type === 'buyer') {
           const ordersResponse = await orderService.getBuyerOrders();
@@ -121,7 +144,7 @@ const Profile = () => {
       } catch (statsErr) {
         console.warn('Could not load user stats:', statsErr);
       }
-      
+
       setProfile({
         name: userData.name || '',
         email: userData.email || '',
@@ -133,9 +156,10 @@ const Profile = () => {
         user_type: userData.user_type || '',
         coins: userData.coins || 0,
         email_verified: userData.email_verified || false,
+        profile_image_url: userData.profile_image_url || null,
         ...stats,
       });
-      
+
       setEditedProfile({
         name: userData.name || '',
         email: userData.email || '',
@@ -160,27 +184,27 @@ const Profile = () => {
     try {
       setSaving(true);
       setError(null);
-      
+
       // Only update name and email (phone, location, bio not in schema yet)
       const updateData = {
         name: editedProfile.name,
         email: editedProfile.email,
       };
-      
+
       const response = await profileService.updateProfile(updateData);
       const updatedUser = response.data?.user;
-      
+
       if (updatedUser) {
         // Update AuthContext
         updateUser(updatedUser);
-        
+
         // Update local profile
         setProfile({
           ...profile,
           name: updatedUser.name,
           email: updatedUser.email,
         });
-        
+
         setEditMode(false);
         setSuccess('Profile updated successfully!');
       }
@@ -203,21 +227,21 @@ const Profile = () => {
       setError('New passwords do not match');
       return;
     }
-    
+
     if (passwordData.newPassword.length < 6) {
       setError('Password must be at least 6 characters long');
       return;
     }
-    
+
     try {
       setChangingPassword(true);
       setError(null);
-      
+
       await profileService.changePassword({
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
-      
+
       setPasswordDialog(false);
       setPasswordData({
         currentPassword: '',
@@ -237,14 +261,103 @@ const Profile = () => {
     setEditedProfile({ ...editedProfile, [field]: value });
   };
 
-  const handleAvatarChange = (event) => {
+  const handleAvatarChange = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setEditedProfile({ ...editedProfile, avatar: e.target.result });
-      };
-      reader.readAsDataURL(file);
+    if (!file || !user) return;
+
+    try {
+      setUploading(true);
+      setError(null);
+
+      const fileExt = file.name.split('.').pop();
+      const filePath = `profile-images/${user.id}-profile.${fileExt}`;
+
+      // 1. Upload to Supabase
+      const { error: uploadError } = await supabase.storage
+        .from('user-documents')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-documents')
+        .getPublicUrl(filePath);
+
+      // 3. Save to backend
+      await profileService.updateProfileImage(user.id, publicUrl);
+
+      // 4. Update local state
+      setProfile(prev => ({ ...prev, profile_image_url: publicUrl }));
+      setEditedProfile(prev => ({ ...prev, profile_image_url: publicUrl }));
+
+      // Update user in context
+      updateUser({ ...user, profile_image_url: publicUrl });
+
+      setSuccess('Profile picture updated successfully!');
+    } catch (err) {
+      console.error('Error uploading avatar:', err);
+      setError('Failed to upload profile picture. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDocumentUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file || !user) return;
+
+    try {
+      setUploading(true);
+      setError(null);
+
+      const fileName = file.name;
+      const fileExt = fileName.split('.').pop();
+      const safeName = fileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filePath = `documents/${user.id}-${Date.now()}-${safeName}`;
+
+      // 1. Upload to Supabase
+      const { error: uploadError } = await supabase.storage
+        .from('user-documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-documents')
+        .getPublicUrl(filePath);
+
+      // 3. Save to backend database
+      await userDocumentsService.addDocument({
+        user_id: user.id,
+        file_name: fileName,
+        file_url: publicUrl,
+        file_type: fileExt
+      });
+
+      // 4. Refresh documents list
+      loadUserDocuments();
+      setSuccess('Document uploaded successfully!');
+    } catch (err) {
+      console.error('Error uploading document:', err);
+      setError('Failed to upload document. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    try {
+      setDocLoading(true);
+      await userDocumentsService.deleteDocument(docId);
+      setDocuments(prev => prev.filter(d => d.id !== docId));
+      setSuccess('Document removed.');
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      setError('Failed to delete document.');
+    } finally {
+      setDocLoading(false);
     }
   };
 
@@ -267,21 +380,21 @@ const Profile = () => {
       </Box>
 
       {/* Main Profile Card */}
-      <Card sx={{ 
-        width: '100%', 
-        maxWidth: 800, 
-        borderRadius: 2, 
+      <Card sx={{
+        width: '100%',
+        maxWidth: 800,
+        borderRadius: 2,
         mb: 3
       }}>
         {/* Profile Header */}
-        <Box sx={{ 
+        <Box sx={{
           background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
           p: 3,
           borderRadius: '8px 8px 0 0',
           position: 'relative',
           overflow: 'hidden'
         }}>
-          <Box sx={{ 
+          <Box sx={{
             position: 'absolute',
             top: 0,
             right: 0,
@@ -291,21 +404,34 @@ const Profile = () => {
             borderRadius: '50%',
             transform: 'translate(50%, -50%)'
           }} />
-          
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, position: 'relative', zIndex: 1 }}>
             <Box sx={{ position: 'relative' }}>
               <Avatar
-                src={editedProfile.avatar || profile.avatar}
-                sx={{ 
-                  width: 80, 
-                  height: 80, 
+                src={profile.profile_image_url}
+                sx={{
+                  width: 80,
+                  height: 80,
                   border: '3px solid rgba(255,255,255,0.2)',
                   fontSize: '1.5rem',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  bgcolor: 'primary.light'
                 }}
               >
-                {profile.name.charAt(0)}
+                {!profile.profile_image_url && profile.name.charAt(0)}
               </Avatar>
+              {uploading && (
+                <CircularProgress
+                  size={86}
+                  sx={{
+                    position: 'absolute',
+                    top: -3,
+                    left: -3,
+                    zIndex: 1,
+                    color: 'white'
+                  }}
+                />
+              )}
               {editMode && (
                 <IconButton
                   sx={{
@@ -329,7 +455,7 @@ const Profile = () => {
                 </IconButton>
               )}
             </Box>
-            
+
             <Box sx={{ flex: 1, color: 'white' }}>
               <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
                 {profile.name}
@@ -338,7 +464,7 @@ const Profile = () => {
                 <Chip
                   label={profile.user_type ? profile.user_type.charAt(0).toUpperCase() + profile.user_type.slice(1) : 'User'}
                   size="small"
-                  sx={{ 
+                  sx={{
                     backgroundColor: 'rgba(255,255,255,0.2)',
                     color: 'white',
                     fontWeight: 500
@@ -348,7 +474,7 @@ const Profile = () => {
                   <Chip
                     label="Verified"
                     size="small"
-                    sx={{ 
+                    sx={{
                       backgroundColor: 'rgba(255,255,255,0.2)',
                       color: 'white',
                       fontWeight: 500
@@ -365,12 +491,12 @@ const Profile = () => {
                 {profile.coins} Coins
               </Typography>
             </Box>
-            
+
             <Box sx={{ alignSelf: 'flex-start', display: 'flex', gap: 1 }}>
               {!editMode ? (
                 <>
-                  <Button 
-                    startIcon={<Edit />} 
+                  <Button
+                    startIcon={<Edit />}
                     onClick={handleEdit}
                     variant="contained"
                     sx={{
@@ -383,8 +509,8 @@ const Profile = () => {
                   >
                     Edit Profile
                   </Button>
-                  <Button 
-                    startIcon={<Lock />} 
+                  <Button
+                    startIcon={<Lock />}
                     onClick={() => setPasswordDialog(true)}
                     variant="outlined"
                     sx={{
@@ -398,8 +524,8 @@ const Profile = () => {
                 </>
               ) : (
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button 
-                    startIcon={<Save />} 
+                  <Button
+                    startIcon={<Save />}
                     onClick={handleSave}
                     disabled={saving}
                     variant="contained"
@@ -411,8 +537,8 @@ const Profile = () => {
                   >
                     {saving ? 'Saving...' : 'Save'}
                   </Button>
-                  <Button 
-                    startIcon={<Cancel />} 
+                  <Button
+                    startIcon={<Cancel />}
                     onClick={handleCancel}
                     disabled={saving}
                     sx={{
@@ -449,7 +575,7 @@ const Profile = () => {
                     }
                   }}>
                     <Stack direction="row" alignItems="center" spacing={2}>
-                      <Avatar sx={{ 
+                      <Avatar sx={{
                         backgroundColor: index === 0 ? '#3b82f6' : index === 1 ? '#10b981' : '#f59e0b',
                         width: 48,
                         height: 48
@@ -478,7 +604,7 @@ const Profile = () => {
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, fontSize: '1.125rem' }}>
               Personal Information
             </Typography>
-            
+
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -497,7 +623,7 @@ const Profile = () => {
                   }}
                 />
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -523,15 +649,102 @@ const Profile = () => {
                   }}
                 />
               </Grid>
-              
+
               {/* Phone, Location, and Bio fields removed - not in current database schema */}
               {/* These can be added later when the schema is extended */}
             </Grid>
           </Box>
+
+          <Divider sx={{ my: 4 }} />
+
+          {/* Verification Documents Section */}
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.125rem' }}>
+                Verification Documents
+              </Typography>
+              <Button
+                variant="contained"
+                component="label"
+                startIcon={<CloudUpload />}
+                size="small"
+                disabled={uploading}
+                sx={{ borderRadius: 2 }}
+              >
+                {uploading ? 'Uploading...' : 'Upload Document'}
+                <input type="file" hidden onChange={handleDocumentUpload} />
+              </Button>
+            </Box>
+
+            {uploading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+
+            {docLoading ? (
+              <Stack spacing={1}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}><CircularProgress size={20} /></Paper>
+              </Stack>
+            ) : documents.length > 0 ? (
+              <List sx={{ pt: 0 }}>
+                {documents.map((doc) => (
+                  <Paper
+                    key={doc.id}
+                    variant="outlined"
+                    sx={{
+                      mb: 1.5,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      '&:hover': { bgcolor: 'grey.50' }
+                    }}
+                  >
+                    <ListItem
+                      secondaryAction={
+                        <Stack direction="row" spacing={1}>
+                          <IconButton edge="end" component="a" href={doc.file_url} target="_blank" title="View Document">
+                            <OpenInNew fontSize="small" />
+                          </IconButton>
+                          <IconButton edge="end" onClick={() => handleDeleteDocument(doc.id)} color="error" title="Delete">
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      }
+                    >
+                      <ListItemIcon>
+                        <Description color="primary" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={doc.file_name}
+                        secondary={`Uploaded on ${new Date(doc.uploaded_at).toLocaleDateString()}`}
+                        primaryTypographyProps={{ fontWeight: 600, fontSize: '0.9rem' }}
+                        secondaryTypographyProps={{ fontSize: '0.8rem' }}
+                      />
+                    </ListItem>
+                  </Paper>
+                ))}
+              </List>
+            ) : (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 4,
+                  textAlign: 'center',
+                  borderRadius: 2,
+                  bgcolor: 'grey.50',
+                  borderStyle: 'dashed'
+                }}
+              >
+                <Description sx={{ fontSize: 40, color: 'text.disabled', mb: 1, opacity: 0.5 }} />
+                <Typography variant="body2" color="text.secondary">
+                  No verification documents uploaded yet.
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Upload IDs, certifications, or property proof documents.
+                </Typography>
+              </Paper>
+            )}
+          </Box>
         </CardContent>
       </Card>
-     </Container>
-   );
- };
+    </Container>
+  );
+};
 
 export default Profile;

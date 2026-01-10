@@ -103,15 +103,15 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
       }}
     >
       {/* Header Section */}
-      <Box sx={{ 
-        p: isMobile ? 1.5 : 3, 
+      <Box sx={{
+        p: isMobile ? 1.5 : 3,
         borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
         background: 'linear-gradient(135deg, rgba(76, 175, 80, 0.02) 0%, rgba(46, 125, 50, 0.02) 100%)',
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isMobile ? 1.5 : 3 }}>
-          <Typography 
+          <Typography
             variant={isMobile ? "subtitle1" : "h6"}
-            sx={{ 
+            sx={{
               fontWeight: 700,
               fontSize: isMobile ? '1rem' : '1.25rem',
               background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
@@ -122,10 +122,10 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
           >
             🌱 ShareCrop
           </Typography>
-          <IconButton 
-            onClick={onClose} 
+          <IconButton
+            onClick={onClose}
             size="small"
-            sx={{ 
+            sx={{
               color: 'text.secondary',
               '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
             }}
@@ -133,33 +133,34 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
             <Close fontSize="small" />
           </IconButton>
         </Box>
-        
+
         {/* User Profile Card */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           p: isMobile ? 1 : 2,
           borderRadius: isMobile ? '6px' : '12px',
           backgroundColor: 'rgba(255, 255, 255, 0.7)',
           border: '1px solid rgba(0, 0, 0, 0.06)',
         }}>
-          <Avatar 
-            sx={{ 
-              width: isMobile ? 32 : 48, 
-              height: isMobile ? 32 : 48, 
+          <Avatar
+            src={user.profile_image_url}
+            sx={{
+              width: isMobile ? 32 : 48,
+              height: isMobile ? 32 : 48,
               bgcolor: 'primary.main',
               mr: isMobile ? 1 : 2,
               fontSize: isMobile ? '0.8rem' : '1.1rem',
               fontWeight: 600,
             }}
           >
-            {user.name?.charAt(0)?.toUpperCase() || 'U'}
+            {!user.profile_image_url && (user.name?.charAt(0)?.toUpperCase() || 'U')}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography 
-              variant="body1" 
-              sx={{ 
-                fontWeight: 600, 
+            <Typography
+              variant="body1"
+              sx={{
+                fontWeight: 600,
                 color: 'text.primary',
                 mb: 0.5,
                 fontSize: isMobile ? '0.8rem' : '0.95rem',
@@ -178,12 +179,12 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
                 height: isMobile ? '18px' : '24px',
                 fontWeight: 500,
                 textTransform: 'capitalize',
-                backgroundColor: user.user_type === 'farmer' 
-                  ? alpha('#4CAF50', 0.1) 
+                backgroundColor: user.user_type === 'farmer'
+                  ? alpha('#4CAF50', 0.1)
                   : alpha('#2196F3', 0.1),
                 color: user.user_type === 'farmer' ? '#2E7D32' : '#1565C0',
-                border: `1px solid ${user.user_type === 'farmer' 
-                  ? alpha('#4CAF50', 0.2) 
+                border: `1px solid ${user.user_type === 'farmer'
+                  ? alpha('#4CAF50', 0.2)
                   : alpha('#2196F3', 0.2)}`,
               }}
             />
@@ -207,25 +208,25 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
                     minHeight: isMobile ? 36 : 48,
                     px: isMobile ? 0.75 : 1.5,
                     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    backgroundColor: isSelected 
+                    backgroundColor: isSelected
                       ? alpha('#4CAF50', 0.08)
                       : 'transparent',
-                    border: isSelected 
+                    border: isSelected
                       ? `1px solid ${alpha('#4CAF50', 0.2)}`
                       : '1px solid transparent',
                     '&:hover': {
-                      backgroundColor: isSelected 
+                      backgroundColor: isSelected
                         ? alpha('#4CAF50', 0.12)
                         : alpha('#000', 0.04),
                       transform: 'translateX(4px)',
-                      boxShadow: isSelected 
+                      boxShadow: isSelected
                         ? `0 4px 12px ${alpha('#4CAF50', 0.15)}`
                         : '0 2px 8px rgba(0, 0, 0, 0.08)',
                     },
                   }}
                 >
-                  <ListItemIcon 
-                    sx={{ 
+                  <ListItemIcon
+                    sx={{
                       minWidth: isMobile ? 28 : 40,
                       color: isSelected ? '#2E7D32' : 'text.secondary',
                       transition: 'color 0.2s ease',
@@ -236,7 +237,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
                   >
                     {item.icon}
                   </ListItemIcon>
-                  <ListItemText 
+                  <ListItemText
                     primary={item.text}
                     primaryTypographyProps={{
                       fontSize: isMobile ? '0.75rem' : '0.9rem',
@@ -252,8 +253,8 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
       </Box>
 
       {/* Logout Section */}
-      <Box sx={{ 
-        p: isMobile ? 1 : 2, 
+      <Box sx={{
+        p: isMobile ? 1 : 2,
         borderTop: '1px solid rgba(0, 0, 0, 0.08)',
         backgroundColor: 'rgba(0, 0, 0, 0.02)',
       }}>
@@ -273,8 +274,8 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
               },
             }}
           >
-            <ListItemIcon 
-              sx={{ 
+            <ListItemIcon
+              sx={{
                 minWidth: isMobile ? 28 : 40,
                 color: '#d32f2f',
                 transition: 'color 0.2s ease',
@@ -285,7 +286,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
             >
               <ExitToApp />
             </ListItemIcon>
-            <ListItemText 
+            <ListItemText
               primary="Logout"
               primaryTypographyProps={{
                 fontSize: isMobile ? '0.75rem' : '0.9rem',

@@ -300,15 +300,15 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   useEffect(() => {
     let mounted = true;
     let timeoutId = null;
-    
+
     const loadPickupReadyFromOrders = async () => {
       try {
-        if (!user || !user.id) { 
+        if (!user || !user.id) {
           if (mounted) {
-            setPickupReadyCount(0); 
+            setPickupReadyCount(0);
             setPickupReadyList([]);
           }
-          return; 
+          return;
         }
         const res = await orderService.getBuyerOrdersWithFields(user.id);
         const orders = Array.isArray(res?.data) ? res.data : (res?.data?.orders || []);
@@ -379,12 +379,12 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
         }
       }
     };
-    
+
     // Debounce the API call - only call if user.id or fields.length changes, and wait 5 seconds
     timeoutId = setTimeout(() => {
       loadPickupReadyFromOrders();
     }, 5000);
-    
+
     return () => {
       mounted = false;
       if (timeoutId) clearTimeout(timeoutId);
@@ -449,10 +449,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
   return (
     <>
-      <AppBar 
+      <AppBar
         ref={appBarRef}
         position="fixed"
-        sx={{ 
+        sx={{
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',
           color: 'text.primary',
@@ -506,15 +506,15 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             </Box>
           </Box>
         )}
-        <Toolbar sx={{ 
-          justifyContent: 'space-between', 
+        <Toolbar sx={{
+          justifyContent: 'space-between',
           px: { xs: 1, sm: 2 },
           minHeight: { xs: 56, sm: 64 },
           gap: 1
         }}>
           {/* Left Section - Menu Button */}
-          <Box sx={{ 
-            display: 'flex', 
+          <Box sx={{
+            display: 'flex',
             alignItems: 'center',
             minWidth: 'fit-content'
           }}>
@@ -522,7 +522,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               edge="start"
               color="inherit"
               onClick={onMenuClick ? onMenuClick : toggleDrawer}
-              sx={{ 
+              sx={{
                 mr: { xs: 0.5, sm: 1 },
                 p: { xs: 1, sm: 1.5 },
                 '& .MuiSvgIcon-root': {
@@ -536,16 +536,16 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
           {/* Center Section - Company Logo/Name */}
           {!isMobile && (
-            <Box 
-              sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
                 cursor: 'pointer',
                 position: 'absolute',
                 left: '50%',
                 transform: 'translateX(-50%)',
                 zIndex: 1
-              }} 
+              }}
               onClick={() => navigate('/')}
             >
               <Typography
@@ -568,9 +568,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           )}
 
           {/* Right Section - Search, Filter, Actions, Coins, Profile */}
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
             gap: { xs: 0.5, sm: 1 },
             position: 'relative',
             flex: 1,
@@ -588,7 +588,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                         color="inherit"
                         onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
                         size="small"
-                        sx={{ 
+                        sx={{
                           backgroundColor: 'rgba(0,0,0,0.04)',
                           '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
                           '& .MuiSvgIcon-root': {
@@ -599,7 +599,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                       >
                         <Search />
                       </IconButton>
-                      
+
                       {/* Mobile Search Bar - positioned relative to search icon */}
                       {mobileSearchOpen && (
                         <Box
@@ -633,10 +633,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                               onChange={(e) => {
                                 const query = e.target.value;
                                 setSearchQuery(query);
-                                
+
                                 if (query.trim()) {
                                   let fieldsToSearch = applyFilters(fields);
-                                  
+
                                   const filtered = fieldsToSearch.filter(field => {
                                     const searchTerm = query.toLowerCase();
                                     return (
@@ -659,7 +659,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                                   setFilteredFields([]);
                                   setSearchAnchorEl(null);
                                 }
-                                
+
                                 if (onSearchChange) {
                                   onSearchChange(query);
                                 }
@@ -676,7 +676,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                       )}
                     </Box>
                   )}
-                  
+
                   {/* Desktop Search Bar */}
                   {!isMobile && (
                     <Box
@@ -691,57 +691,57 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                         position: 'relative'
                       }}
                     >
-                    {!isMobile && <Search sx={{ color: 'grey.500', mr: 1, fontSize: '20px' }} />}
-                    <InputBase
-                      placeholder="Search fields, crops..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        const query = e.target.value;
-                        setSearchQuery(query);
-                        
-                        if (query.trim()) {
-                          let fieldsToSearch = applyFilters(fields);
-                          
-                          const filtered = fieldsToSearch.filter(field => {
-                            const searchTerm = query.toLowerCase();
-                            return (
-                              field.product_name?.toLowerCase().includes(searchTerm) ||
-                              field.productName?.toLowerCase().includes(searchTerm) ||
-                              field.name?.toLowerCase().includes(searchTerm) ||
-                              field.category?.toLowerCase().includes(searchTerm) ||
-                              field.subcategory?.toLowerCase().includes(searchTerm) ||
-                              field.farmer?.toLowerCase().includes(searchTerm) ||
-                              field.owner?.toLowerCase().includes(searchTerm) ||
-                              field.description?.toLowerCase().includes(searchTerm) ||
-                              field.location?.toLowerCase().includes(searchTerm) ||
-                              field.farm_name?.toLowerCase().includes(searchTerm) ||
-                              field.farmName?.toLowerCase().includes(searchTerm)
-                            );
-                          });
-                          setFilteredFields(filtered.slice(0, 5));
-                          setSearchAnchorEl(e.currentTarget.parentElement);
-                        } else {
-                          setFilteredFields([]);
-                          setSearchAnchorEl(null);
-                        }
-                        
-                        if (onSearchChange) {
-                          onSearchChange(query);
-                        }
-                      }}
-                      onFocus={(e) => {
-                        if (searchQuery.trim() && filteredFields.length > 0) {
-                          setSearchAnchorEl(e.currentTarget.parentElement);
-                        }
-                      }}
-                      sx={{ flex: 1, fontSize: '14px' }}
-                    />
+                      {!isMobile && <Search sx={{ color: 'grey.500', mr: 1, fontSize: '20px' }} />}
+                      <InputBase
+                        placeholder="Search fields, crops..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          const query = e.target.value;
+                          setSearchQuery(query);
+
+                          if (query.trim()) {
+                            let fieldsToSearch = applyFilters(fields);
+
+                            const filtered = fieldsToSearch.filter(field => {
+                              const searchTerm = query.toLowerCase();
+                              return (
+                                field.product_name?.toLowerCase().includes(searchTerm) ||
+                                field.productName?.toLowerCase().includes(searchTerm) ||
+                                field.name?.toLowerCase().includes(searchTerm) ||
+                                field.category?.toLowerCase().includes(searchTerm) ||
+                                field.subcategory?.toLowerCase().includes(searchTerm) ||
+                                field.farmer?.toLowerCase().includes(searchTerm) ||
+                                field.owner?.toLowerCase().includes(searchTerm) ||
+                                field.description?.toLowerCase().includes(searchTerm) ||
+                                field.location?.toLowerCase().includes(searchTerm) ||
+                                field.farm_name?.toLowerCase().includes(searchTerm) ||
+                                field.farmName?.toLowerCase().includes(searchTerm)
+                              );
+                            });
+                            setFilteredFields(filtered.slice(0, 5));
+                            setSearchAnchorEl(e.currentTarget.parentElement);
+                          } else {
+                            setFilteredFields([]);
+                            setSearchAnchorEl(null);
+                          }
+
+                          if (onSearchChange) {
+                            onSearchChange(query);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          if (searchQuery.trim() && filteredFields.length > 0) {
+                            setSearchAnchorEl(e.currentTarget.parentElement);
+                          }
+                        }}
+                        sx={{ flex: 1, fontSize: '14px' }}
+                      />
                     </Box>
                   )}
                 </Box>
 
                 {/* Filter Icon */}
-                <Badge 
+                <Badge
                   badgeContent={activeFilters.categories.length + activeFilters.subcategories.length}
                   color="primary"
                   invisible={activeFilters.categories.length + activeFilters.subcategories.length === 0}
@@ -757,7 +757,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     color="inherit"
                     onClick={(e) => setFilterAnchorEl(e.currentTarget)}
                     size={isMobile ? "small" : "medium"}
-                    sx={{ 
+                    sx={{
                       backgroundColor: 'rgba(0,0,0,0.04)',
                       '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
                       ...(filterAnchorEl && {
@@ -779,190 +779,191 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               </>
             )}
 
-              {/* Create Field Button - Only show for farmers */}
-              {userType === 'farmer' && (
-                <Tooltip title="Create New Field">
-                  <IconButton
-                    color="inherit"
-                    onClick={onCreateField}
-                    size={isMobile ? "small" : "medium"}
-                    sx={{ 
-                      backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                      color: '#4CAF50',
-                      '&:hover': { 
-                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                        transform: 'scale(1.05)'
-                      },
-                      transition: 'all 0.2s ease-in-out',
-                      border: '1px solid rgba(76, 175, 80, 0.3)',
-                      '& .MuiSvgIcon-root': {
-                        fontSize: isMobile ? '18px' : '24px'
-                      }
-                    }}
-                  >
-                    <Add />
-                  </IconButton>
-                </Tooltip>
-              )}
-
-              {/* Farmer Coins */}
-              {!isAdmin && (
-                <Tooltip 
-                  title={
-                    <Box sx={{ textAlign: 'center', py: 0.3 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.3, fontSize: '11px' }}>
-                        Farmer Coins Balance
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: 'block', mb: 0.3, fontSize: '10px' }}>
-                        1 Farmer Coin = $100
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'success.light', fontSize: '10px' }}>
-                        You have {userCoins.toLocaleString()} coins = ${(userCoins * 100).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  }
-                  arrow
-                  placement="bottom"
-                  componentsProps={{
-                    tooltip: {
-                      sx: {
-                        maxWidth: 180,
-                        fontSize: '10px',
-                        p: 1
-                      }
+            {/* Create Field Button - Only show for farmers */}
+            {userType === 'farmer' && (
+              <Tooltip title="Create New Field">
+                <IconButton
+                  color="inherit"
+                  onClick={onCreateField}
+                  size={isMobile ? "small" : "medium"}
+                  sx={{
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    color: '#4CAF50',
+                    '&:hover': {
+                      backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                      transform: 'scale(1.05)'
+                    },
+                    transition: 'all 0.2s ease-in-out',
+                    border: '1px solid rgba(76, 175, 80, 0.3)',
+                    '& .MuiSvgIcon-root': {
+                      fontSize: isMobile ? '18px' : '24px'
                     }
                   }}
                 >
-                  <Chip
-                    icon={<span style={{ fontSize: isMobile ? '12px' : '14px' }}>🪙</span>}
-                    label={userCoins.toLocaleString()}
-                    variant="outlined"
-                    size={isMobile ? "small" : "medium"}
-                    sx={{ 
-                      fontWeight: 'bold',
-                      borderColor: '#FF9800',
-                      color: '#F57C00',
-                      backgroundColor: 'rgba(255, 152, 0, 0.1)',
-                      cursor: 'pointer',
-                      height: isMobile ? 24 : 32,
-                      '& .MuiChip-label': {
-                        fontSize: isMobile ? '11px' : '12px',
-                        px: isMobile ? 0.5 : 1
-                      },
-                      '& .MuiChip-icon': {
-                        marginLeft: isMobile ? '4px' : '8px',
-                        marginRight: isMobile ? '-2px' : '-6px'
-                      },
-                      '&:hover': {
-                        backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                        borderColor: '#F57C00',
-                      }
-                    }}
-                  />
-                </Tooltip>
-              )}
+                  <Add />
+                </IconButton>
+              </Tooltip>
+            )}
 
-              {/* Profile - Clickable Avatar with Menu */}
-              {!isMobile && (
-                <>
-                  <Box
-                    onClick={(e) => setUserMenuAnchorEl(e.currentTarget)}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      cursor: 'pointer',
-                      borderRadius: 2,
-                      px: 1,
-                      py: 0.5,
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                      },
-                    }}
-                  >
-                    <Avatar 
-                      sx={{ 
-                        width: 36, 
-                        height: 36, 
-                        bgcolor: 'primary.main',
-                        fontSize: '14px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                    </Avatar>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 500,
-                        color: 'text.primary',
-                        display: { xs: 'none', sm: 'block' }
-                      }}
-                    >
-                      {user?.name?.split(' ')[0] || user?.name || 'User'}
+            {/* Farmer Coins */}
+            {!isAdmin && (
+              <Tooltip
+                title={
+                  <Box sx={{ textAlign: 'center', py: 0.3 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.3, fontSize: '11px' }}>
+                      Farmer Coins Balance
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mb: 0.3, fontSize: '10px' }}>
+                      1 Farmer Coin = $100
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'success.light', fontSize: '10px' }}>
+                      You have {userCoins.toLocaleString()} coins = ${(userCoins * 100).toLocaleString()}
                     </Typography>
                   </Box>
-                  
-                  <Menu
-                    anchorEl={userMenuAnchorEl}
-                    open={Boolean(userMenuAnchorEl)}
-                    onClose={() => setUserMenuAnchorEl(null)}
-                    anchorOrigin={{
-                      vertical: 'bottom',
-                      horizontal: 'right',
-                    }}
-                    transformOrigin={{
-                      vertical: 'top',
-                      horizontal: 'right',
-                    }}
-                    PaperProps={{
-                      sx: {
-                        mt: 1,
-                        minWidth: 200,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                        borderRadius: 2,
-                      }
+                }
+                arrow
+                placement="bottom"
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      maxWidth: 180,
+                      fontSize: '10px',
+                      p: 1
+                    }
+                  }
+                }}
+              >
+                <Chip
+                  icon={<span style={{ fontSize: isMobile ? '12px' : '14px' }}>🪙</span>}
+                  label={userCoins.toLocaleString()}
+                  variant="outlined"
+                  size={isMobile ? "small" : "medium"}
+                  sx={{
+                    fontWeight: 'bold',
+                    borderColor: '#FF9800',
+                    color: '#F57C00',
+                    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                    cursor: 'pointer',
+                    height: isMobile ? 24 : 32,
+                    '& .MuiChip-label': {
+                      fontSize: isMobile ? '11px' : '12px',
+                      px: isMobile ? 0.5 : 1
+                    },
+                    '& .MuiChip-icon': {
+                      marginLeft: isMobile ? '4px' : '8px',
+                      marginRight: isMobile ? '-2px' : '-6px'
+                    },
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                      borderColor: '#F57C00',
+                    }
+                  }}
+                />
+              </Tooltip>
+            )}
+
+            {/* Profile - Clickable Avatar with Menu */}
+            {!isMobile && (
+              <>
+                <Box
+                  onClick={(e) => setUserMenuAnchorEl(e.currentTarget)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    cursor: 'pointer',
+                    borderRadius: 2,
+                    px: 1,
+                    py: 0.5,
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                    },
+                  }}
+                >
+                  <Avatar
+                    src={user?.profile_image_url}
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      bgcolor: 'primary.main',
+                      fontSize: '14px',
+                      cursor: 'pointer'
                     }}
                   >
-                    <MenuItem disabled>
-                      <ListItemIcon>
-                        <Person fontSize="small" />
-                      </ListItemIcon>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {user?.name || 'User'}
-                      </Typography>
-                    </MenuItem>
-                    <Divider />
-                    <MenuItem
-                      onClick={() => {
-                        setUserMenuAnchorEl(null);
-                        navigate(userType === 'farmer' ? '/farmer/profile' : '/buyer/profile');
-                      }}
-                    >
-                      <ListItemIcon>
-                        <Person fontSize="small" />
-                      </ListItemIcon>
-                      View Profile
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() => {
-                        setUserMenuAnchorEl(null);
-                        if (onLogout) {
-                          onLogout();
-                        }
-                      }}
-                      sx={{ color: 'error.main' }}
-                    >
-                      <ListItemIcon>
-                        <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
-                      </ListItemIcon>
-                      Logout
-                    </MenuItem>
-                  </Menu>
-                </>
-              )}
-            </Box>
-          </Toolbar>
+                    {!user?.profile_image_url && (user?.name?.charAt(0)?.toUpperCase() || 'U')}
+                  </Avatar>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 500,
+                      color: 'text.primary',
+                      display: { xs: 'none', sm: 'block' }
+                    }}
+                  >
+                    {user?.name?.split(' ')[0] || user?.name || 'User'}
+                  </Typography>
+                </Box>
+
+                <Menu
+                  anchorEl={userMenuAnchorEl}
+                  open={Boolean(userMenuAnchorEl)}
+                  onClose={() => setUserMenuAnchorEl(null)}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'right',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                  PaperProps={{
+                    sx: {
+                      mt: 1,
+                      minWidth: 200,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      borderRadius: 2,
+                    }
+                  }}
+                >
+                  <MenuItem disabled>
+                    <ListItemIcon>
+                      <Person fontSize="small" />
+                    </ListItemIcon>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {user?.name || 'User'}
+                    </Typography>
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      setUserMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/profile' : '/buyer/profile');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <Person fontSize="small" />
+                    </ListItemIcon>
+                    View Profile
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setUserMenuAnchorEl(null);
+                      if (onLogout) {
+                        onLogout();
+                      }
+                    }}
+                    sx={{ color: 'error.main' }}
+                  >
+                    <ListItemIcon>
+                      <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
+                    </ListItemIcon>
+                    Logout
+                  </MenuItem>
+                </Menu>
+              </>
+            )}
+          </Box>
+        </Toolbar>
       </AppBar>
 
       <Dialog open={pickupPanelOpen} onClose={() => setPickupPanelOpen(false)} fullWidth maxWidth="sm">
@@ -1007,149 +1008,152 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
       {/* Collapsible Side Menu */}
       {userType !== 'admin' && (
-      <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={toggleDrawer}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: isMobile ? 220 : 280,
-            boxSizing: 'border-box',
-            backgroundColor: 'background.paper',
-            top: 'var(--app-header-height)',
-            height: 'calc(100% - var(--app-header-height))',
-            pt: 2,
-          },
-        }}
-      >
-        <Box sx={{ p: isMobile ? 1.5 : 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isMobile ? 1.5 : 2 }}>
-            <Typography 
-              variant="h6" 
-              sx={{ 
-                fontWeight: 'bold',
-                fontSize: isMobile ? '1.1rem' : '1.25rem'
-              }}
-            >
-              🌱 ShareCrop
-            </Typography>
-            <IconButton onClick={toggleDrawer} size="small">
-              <Close />
-            </IconButton>
-          </Box>
-          
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: isMobile ? 1.5 : 2 }}>
-            <Avatar sx={{ 
-              mr: isMobile ? 1.5 : 2, 
-              bgcolor: 'primary.main',
-              width: isMobile ? 36 : 40,
-              height: isMobile ? 36 : 40,
-              fontSize: isMobile ? '0.9rem' : '1rem'
-            }}>
-              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-            </Avatar>
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography 
-                variant="body1" 
-                sx={{ 
+        <Drawer
+          anchor="left"
+          open={drawerOpen}
+          onClose={toggleDrawer}
+          sx={{
+            '& .MuiDrawer-paper': {
+              width: isMobile ? 220 : 280,
+              boxSizing: 'border-box',
+              backgroundColor: 'background.paper',
+              top: 'var(--app-header-height)',
+              height: 'calc(100% - var(--app-header-height))',
+              pt: 2,
+            },
+          }}
+        >
+          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isMobile ? 1.5 : 2 }}>
+              <Typography
+                variant="h6"
+                sx={{
                   fontWeight: 'bold',
-                  fontSize: isMobile ? '0.9rem' : '1rem',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
+                  fontSize: isMobile ? '1.1rem' : '1.25rem'
                 }}
               >
-                {user?.name?.split(' ')[0] || user?.name || 'User'}
+                🌱 ShareCrop
               </Typography>
-              <Chip
-                label={user?.user_type || 'User'}
-                size="small"
-                color={user?.user_type === 'farmer' ? 'primary' : 'secondary'}
-                sx={{ 
-                  textTransform: 'capitalize',
-                  fontSize: isMobile ? '0.7rem' : '0.75rem',
-                  height: isMobile ? 20 : 24
+              <IconButton onClick={toggleDrawer} size="small">
+                <Close />
+              </IconButton>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: isMobile ? 1.5 : 2 }}>
+              <Avatar
+                src={user?.profile_image_url}
+                sx={{
+                  mr: isMobile ? 1.5 : 2,
+                  bgcolor: 'primary.main',
+                  width: isMobile ? 36 : 40,
+                  height: isMobile ? 36 : 40,
+                  fontSize: isMobile ? '0.9rem' : '1rem'
                 }}
-              />
+              >
+                {!user?.profile_image_url && (user?.name?.charAt(0)?.toUpperCase() || 'U')}
+              </Avatar>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography
+                  variant="body1"
+                  sx={{
+                    fontWeight: 'bold',
+                    fontSize: isMobile ? '0.9rem' : '1rem',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {user?.name?.split(' ')[0] || user?.name || 'User'}
+                </Typography>
+                <Chip
+                  label={user?.user_type || 'User'}
+                  size="small"
+                  color={user?.user_type === 'farmer' ? 'primary' : 'secondary'}
+                  sx={{
+                    textTransform: 'capitalize',
+                    fontSize: isMobile ? '0.7rem' : '0.75rem',
+                    height: isMobile ? 20 : 24
+                  }}
+                />
+              </Box>
             </Box>
           </Box>
-        </Box>
 
-        <Divider />
+          <Divider />
 
-        <List sx={{ py: isMobile ? 0.5 : 1 }}>
-          {menuItems.map((item) => (
+          <List sx={{ py: isMobile ? 0.5 : 1 }}>
+            {menuItems.map((item) => (
+              <ListItem
+                button
+                key={item.text}
+                onClick={() => handleNavigation(item.path)}
+                selected={location.pathname === item.path}
+                sx={{
+                  py: isMobile ? 0.5 : 1,
+                  px: isMobile ? 1.5 : 2,
+                  minHeight: isMobile ? 40 : 48,
+                  '&.Mui-selected': {
+                    backgroundColor: 'primary.light',
+                    color: 'primary.main',
+                    '& .MuiListItemIcon-root': {
+                      color: 'primary.main',
+                    },
+                  },
+                  '&.Mui-selected:hover': {
+                    backgroundColor: 'primary.light',
+                  },
+                }}
+              >
+                <ListItemIcon sx={{
+                  color: 'inherit',
+                  minWidth: isMobile ? 32 : 40,
+                  '& svg': {
+                    fontSize: isMobile ? '1.2rem' : '1.5rem'
+                  }
+                }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.text}
+                  primaryTypographyProps={{
+                    fontSize: isMobile ? '0.85rem' : '1rem',
+                    fontWeight: location.pathname === item.path ? 600 : 400
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+
+          <Divider />
+
+          <List sx={{ py: isMobile ? 0.5 : 1 }}>
             <ListItem
               button
-              key={item.text}
-              onClick={() => handleNavigation(item.path)}
-              selected={location.pathname === item.path}
+              onClick={handleLogout}
               sx={{
                 py: isMobile ? 0.5 : 1,
                 px: isMobile ? 1.5 : 2,
                 minHeight: isMobile ? 40 : 48,
-                '&.Mui-selected': {
-                  backgroundColor: 'primary.light',
-                  color: 'primary.main',
-                  '& .MuiListItemIcon-root': {
-                    color: 'primary.main',
-                  },
-                },
-                '&.Mui-selected:hover': {
-                  backgroundColor: 'primary.light',
-                },
               }}
             >
-              <ListItemIcon sx={{ 
-                color: 'inherit',
+              <ListItemIcon sx={{
                 minWidth: isMobile ? 32 : 40,
                 '& svg': {
                   fontSize: isMobile ? '1.2rem' : '1.5rem'
                 }
               }}>
-                {item.icon}
+                <ExitToApp />
               </ListItemIcon>
-              <ListItemText 
-                primary={item.text}
+              <ListItemText
+                primary="Logout"
                 primaryTypographyProps={{
                   fontSize: isMobile ? '0.85rem' : '1rem',
-                  fontWeight: location.pathname === item.path ? 600 : 400
+                  fontWeight: 400
                 }}
               />
             </ListItem>
-          ))}
-        </List>
-
-        <Divider />
-
-        <List sx={{ py: isMobile ? 0.5 : 1 }}>
-          <ListItem 
-            button 
-            onClick={handleLogout}
-            sx={{
-              py: isMobile ? 0.5 : 1,
-              px: isMobile ? 1.5 : 2,
-              minHeight: isMobile ? 40 : 48,
-            }}
-          >
-            <ListItemIcon sx={{ 
-              minWidth: isMobile ? 32 : 40,
-              '& svg': {
-                fontSize: isMobile ? '1.2rem' : '1.5rem'
-              }
-            }}>
-              <ExitToApp />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Logout"
-              primaryTypographyProps={{
-                fontSize: isMobile ? '0.85rem' : '1rem',
-                fontWeight: 400
-              }}
-            />
-          </ListItem>
-        </List>
-      </Drawer>
+          </List>
+        </Drawer>
       )}
 
       {/* Search Dropdown */}
@@ -1165,8 +1169,8 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             },
           },
         ]}
-        sx={{ 
-          zIndex: 1400, 
+        sx={{
+          zIndex: 1400,
           width: Math.max(searchAnchorEl?.offsetWidth || 280, 280),
           ...(isMobile && {
             width: '260px',
@@ -1199,23 +1203,23 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     setFilteredFields([]);
                   }}
                   sx={{
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      py: isMobile ? 0.6 : 0.8,
-                      px: isMobile ? 1.5 : 2,
-                      minHeight: 'auto',
-                      width: '100%',
-                      '&:hover': {
-                        backgroundColor: 'rgba(46, 125, 50, 0.04)',
-                      },
-                      '&:not(:last-child)': {
-                        borderBottom: '1px solid rgba(0,0,0,0.08)',
-                      },
-                    }}
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    py: isMobile ? 0.6 : 0.8,
+                    px: isMobile ? 1.5 : 2,
+                    minHeight: 'auto',
+                    width: '100%',
+                    '&:hover': {
+                      backgroundColor: 'rgba(46, 125, 50, 0.04)',
+                    },
+                    '&:not(:last-child)': {
+                      borderBottom: '1px solid rgba(0,0,0,0.08)',
+                    },
+                  }}
                 >
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
+                  <Typography
+                    variant="body2"
+                    sx={{
                       fontWeight: 500,
                       fontSize: isMobile ? '0.7rem' : '0.8rem',
                       color: 'text.primary',
@@ -1227,8 +1231,8 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   >
                     {field.product_name || field.productName || field.name}
                   </Typography>
-                  <Typography 
-                    variant="caption" 
+                  <Typography
+                    variant="caption"
                     sx={{
                       fontSize: isMobile ? '0.6rem' : '0.7rem',
                       color: 'text.secondary',
@@ -1240,8 +1244,8 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   >
                     {field.farmer || field.owner} • {field.location}
                   </Typography>
-                  <Typography 
-                    variant="caption" 
+                  <Typography
+                    variant="caption"
                     sx={{
                       fontSize: isMobile ? '0.55rem' : '0.65rem',
                       color: 'success.main',
@@ -1281,7 +1285,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             },
           },
         ]}
-        sx={{ 
+        sx={{
           zIndex: 1400,
           position: 'fixed !important',
         }}
@@ -1307,147 +1311,147 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                 Filter Farms
               </Typography>
               <Divider sx={{ mb: 2, flexShrink: 0 }} />
-              
+
               {/* Category and Subcategory Filters */}
               <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, fontSize: '0.7rem', color: 'text.secondary' }}>
-                Categories
-              </Typography>
-              {(() => {
-                const CATEGORY_OPTIONS = {
-                  'Beverages': ['Beer', 'Coffee', 'Juice', 'Milk', 'Soda', 'Teabags', 'Wine'],
-                  'Bread & Bakery': ['Bagels', 'Bread', 'Cookies', 'Muffins', 'Pies', 'Tortillas'],
-                  'Canned Goods': ['Fruit', 'Pasta Sauce', 'Soup', 'Vegetables'],
-                  'Dairy': ['Butter', 'Cheese', 'Eggs', 'Milk'],
-                  'Deli': ['Cheeses', 'Salami'],
-                  'Fish & Seafood': ['Bivalves & Clams', 'Crab', 'Fish', 'Lobster', 'Octopus & Squid', 'Shrimp'],
-                  'Frozen Food': ['Fish', 'Ice cream', 'Pizza', 'Potatoes', 'Ready Meals'],
-                  'Fruits': ['Green Apple', 'Red Apple', 'Peach', 'Strawberry', 'Tangerine', 'Watermelon', 'Avocados', 'Mango', 'Grapes', 'Banana'],
-                  'Vegetables': ['Corn', 'Eggplant', 'Lemon', 'Tomato', 'Broccoli', 'Capsicum', 'Carrot', 'Onions', 'Potatoes', 'Salad Greens'],
-                  'Meat': ['Bacon', 'Chicken', 'Beef', 'Pork'],
-                  'Oil': ['Coconut Oil', 'Olive Oil', 'Peanut Oil', 'Sunflower Oil'],
-                  'Seeds': ['Hibiscus', 'Rice Seeds', 'Rose'],
-                  'Snacks': ['Nuts', 'Popcorn', 'Pretzels']
-                };
-                const categories = Object.keys(CATEGORY_OPTIONS);
-                const isAllSubsSelected = (category) => {
-                  const subs = CATEGORY_OPTIONS[category] || [];
-                  return subs.length > 0 && subs.every(s => activeFilters.subcategories.includes(s));
-                };
-                const isSomeSubsSelected = (category) => {
-                  const subs = CATEGORY_OPTIONS[category] || [];
-                  const count = subs.filter(s => activeFilters.subcategories.includes(s)).length;
-                  return count > 0 && count < subs.length;
-                };
-                return (
-                  <Box>
-                    {categories.map((category) => {
-                      const checkedCat = activeFilters.categories.includes(category) || isAllSubsSelected(category);
-                      const indeterminateCat = !checkedCat && isSomeSubsSelected(category);
-                      return (
-                        <Box key={category} sx={{ mb: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  size="small"
-                                  checked={checkedCat}
-                                  indeterminate={indeterminateCat}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setActiveFilters(prev => {
-                                      const subs = CATEGORY_OPTIONS[category] || [];
-                                      let categories = prev.categories;
-                                      let subcategories = prev.subcategories;
-                                      if (checked) {
-                                        categories = categories.includes(category) ? categories : [...categories, category];
-                                        const mergedSubs = new Set(subcategories);
-                                        subs.forEach(s => mergedSubs.add(s));
-                                        subcategories = Array.from(mergedSubs);
-                                      } else {
-                                        categories = categories.filter(c => c !== category);
-                                        subcategories = subcategories.filter(s => !subs.includes(s));
-                                      }
-                                      return { ...prev, categories, subcategories };
-                                    });
-                                  }}
-                                />
-                              }
-                              label={category}
-                              sx={{ 
-                                '& .MuiFormControlLabel-label': { 
-                                  fontSize: '0.65rem',
-                                  color: 'text.primary'
-                                },
-                                '& .MuiCheckbox-root': {
-                                  color: 'rgba(76, 175, 80, 0.6)',
-                                  '&.Mui-checked': {
-                                    color: '#4CAF50'
-                                  }
-                                }
-                              }}
-                            />
-                            <IconButton size="small" onClick={() => setExpanded(prev => ({ ...prev, [category]: !prev[category] }))}>
-                              <ExpandMore sx={{ transform: expanded[category] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
-                            </IconButton>
-                          </Box>
-                          <Box sx={{ pl: 2 }}>
-                            <Box sx={{ display: expanded[category] ? 'block' : 'none' }}>
-                              <FormGroup>
-                                {CATEGORY_OPTIONS[category].map((sub) => (
-                                  <FormControlLabel
-                                    key={`${category}-${sub}`}
-                                    control={
-                                      <Checkbox
-                                        size="small"
-                                        checked={activeFilters.subcategories.includes(sub)}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
-                                          setActiveFilters(prev => {
-                                            const subs = CATEGORY_OPTIONS[category] || [];
-                                            let categories = prev.categories;
-                                            let subcategories = prev.subcategories;
-                                            if (checked) {
-                                              subcategories = subcategories.includes(sub) ? subcategories : [...subcategories, sub];
-                                            } else {
-                                              subcategories = subcategories.filter(s => s !== sub);
-                                            }
-                                            const allSelected = subs.every(s => subcategories.includes(s));
-                                            if (allSelected) {
-                                              categories = categories.includes(category) ? categories : [...categories, category];
-                                            } else {
-                                              categories = categories.filter(c => c !== category);
-                                            }
-                                            return { ...prev, categories, subcategories };
-                                          });
-                                        }}
-                                      />
-                                    }
-                                    label={sub}
-                                    sx={{
-                                      '& .MuiFormControlLabel-label': {
-                                        fontSize: '0.65rem',
-                                        color: 'text.primary'
-                                      },
-                                      '& .MuiCheckbox-root': {
-                                        color: 'rgba(76, 175, 80, 0.6)',
-                                        '&.Mui-checked': {
-                                          color: '#4CAF50'
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, fontSize: '0.7rem', color: 'text.secondary' }}>
+                  Categories
+                </Typography>
+                {(() => {
+                  const CATEGORY_OPTIONS = {
+                    'Beverages': ['Beer', 'Coffee', 'Juice', 'Milk', 'Soda', 'Teabags', 'Wine'],
+                    'Bread & Bakery': ['Bagels', 'Bread', 'Cookies', 'Muffins', 'Pies', 'Tortillas'],
+                    'Canned Goods': ['Fruit', 'Pasta Sauce', 'Soup', 'Vegetables'],
+                    'Dairy': ['Butter', 'Cheese', 'Eggs', 'Milk'],
+                    'Deli': ['Cheeses', 'Salami'],
+                    'Fish & Seafood': ['Bivalves & Clams', 'Crab', 'Fish', 'Lobster', 'Octopus & Squid', 'Shrimp'],
+                    'Frozen Food': ['Fish', 'Ice cream', 'Pizza', 'Potatoes', 'Ready Meals'],
+                    'Fruits': ['Green Apple', 'Red Apple', 'Peach', 'Strawberry', 'Tangerine', 'Watermelon', 'Avocados', 'Mango', 'Grapes', 'Banana'],
+                    'Vegetables': ['Corn', 'Eggplant', 'Lemon', 'Tomato', 'Broccoli', 'Capsicum', 'Carrot', 'Onions', 'Potatoes', 'Salad Greens'],
+                    'Meat': ['Bacon', 'Chicken', 'Beef', 'Pork'],
+                    'Oil': ['Coconut Oil', 'Olive Oil', 'Peanut Oil', 'Sunflower Oil'],
+                    'Seeds': ['Hibiscus', 'Rice Seeds', 'Rose'],
+                    'Snacks': ['Nuts', 'Popcorn', 'Pretzels']
+                  };
+                  const categories = Object.keys(CATEGORY_OPTIONS);
+                  const isAllSubsSelected = (category) => {
+                    const subs = CATEGORY_OPTIONS[category] || [];
+                    return subs.length > 0 && subs.every(s => activeFilters.subcategories.includes(s));
+                  };
+                  const isSomeSubsSelected = (category) => {
+                    const subs = CATEGORY_OPTIONS[category] || [];
+                    const count = subs.filter(s => activeFilters.subcategories.includes(s)).length;
+                    return count > 0 && count < subs.length;
+                  };
+                  return (
+                    <Box>
+                      {categories.map((category) => {
+                        const checkedCat = activeFilters.categories.includes(category) || isAllSubsSelected(category);
+                        const indeterminateCat = !checkedCat && isSomeSubsSelected(category);
+                        return (
+                          <Box key={category} sx={{ mb: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    size="small"
+                                    checked={checkedCat}
+                                    indeterminate={indeterminateCat}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setActiveFilters(prev => {
+                                        const subs = CATEGORY_OPTIONS[category] || [];
+                                        let categories = prev.categories;
+                                        let subcategories = prev.subcategories;
+                                        if (checked) {
+                                          categories = categories.includes(category) ? categories : [...categories, category];
+                                          const mergedSubs = new Set(subcategories);
+                                          subs.forEach(s => mergedSubs.add(s));
+                                          subcategories = Array.from(mergedSubs);
+                                        } else {
+                                          categories = categories.filter(c => c !== category);
+                                          subcategories = subcategories.filter(s => !subs.includes(s));
                                         }
-                                      }
+                                        return { ...prev, categories, subcategories };
+                                      });
                                     }}
                                   />
-                                ))}
-                              </FormGroup>
+                                }
+                                label={category}
+                                sx={{
+                                  '& .MuiFormControlLabel-label': {
+                                    fontSize: '0.65rem',
+                                    color: 'text.primary'
+                                  },
+                                  '& .MuiCheckbox-root': {
+                                    color: 'rgba(76, 175, 80, 0.6)',
+                                    '&.Mui-checked': {
+                                      color: '#4CAF50'
+                                    }
+                                  }
+                                }}
+                              />
+                              <IconButton size="small" onClick={() => setExpanded(prev => ({ ...prev, [category]: !prev[category] }))}>
+                                <ExpandMore sx={{ transform: expanded[category] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+                              </IconButton>
                             </Box>
+                            <Box sx={{ pl: 2 }}>
+                              <Box sx={{ display: expanded[category] ? 'block' : 'none' }}>
+                                <FormGroup>
+                                  {CATEGORY_OPTIONS[category].map((sub) => (
+                                    <FormControlLabel
+                                      key={`${category}-${sub}`}
+                                      control={
+                                        <Checkbox
+                                          size="small"
+                                          checked={activeFilters.subcategories.includes(sub)}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setActiveFilters(prev => {
+                                              const subs = CATEGORY_OPTIONS[category] || [];
+                                              let categories = prev.categories;
+                                              let subcategories = prev.subcategories;
+                                              if (checked) {
+                                                subcategories = subcategories.includes(sub) ? subcategories : [...subcategories, sub];
+                                              } else {
+                                                subcategories = subcategories.filter(s => s !== sub);
+                                              }
+                                              const allSelected = subs.every(s => subcategories.includes(s));
+                                              if (allSelected) {
+                                                categories = categories.includes(category) ? categories : [...categories, category];
+                                              } else {
+                                                categories = categories.filter(c => c !== category);
+                                              }
+                                              return { ...prev, categories, subcategories };
+                                            });
+                                          }}
+                                        />
+                                      }
+                                      label={sub}
+                                      sx={{
+                                        '& .MuiFormControlLabel-label': {
+                                          fontSize: '0.65rem',
+                                          color: 'text.primary'
+                                        },
+                                        '& .MuiCheckbox-root': {
+                                          color: 'rgba(76, 175, 80, 0.6)',
+                                          '&.Mui-checked': {
+                                            color: '#4CAF50'
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  ))}
+                                </FormGroup>
+                              </Box>
+                            </Box>
+                            <Divider sx={{ my: 1 }} />
                           </Box>
-                          <Divider sx={{ my: 1 }} />
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                );
-              })()}
+                        );
+                      })}
+                    </Box>
+                  );
+                })()}
               </Box>
 
               {/* Action Buttons */}

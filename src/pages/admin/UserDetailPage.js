@@ -23,6 +23,7 @@ import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
 import { orderService } from '../../services/orders';
 import { transactionsService } from '../../services/transactions';
+import { userDocumentsService } from '../../services/userDocuments';
 import './UserDetailPage.css';
 
 const UserDetailPage = () => {
@@ -36,6 +37,7 @@ const UserDetailPage = () => {
     const [complaintsAgainst, setComplaintsAgainst] = useState([]);
     const [complaintsMade, setComplaintsMade] = useState([]);
     const [documents, setDocuments] = useState(null);
+    const [userDocs, setUserDocs] = useState([]);
     const [error, setError] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -50,29 +52,33 @@ const UserDetailPage = () => {
 
                 // Load specific data based on role
                 if (userResp.data.user_type === 'farmer') {
-                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, docsResp, transResp] = await Promise.all([
+                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, docsResp, transResp, userDocsResp] = await Promise.all([
                         orderService.getFarmerOrders(id),
                         complaintService.getComplaints({ complained_against_user_id: id }),
                         complaintService.getComplaints({ user_id: id }),
                         adminService.getFarmerDocuments(id),
-                        transactionsService.getUserTransactions(id)
+                        transactionsService.getUserTransactions(id),
+                        userDocumentsService.getUserDocuments(id)
                     ]);
                     setOrders(Array.isArray(ordersResp.data) ? ordersResp.data : []);
                     setComplaintsAgainst(Array.isArray(complaintsAgainstResp.data) ? complaintsAgainstResp.data : []);
                     setComplaintsMade(Array.isArray(complaintsMadeResp.data) ? complaintsMadeResp.data : []);
                     setDocuments(docsResp.data?.documents || null);
                     setTransactions(Array.isArray(transResp.data) ? transResp.data : []);
+                    setUserDocs(userDocsResp.data || []);
                 } else {
-                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, transResp] = await Promise.all([
+                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, transResp, userDocsResp] = await Promise.all([
                         orderService.getBuyerOrdersWithFields(id),
                         complaintService.getComplaints({ complained_against_user_id: id }),
                         complaintService.getComplaints({ user_id: id }),
-                        transactionsService.getUserTransactions(id)
+                        transactionsService.getUserTransactions(id),
+                        userDocumentsService.getUserDocuments(id)
                     ]);
                     setOrders(Array.isArray(ordersResp.data) ? ordersResp.data : []);
                     setComplaintsAgainst(Array.isArray(complaintsAgainstResp.data) ? complaintsAgainstResp.data : []);
                     setComplaintsMade(Array.isArray(complaintsMadeResp.data) ? complaintsMadeResp.data : []);
                     setTransactions(Array.isArray(transResp.data) ? transResp.data : []);
+                    setUserDocs(userDocsResp.data || []);
                 }
             } catch (err) {
                 console.error('Error loading user details:', err);
@@ -114,7 +120,7 @@ const UserDetailPage = () => {
         `Orders (${orders.length})`,
         `Transactions (${transactions.length})`,
         "Financials",
-        ...(user.user_type === 'farmer' ? ["Documents"] : []),
+        `Documents (${userDocs.length})`,
         `Reports Against (${complaintsAgainst.length})`,
         `Reports Made (${complaintsMade.length})`
     ];
@@ -148,7 +154,11 @@ const UserDetailPage = () => {
                     <div className="profile-info">
                         <div className="profile-avatar-container">
                             <div className={`profile-avatar ${user.user_type === 'farmer' ? 'farmer' : 'buyer'}`}>
-                                <PersonIcon style={{ fontSize: 60 }} />
+                                {user.profile_image_url ? (
+                                    <img src={user.profile_image_url} alt={user.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                ) : (
+                                    <PersonIcon style={{ fontSize: 80 }} />
+                                )}
                             </div>
                         </div>
                         <h2 className="profile-name">{user.name}</h2>
@@ -366,23 +376,56 @@ const UserDetailPage = () => {
                             </div>
                         )}
 
-                        {user.user_type === 'farmer' && tabValue === 3 && (
+                        {tabValue === 4 && (
                             <div className="documents-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Verification Materials</h3>
-                                {documents ? (
+                                {userDocs.length > 0 ? (
+                                    <div className="custom-table-container">
+                                        <table className="custom-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>File Name</th>
+                                                    <th>Type</th>
+                                                    <th>Uploaded At</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {userDocs.map((doc) => (
+                                                    <tr key={doc.id}>
+                                                        <td style={{ fontWeight: 600 }}>{doc.file_name}</td>
+                                                        <td><span className="type-badge farmer">{doc.file_type || 'other'}</span></td>
+                                                        <td style={{ color: '#64748b' }}>{formatDate(doc.uploaded_at, true)}</td>
+                                                        <td>
+                                                            <a
+                                                                href={doc.file_url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-button"
+                                                                style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}
+                                                            >
+                                                                View
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : documents ? (
                                     <div className="doc-viewer" style={{ background: '#0f172a', padding: '24px', borderRadius: '16px', color: '#94a3b8', fontFamily: 'monospace', overflowX: 'auto' }}>
                                         <pre>{JSON.stringify(documents, null, 2)}</pre>
                                     </div>
                                 ) : (
                                     <div className="empty-state">
                                         <DescriptionIcon className="empty-icon" />
-                                        <p>No documentation found for verification.</p>
+                                        <p>No verification documents found for this account.</p>
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {((user.user_type === 'farmer' ? tabValue === 5 : tabValue === 4)) && (
+                        {tabValue === 5 && (
                             <div className="complaints-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Account Reports (Against User)</h3>
                                 {complaintsAgainst.length > 0 ? (
@@ -419,7 +462,7 @@ const UserDetailPage = () => {
                             </div>
                         )}
 
-                        {((user.user_type === 'farmer' ? tabValue === 6 : tabValue === 5)) && (
+                        {tabValue === 6 && (
                             <div className="complaints-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Reports Filed (By User)</h3>
                                 {complaintsMade.length > 0 ? (
