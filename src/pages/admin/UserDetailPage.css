@@ -125,7 +125,7 @@
     background: white;
     border-radius: 50%;
     margin-bottom: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .profile-avatar {
@@ -280,7 +280,8 @@
 /* Main Content Tabs */
 .main-info-tabs {
     flex: 1;
-    min-width: 0; /* Important for flex children */
+    min-width: 0;
+    /* Important for flex children */
 }
 
 .tabs-header {
@@ -298,9 +299,10 @@
 }
 
 .tab-item {
-    padding: 20px 24px;
+    padding: 16px 20px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 0.875rem;
     color: #64748b;
     position: relative;
     white-space: nowrap;
@@ -351,10 +353,21 @@
     transform: translateY(-4px);
 }
 
-.stat-box.green { background: rgba(16, 185, 129, 0.05); }
-.stat-box.blue { background: rgba(59, 130, 246, 0.05); }
-.stat-box.orange { background: rgba(245, 158, 11, 0.05); }
-.stat-box.pruple { background: rgba(168, 85, 247, 0.05); }
+.stat-box.green {
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.stat-box.blue {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.stat-box.orange {
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.stat-box.pruple {
+    background: rgba(168, 85, 247, 0.05);
+}
 
 .stat-icon {
     font-size: 32px;
@@ -433,7 +446,7 @@
     .user-detail-content {
         flex-direction: column;
     }
-    
+
     .profile-sidebar {
         flex: none;
         width: 100%;
@@ -445,15 +458,15 @@
     .user-detail-container {
         padding: 16px;
     }
-    
+
     .stats-grid {
         grid-template-columns: 1fr 1fr;
     }
-    
+
     .stat-box {
         min-width: calc(50% - 8px);
     }
-    
+
     .tab-panel {
         padding: 20px;
     }

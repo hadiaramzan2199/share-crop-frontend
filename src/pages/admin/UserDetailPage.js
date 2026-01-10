@@ -20,6 +20,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
 import { orderService } from '../../services/orders';
+import { transactionsService } from '../../services/transactions';
 import './UserDetailPage.css';
 
 const UserDetailPage = () => {
@@ -29,6 +30,7 @@ const UserDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
     const [orders, setOrders] = useState([]);
+    const [transactions, setTransactions] = useState([]);
     const [complaintsAgainst, setComplaintsAgainst] = useState([]);
     const [complaintsMade, setComplaintsMade] = useState([]);
     const [documents, setDocuments] = useState(null);
@@ -44,25 +46,29 @@ const UserDetailPage = () => {
 
                 // Load specific data based on role
                 if (userResp.data.user_type === 'farmer') {
-                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, docsResp] = await Promise.all([
+                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, docsResp, transResp] = await Promise.all([
                         orderService.getFarmerOrders(id),
                         complaintService.getComplaints({ complained_against_user_id: id }),
                         complaintService.getComplaints({ user_id: id }),
-                        adminService.getFarmerDocuments(id)
+                        adminService.getFarmerDocuments(id),
+                        transactionsService.getUserTransactions(id)
                     ]);
                     setOrders(Array.isArray(ordersResp.data) ? ordersResp.data : []);
                     setComplaintsAgainst(Array.isArray(complaintsAgainstResp.data) ? complaintsAgainstResp.data : []);
                     setComplaintsMade(Array.isArray(complaintsMadeResp.data) ? complaintsMadeResp.data : []);
                     setDocuments(docsResp.data?.documents || null);
+                    setTransactions(Array.isArray(transResp.data) ? transResp.data : []);
                 } else {
-                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp] = await Promise.all([
+                    const [ordersResp, complaintsAgainstResp, complaintsMadeResp, transResp] = await Promise.all([
                         orderService.getBuyerOrdersWithFields(id),
                         complaintService.getComplaints({ complained_against_user_id: id }),
-                        complaintService.getComplaints({ user_id: id })
+                        complaintService.getComplaints({ user_id: id }),
+                        transactionsService.getUserTransactions(id)
                     ]);
                     setOrders(Array.isArray(ordersResp.data) ? ordersResp.data : []);
                     setComplaintsAgainst(Array.isArray(complaintsAgainstResp.data) ? complaintsAgainstResp.data : []);
                     setComplaintsMade(Array.isArray(complaintsMadeResp.data) ? complaintsMadeResp.data : []);
+                    setTransactions(Array.isArray(transResp.data) ? transResp.data : []);
                 }
             } catch (err) {
                 console.error('Error loading user details:', err);
@@ -75,15 +81,17 @@ const UserDetailPage = () => {
         loadData();
     }, [id]);
 
-    const formatDate = (dateString) => {
+    const formatDate = (dateString, includeTime = false) => {
         if (!dateString) return 'N/A';
         try {
             const date = new Date(dateString);
-            return date.toLocaleDateString('en-US', {
+            const options = {
                 year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
+                month: 'short',
+                day: 'numeric',
+                ...(includeTime && { hour: '2-digit', minute: '2-digit' })
+            };
+            return date.toLocaleDateString('en-US', options);
         } catch {
             return dateString;
         }
@@ -95,10 +103,11 @@ const UserDetailPage = () => {
     const tabs = [
         "Overview",
         `Orders (${orders.length})`,
+        `Transactions (${transactions.length})`,
         "Financials",
         ...(user.user_type === 'farmer' ? ["Documents"] : []),
-        `Account Reports (${complaintsAgainst.length})`,
-        `Reports Filed (${complaintsMade.length})`
+        `Reports Against (${complaintsAgainst.length})`,
+        `Reports Made (${complaintsMade.length})`
     ];
 
     return (
@@ -282,6 +291,49 @@ const UserDetailPage = () => {
                         )}
 
                         {tabValue === 2 && (
+                            <div className="transactions-tab">
+                                <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Coin Activity</h3>
+                                {transactions.length > 0 ? (
+                                    <div className="custom-table-container">
+                                        <table className="custom-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Amount</th>
+                                                    <th>Reason</th>
+                                                    <th>Date</th>
+                                                    <th>Balance After</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {transactions.map((t) => (
+                                                    <tr key={t.id}>
+                                                        <td>
+                                                            <span className={`status-badge ${t.type === 'debit' ? 'rejected' : 'approved'}`} style={{ fontSize: '0.7rem' }}>
+                                                                {t.type}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ fontWeight: 700, color: t.type === 'debit' ? '#dc2626' : '#059669' }}>
+                                                            {t.type === 'debit' ? '-' : '+'}{Math.abs(t.amount).toLocaleString()}
+                                                        </td>
+                                                        <td style={{ fontSize: '0.85rem' }}>{t.reason}</td>
+                                                        <td style={{ color: '#64748b' }}>{formatDate(t.created_at, true)}</td>
+                                                        <td style={{ fontWeight: 600 }}>{t.balance_after?.toLocaleString()}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="empty-state">
+                                        <AccountBalanceWalletIcon className="empty-icon" />
+                                        <p>No transactions recorded for this account.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {tabValue === 3 && (
                             <div className="financials-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Financial Overview</h3>
                                 <div className="stats-grid">
@@ -313,7 +365,7 @@ const UserDetailPage = () => {
                             </div>
                         )}
 
-                        {((user.user_type === 'farmer' ? tabValue === 4 : tabValue === 3)) && (
+                        {((user.user_type === 'farmer' ? tabValue === 5 : tabValue === 4)) && (
                             <div className="complaints-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Account Reports (Against User)</h3>
                                 {complaintsAgainst.length > 0 ? (
@@ -350,7 +402,7 @@ const UserDetailPage = () => {
                             </div>
                         )}
 
-                        {((user.user_type === 'farmer' ? tabValue === 5 : tabValue === 4)) && (
+                        {((user.user_type === 'farmer' ? tabValue === 6 : tabValue === 5)) && (
                             <div className="complaints-tab">
                                 <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Reports Filed (By User)</h3>
                                 {complaintsMade.length > 0 ? (
