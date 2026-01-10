@@ -688,8 +688,8 @@ const AdminUsers = () => {
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 200 }}>Email</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120, display: { xs: 'none', sm: 'table-cell' } }}>Coins</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Against</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 100 }}>Made</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 150 }}>Reports Against User</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 150 }}>Reports Made by User</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
