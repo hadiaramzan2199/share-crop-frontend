@@ -1,9 +1,5 @@
-/**
- * Coin Service - Manages user-specific farmer coins using database
- * Provides coin management for users with real-time updates
- */
+import api from './api';
 
-const API_BASE_URL = `${process.env.REACT_APP_API_BASE_URL || `http://${window.location.hostname}:5000`}/api`;
 const DEFAULT_COINS = 12500;
 
 class CoinService {
@@ -18,17 +14,8 @@ class CoinService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/coins/${userId}`);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          return DEFAULT_COINS;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data.coins || DEFAULT_COINS;
+      const response = await api.get(`/api/coins/${userId}`);
+      return response.data.coins || DEFAULT_COINS;
     } catch (error) {
       console.error('Error getting user coins:', error);
       return DEFAULT_COINS;
@@ -48,20 +35,10 @@ class CoinService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/coins/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ coins: Math.max(0, coins) }),
+      const response = await api.put(`/api/coins/${userId}`, {
+        coins: Math.max(0, coins)
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.coins;
+      return response.data.coins;
     } catch (error) {
       console.error('Error setting user coins:', error);
       return DEFAULT_COINS;
@@ -81,22 +58,7 @@ class CoinService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/coins/${userId}/deduct`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ amount }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 400) {
-          // Insufficient funds or invalid amount
-          return false;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
+      await api.post(`/api/coins/${userId}/deduct`, { amount });
       return true;
     } catch (error) {
       console.error('Error deducting coins:', error);
@@ -117,20 +79,8 @@ class CoinService {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/coins/${userId}/add`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ amount }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.coins;
+      const response = await api.post(`/api/coins/${userId}/add`, { amount });
+      return response.data.coins;
     } catch (error) {
       console.error('Error adding coins:', error);
       return DEFAULT_COINS;
