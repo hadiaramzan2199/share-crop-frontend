@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Grid, Avatar, Stack, IconButton, Button, Box, Typography as MuiTypography } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Grid, Avatar, Stack, IconButton, Button, Box, Typography as MuiTypography, CircularProgress } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
@@ -18,6 +18,7 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import DescriptionIcon from '@mui/icons-material/Description';
+import Tooltip from '@mui/material/Tooltip';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
@@ -30,6 +31,15 @@ const UserDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [tabValue, setTabValue] = useState(0);
+
+    // Read tab index from URL on mount
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        if (tab !== null) {
+            setTabValue(parseInt(tab));
+        }
+    }, [window.location.search]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
     const [orders, setOrders] = useState([]);
@@ -112,7 +122,25 @@ const UserDetailPage = () => {
         setIsOrderModalOpen(true);
     };
 
-    if (loading) return <div className="user-detail-container"><div className="header-text"><h1>Loading...</h1></div></div>;
+    if (loading) {
+        return (
+            <Box
+                sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '80vh',
+                    gap: 2
+                }}
+            >
+                <CircularProgress sx={{ color: '#4CAF50' }} size={60} thickness={4} />
+                <MuiTypography variant="h6" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                    Loading user profile...
+                </MuiTypography>
+            </Box>
+        );
+    }
     if (error) return <div className="user-detail-container"><div className="error-alert">{error}</div></div>;
 
     const tabs = [

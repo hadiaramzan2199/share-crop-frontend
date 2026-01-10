@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab } from '@mui/material';
+import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab, Tooltip } from '@mui/material';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 const StatusChip = ({ status }) => {
   const colorMap = {
@@ -741,7 +742,19 @@ const AdminUsers = () => {
                         }
                       }}
                     >
-                      <TableCell sx={{ py: 2, fontWeight: 500 }}>{u.name || 'N/A'}</TableCell>
+                      <TableCell sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Avatar
+                            src={u.profile_image_url}
+                            sx={{ width: 32, height: 32, bgcolor: u.user_type === 'farmer' ? '#4CAF50' : '#2196F3', fontSize: '14px' }}
+                          >
+                            {!u.profile_image_url && (u.name?.charAt(0)?.toUpperCase() || 'U')}
+                          </Avatar>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {u.name || 'N/A'}
+                          </Typography>
+                        </Box>
+                      </TableCell>
                       <TableCell sx={{ py: 2 }}>{u.email || 'N/A'}</TableCell>
                       <TableCell sx={{ py: 2, display: { xs: 'none', sm: 'table-cell' } }}>
                         <Chip
@@ -926,6 +939,7 @@ const AdminUsers = () => {
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 150 }}>Name</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 200 }}>Email</TableCell>
+                  <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Docs</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 120 }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: 'text.primary', py: 2, minWidth: 200 }}>Actions</TableCell>
                 </TableRow>
@@ -974,8 +988,31 @@ const AdminUsers = () => {
                           }
                         }}
                       >
-                        <TableCell sx={{ py: 2, fontWeight: 500 }}>{f.name || 'N/A'}</TableCell>
+                        <TableCell sx={{ py: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Avatar
+                              src={f.profile_image_url}
+                              sx={{ width: 32, height: 32, bgcolor: '#4CAF50', fontSize: '14px' }}
+                            >
+                              {!f.profile_image_url && (f.name?.charAt(0)?.toUpperCase() || 'F')}
+                            </Avatar>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {f.name || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
                         <TableCell sx={{ py: 2 }}>{f.email || 'N/A'}</TableCell>
+                        <TableCell sx={{ py: 2 }}>
+                          <Tooltip title="View All Documents">
+                            <IconButton
+                              size="small"
+                              onClick={() => navigate(`/admin/users/${f.id}?tab=4`)}
+                              sx={{ color: '#4CAF50', bgcolor: 'rgba(76,175,80,0.1)', '&:hover': { bgcolor: 'rgba(76,175,80,0.2)' } }}
+                            >
+                              <DescriptionIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell sx={{ py: 2 }}>
                           <StatusChip status={f.approval_status} />
                         </TableCell>

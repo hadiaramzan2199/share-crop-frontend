@@ -14,8 +14,21 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
-import { Visibility, VisibilityOff, PersonAdd } from '@mui/icons-material';
+import { Visibility, VisibilityOff, PersonAdd, PhotoCamera, CloudUpload, Description, Delete } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  Avatar,
+  Paper,
+  Stack,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Tooltip
+} from '@mui/material';
+import supabase from '../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -30,6 +43,10 @@ const Signup = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
+  const [profileImagePreview, setProfileImagePreview] = useState(null);
+  const [verificationDocs, setVerificationDocs] = useState([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -38,6 +55,29 @@ const Signup = () => {
       });
     }
   }, []);
+
+  const handleProfileImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProfileImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfileImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDocsChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      setVerificationDocs(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeDoc = (index) => {
+    setVerificationDocs(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,7 +102,57 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      await signup(name, email, password, userType);
+      let profile_image_url = null;
+      let uploadedDocuments = [];
+
+      // 1. Upload Profile Image if selected
+      if (profileImage) {
+        setUploadingFiles(true);
+        const fileExt = profileImage.name.split('.').pop();
+        const fileName = `${uuidv4()}.${fileExt}`;
+        const filePath = `profile-images/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('user-documents')
+          .upload(filePath, profileImage);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('user-documents')
+          .getPublicUrl(filePath);
+
+        profile_image_url = publicUrl;
+      }
+
+      // 2. Upload Verification Documents if selected
+      if (verificationDocs.length > 0) {
+        setUploadingFiles(true);
+        for (const file of verificationDocs) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${uuidv4()}-${file.name}`;
+          const filePath = `documents/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('user-documents')
+            .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('user-documents')
+            .getPublicUrl(filePath);
+
+          uploadedDocuments.push({
+            file_name: file.name,
+            file_url: publicUrl,
+            file_type: file.type || 'other'
+          });
+        }
+      }
+
+      await signup(name, email, password, userType, profile_image_url, uploadedDocuments);
+
       // Redirect based on user type
       if (userType === 'farmer') {
         navigate('/farmer', { replace: true });
@@ -71,8 +161,8 @@ const Signup = () => {
       }
     } catch (err) {
       setError(
-        err.response?.data?.error || 
-        err.message || 
+        err.response?.data?.error ||
+        err.message ||
         'Signup failed. Please try again.'
       );
     } finally {
@@ -155,7 +245,7 @@ const Signup = () => {
               `,
             }}
           >
-            <span style={{ 
+            <span style={{
               fontSize: '1.2em',
             }}>🌱</span>
             ShareCrop
@@ -307,10 +397,10 @@ const Signup = () => {
               }}
             />
 
-            <FormControl 
-              fullWidth 
-              margin="normal" 
-              sx={{ 
+            <FormControl
+              fullWidth
+              margin="normal"
+              sx={{
                 mb: 2.5,
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
@@ -341,6 +431,83 @@ const Signup = () => {
                 <MenuItem value="farmer">Farmer</MenuItem>
               </Select>
             </FormControl>
+
+            {/* Profile Image Upload */}
+            <Box sx={{ mb: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+                Profile Picture (Optional)
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                <Avatar
+                  src={profileImagePreview}
+                  sx={{ width: 80, height: 80, mb: 1, border: '2px solid #4CAF50' }}
+                >
+                  {!profileImagePreview && <PhotoCamera />}
+                </Avatar>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  component="label"
+                  startIcon={<CloudUpload />}
+                  sx={{ textTransform: 'none', borderRadius: 2 }}
+                >
+                  Select Image
+                  <input type="file" hidden accept="image/*" onChange={handleProfileImageChange} />
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  You can also update this later in your profile.
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Farmer Documents Upload */}
+            {userType === 'farmer' && (
+              <Box sx={{ mb: 3 }}>
+                <Divider sx={{ mb: 3 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, color: '#2E7D32' }}>
+                  Verification Documents (Recommended)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  For account approval, you must upload documents (ID, certifications, etc.). You can also upload these later from your profile.
+                </Typography>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  component="label"
+                  startIcon={<CloudUpload />}
+                  sx={{ borderStyle: 'dashed', borderRadius: 2, py: 1.5, textTransform: 'none' }}
+                >
+                  Upload Documents
+                  <input type="file" hidden multiple onChange={handleDocsChange} />
+                </Button>
+
+                {verificationDocs.length > 0 && (
+                  <List sx={{ mt: 1 }}>
+                    {verificationDocs.map((file, index) => (
+                      <Paper key={index} variant="outlined" sx={{ mb: 1, borderRadius: 2 }}>
+                        <ListItem
+                          secondaryAction={
+                            <IconButton edge="end" size="small" onClick={() => removeDoc(index)} color="error">
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          }
+                        >
+                          <ListItemIcon sx={{ minWidth: 40 }}>
+                            <Description color="primary" fontSize="small" />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={file.name}
+                            primaryTypographyProps={{ fontSize: '0.8rem', noWrap: true }}
+                          />
+                        </ListItem>
+                      </Paper>
+                    ))}
+                  </List>
+                )}
+                <Divider sx={{ mt: 3 }} />
+              </Box>
+            )}
 
             <TextField
               fullWidth
@@ -465,7 +632,12 @@ const Signup = () => {
               }}
               endIcon={!loading && <PersonAdd />}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
+              {loading ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <CircularProgress size={20} color="inherit" />
+                  <span>{uploadingFiles ? 'Uploading files...' : 'Creating Account...'}</span>
+                </Stack>
+              ) : 'Create Account'}
             </Button>
 
             <Box sx={{ textAlign: 'center' }}>
