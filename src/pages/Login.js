@@ -50,7 +50,7 @@ const Login = () => {
       // Redirect based on user type or return to previous page
       const from = location.state?.from?.pathname || '/';
       const userType = localStorage.getItem('userRole');
-      
+
       // If coming from a protected route, go back there
       if (from !== '/' && from !== '/login' && from !== '/signup') {
         navigate(from, { replace: true });
@@ -66,8 +66,8 @@ const Login = () => {
       }
     } catch (err) {
       setError(
-        err.response?.data?.error || 
-        err.message || 
+        err.response?.data?.error ||
+        err.message ||
         'Login failed. Please check your credentials.'
       );
     } finally {
@@ -95,7 +95,7 @@ const Login = () => {
         }}
       >
         <img
-          src="/assets/Farmers.gif"
+          src="/assets/farmers.gif"
           alt="Farmers Animation"
           style={{
             width: '100%',
@@ -141,7 +141,7 @@ const Login = () => {
               `,
             }}
           >
-            <span style={{ 
+            <span style={{
               fontSize: '1.2em',
             }}>🌱</span>
             ShareCrop
