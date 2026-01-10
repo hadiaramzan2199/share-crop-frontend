@@ -14,6 +14,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  ListItemAvatar,
   Divider,
   Chip,
   Paper,
@@ -50,12 +51,15 @@ import {
   Add,
   HomeWork,
   ExpandMore,
-  ReportProblem
+  ReportProblem,
+  Notifications
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
 import { orderService } from '../../services/orders';
 import { getProductIcon } from '../../utils/productIcons';
+import supabase from '../../services/supabase';
+import { messagingService } from '../../services/messaging';
 
 // Custom hook to detect mobile screens
 const useIsMobile = () => {
@@ -118,6 +122,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   const [pickupPanelOpen, setPickupPanelOpen] = useState(false);
   const [pickupReadyList, setPickupReadyList] = useState([]);
   const [userMenuAnchorEl, setUserMenuAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [recentChats, setRecentChats] = useState([]);
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
 
   // Get user-specific coins when user changes
   const loadUserCoins = async () => {
@@ -136,6 +143,55 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
   useEffect(() => {
     loadUserCoins();
+  }, [user]);
+
+  // Handle Unread Count and Realtime Notifications
+  const fetchUnreadStats = async () => {
+    if (!user || !user.id) return;
+    try {
+      const convs = await messagingService.getConversations();
+      setRecentChats(convs);
+      const total = convs.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      setUnreadCount(total);
+    } catch (err) {
+      console.error('Error fetching unread stats:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && user.id) {
+      fetchUnreadStats();
+
+      if (supabase) {
+        // Subscribe to messages to update unread count
+        const msgChannel = supabase
+          .channel(`header-notifications-${user.id}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+          }, payload => {
+            const newMsg = payload.new;
+            // If it's not from us, refresh stats
+            if (newMsg.sender_id !== user.id) {
+              fetchUnreadStats();
+            }
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: 'is_read=eq.true'
+          }, () => {
+            fetchUnreadStats();
+          })
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(msgChannel);
+        };
+      }
+    }
   }, [user]);
 
   // Expose refresh function to parent components
@@ -862,6 +918,27 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               </Tooltip>
             )}
 
+            {/* Notifications Bell */}
+            {!isAdmin && (
+              <IconButton
+                color="inherit"
+                onClick={(e) => setNotifAnchorEl(e.currentTarget)}
+                sx={{
+                  mr: 1,
+                  backgroundColor: 'rgba(0,0,0,0.04)',
+                  '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
+                  ...(notifAnchorEl && {
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    color: 'primary.main'
+                  })
+                }}
+              >
+                <Badge badgeContent={unreadCount} color="error">
+                  <Notifications sx={{ fontSize: isMobile ? 20 : 24 }} />
+                </Badge>
+              </IconButton>
+            )}
+
             {/* Profile - Clickable Avatar with Menu */}
             {!isMobile && (
               <>
@@ -962,6 +1039,98 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                 </Menu>
               </>
             )}
+
+            {/* Notifications Dropdown */}
+            <Menu
+              anchorEl={notifAnchorEl}
+              open={Boolean(notifAnchorEl)}
+              onClose={() => setNotifAnchorEl(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              PaperProps={{
+                sx: {
+                  mt: 1.5,
+                  width: { xs: 280, sm: 320 },
+                  maxHeight: 400,
+                  borderRadius: 3,
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                  overflow: 'hidden'
+                }
+              }}
+            >
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#f8fafc' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Messages</Typography>
+                {unreadCount > 0 && (
+                  <Chip label={`${unreadCount} New`} size="small" color="error" sx={{ height: 20, fontSize: '0.7rem' }} />
+                )}
+              </Box>
+              <Divider />
+              <List sx={{ p: 0 }}>
+                {recentChats.slice(0, 5).map(chat => (
+                  <MenuItem
+                    key={chat.id}
+                    onClick={() => {
+                      setNotifAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
+                    }}
+                    sx={{
+                      py: 1.5,
+                      px: 2,
+                      borderBottom: '1px solid #f1f5f9',
+                      bgcolor: chat.unread_count > 0 ? 'rgba(76, 175, 80, 0.04)' : 'transparent',
+                      '&:hover': { bgcolor: '#f0fdf4' }
+                    }}
+                  >
+                    <ListItemAvatar sx={{ minWidth: 48 }}>
+                      <Avatar src={chat.participant_avatar} sx={{ width: 40, height: 40 }}>
+                        {chat.participant_name?.charAt(0)}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: chat.unread_count > 0 ? 700 : 500, color: '#1e293b' }}>
+                          {chat.participant_name}
+                        </Typography>
+                        {chat.last_message_at && (
+                          <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                            {new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: chat.unread_count > 0 ? '#334155' : '#64748b',
+                          display: '-webkit-box',
+                          overflow: 'hidden',
+                          WebkitBoxOrient: 'vertical',
+                          WebkitLineClamp: 1,
+                          fontWeight: chat.unread_count > 0 ? 500 : 400
+                        }}
+                      >
+                        {chat.last_message || 'No messages yet'}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+                {recentChats.length === 0 && (
+                  <Box sx={{ py: 4, textAlign: 'center' }}>
+                    <Message sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
+                    <Typography variant="body2" sx={{ color: '#94a3b8' }}>No conversations yet</Typography>
+                  </Box>
+                )}
+              </List>
+              <Divider />
+              <MenuItem
+                onClick={() => {
+                  setNotifAnchorEl(null);
+                  navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
+                }}
+                sx={{ justifyContent: 'center', py: 1.5, color: '#4caf50', fontWeight: 600, fontSize: '0.875rem' }}
+              >
+                View All Messages
+              </MenuItem>
+            </Menu>
           </Box>
         </Toolbar>
       </AppBar>
