@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Grid, Avatar, Stack, IconButton, Button, Box, Typography as MuiTypography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CloseIcon from '@mui/icons-material/Close';
 import PersonIcon from '@mui/icons-material/Person';
 import EmailIcon from '@mui/icons-material/Email';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -35,6 +37,8 @@ const UserDetailPage = () => {
     const [complaintsMade, setComplaintsMade] = useState([]);
     const [documents, setDocuments] = useState(null);
     const [error, setError] = useState(null);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
@@ -95,6 +99,11 @@ const UserDetailPage = () => {
         } catch {
             return dateString;
         }
+    };
+
+    const handleViewOrder = (order) => {
+        setSelectedOrder(order);
+        setIsOrderModalOpen(true);
     };
 
     if (loading) return <div className="user-detail-container"><div className="header-text"><h1>Loading...</h1></div></div>;
@@ -275,7 +284,15 @@ const UserDetailPage = () => {
                                                                 {order.status}
                                                             </span>
                                                         </td>
-                                                        <td><button className="text-button" style={{ color: '#3b82f6', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}>Details</button></td>
+                                                        <td>
+                                                            <button
+                                                                className="text-button"
+                                                                style={{ color: '#3b82f6', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600 }}
+                                                                onClick={() => handleViewOrder(order)}
+                                                            >
+                                                                Details
+                                                            </button>
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -441,6 +458,140 @@ const UserDetailPage = () => {
                     </div>
                 </main>
             </div>
+
+            {/* Order Details Dialog */}
+            <Dialog
+                open={isOrderModalOpen}
+                onClose={() => setIsOrderModalOpen(false)}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                    }
+                }}
+            >
+                <DialogTitle sx={{
+                    borderBottom: '1px solid #e2e8f0',
+                    backgroundColor: '#f8fafc',
+                    p: 2
+                }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                        <Stack direction="row" alignItems="center" spacing={2}>
+                            <Avatar sx={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
+                                <ShoppingBagIcon />
+                            </Avatar>
+                            <Box>
+                                <MuiTypography variant="h6" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                                    Order Details
+                                </MuiTypography>
+                                <MuiTypography variant="caption" sx={{ color: '#64748b', fontWeight: 600 }}>
+                                    #{selectedOrder?.id}
+                                </MuiTypography>
+                            </Box>
+                        </Stack>
+                        <IconButton onClick={() => setIsOrderModalOpen(false)} size="small">
+                            <CloseIcon />
+                        </IconButton>
+                    </Stack>
+                </DialogTitle>
+                <DialogContent sx={{ p: 3, mt: 1 }}>
+                    {selectedOrder && (
+                        <Grid container spacing={3}>
+                            {/* Product Info */}
+                            <Grid item xs={12} md={6}>
+                                <div style={{ padding: '20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                                        <div style={{ color: '#10b981' }}>
+                                            <AgricultureIcon fontSize="small" />
+                                        </div>
+                                        <MuiTypography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>
+                                            Field Information
+                                        </MuiTypography>
+                                    </Stack>
+                                    <Divider sx={{ mb: 2, opacity: 0.6 }} />
+                                    <Stack spacing={2}>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Field Name</MuiTypography>
+                                            <MuiTypography variant="body1" sx={{ fontWeight: 600, color: '#1e293b' }}>{selectedOrder.field_name || 'N/A'}</MuiTypography>
+                                        </Box>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Crop Type</MuiTypography>
+                                            <MuiTypography variant="body1" sx={{ fontWeight: 600, color: '#1e293b' }}>{selectedOrder.crop_type || 'Mixed'}</MuiTypography>
+                                        </Box>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Location</MuiTypography>
+                                            <MuiTypography variant="body1" sx={{ fontWeight: 600, color: '#1e293b' }}>{selectedOrder.location || 'N/A'}</MuiTypography>
+                                        </Box>
+                                    </Stack>
+                                </div>
+                            </Grid>
+
+                            {/* Transaction Info */}
+                            <Grid item xs={12} md={6}>
+                                <div style={{ padding: '20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
+                                        <div style={{ color: '#3b82f6' }}>
+                                            <AttachMoneyIcon fontSize="small" />
+                                        </div>
+                                        <MuiTypography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>
+                                            Financial Details
+                                        </MuiTypography>
+                                    </Stack>
+                                    <Divider sx={{ mb: 2, opacity: 0.6 }} />
+                                    <Stack spacing={2}>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Status</MuiTypography>
+                                            <span className={`status-badge ${selectedOrder.status === 'completed' ? 'approved' : 'pending'}`}>
+                                                {selectedOrder.status}
+                                            </span>
+                                        </Box>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Quantity / Area</MuiTypography>
+                                            <MuiTypography variant="body1" sx={{ fontWeight: 600, color: '#1e293b' }}>{selectedOrder.quantity || selectedOrder.area_rented || 0} m²</MuiTypography>
+                                        </Box>
+                                        <Box>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, display: 'block' }}>Total Amount</MuiTypography>
+                                            <MuiTypography variant="h6" sx={{ fontWeight: 800, color: '#059669' }}>${selectedOrder.total_price?.toLocaleString() || 0}</MuiTypography>
+                                        </Box>
+                                    </Stack>
+                                </div>
+                            </Grid>
+
+                            {/* Additional Info */}
+                            <Grid item xs={12}>
+                                <div style={{ padding: '20px', backgroundColor: '#f1f5f9', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <MuiTypography variant="subtitle2" sx={{ fontWeight: 700, color: '#475569', mb: 1.5 }}>Details & Timing</MuiTypography>
+                                    <Grid container spacing={2}>
+                                        <Grid item xs={6} sm={4}>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600 }}>Created On</MuiTypography>
+                                            <MuiTypography variant="body2" sx={{ fontWeight: 600 }}>{formatDate(selectedOrder.created_at, true)}</MuiTypography>
+                                        </Grid>
+                                        <Grid item xs={6} sm={4}>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600 }}>Harvest Date</MuiTypography>
+                                            <MuiTypography variant="body2" sx={{ fontWeight: 600 }}>{formatDate(selectedOrder.selected_harvest_date) || 'Not selected'}</MuiTypography>
+                                        </Grid>
+                                        <Grid item xs={6} sm={4}>
+                                            <MuiTypography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600 }}>Shipping Mode</MuiTypography>
+                                            <MuiTypography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{selectedOrder.mode_of_shipping || 'Delivery'}</MuiTypography>
+                                        </Grid>
+                                    </Grid>
+                                </div>
+                            </Grid>
+                        </Grid>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ p: 2, backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                    <Button
+                        onClick={() => setIsOrderModalOpen(false)}
+                        sx={{ color: '#64748b', fontWeight: 600, textTransform: 'none' }}
+                    >
+                        Close
+                    </Button>
+
+                </DialogActions>
+            </Dialog>
         </div>
     );
 };
