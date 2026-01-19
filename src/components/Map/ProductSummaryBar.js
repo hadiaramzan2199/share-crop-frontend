@@ -94,7 +94,7 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
   return (
     <div ref={summaryRef} style={{
       position: 'absolute',
-      bottom: '10px',
+      bottom: '20px',
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',

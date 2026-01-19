@@ -58,7 +58,7 @@ const EnhancedFarmMap = forwardRef(({
   fields: externalFields,
   onEditField,
   filters: externalFilters,
-  height = '100vh',
+  height = '100%',
   embedded = false,
   minimal = false
 }, ref) => {
@@ -2735,7 +2735,7 @@ const EnhancedFarmMap = forwardRef(({
         }}
         mapStyle={DARK_MAP_STYLE}
         onLoad={(e) => configureGlobeMap(e.target)}
-        style={{ width: '100%', height: '100%', marginTop: embedded ? '0px' : '-65px' }}
+        style={{ width: '100%', height: '100%' }}
         mapboxAccessToken={MAPBOX_TOKEN}
         projection="globe"
         initialViewState={{
