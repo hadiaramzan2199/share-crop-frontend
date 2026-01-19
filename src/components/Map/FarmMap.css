@@ -1,0 +1,43 @@
+/* Gentle star twinkle */
+@keyframes starTwinkle {
+
+    0%,
+    100% {
+        opacity: 0.25;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Deep-space background */
+.stars-bg {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at bottom,
+            #050814 0%,
+            #02030a 60%,
+            #000000 100%);
+    z-index: -1;
+    overflow: hidden;
+}
+
+/* Sparse star layer */
+.stars-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, .4), transparent),
+        radial-gradient(1px 1px at 60% 40%, rgba(200, 220, 255, .35), transparent),
+        radial-gradient(2px 2px at 80% 20%, rgba(255, 255, 255, .5), transparent),
+        radial-gradient(1px 1px at 40% 70%, rgba(200, 220, 255, .3), transparent);
+    background-size: 800px 800px;
+    animation: starTwinkle 6s ease-in-out infinite;
+}
+
+/* Map canvas transparency */
+.mapboxgl-map {
+    background: transparent !important;
+}

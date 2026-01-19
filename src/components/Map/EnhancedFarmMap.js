@@ -7,17 +7,21 @@ import fieldsService from '../../services/fields';
 import { mockProductService } from '../../services/mockServices';
 import notificationsService from '../../services/notifications';
 import api from '../../services/api';
- 
+
 import { mockOrderService } from '../../services/mockServices';
 import rentedFieldsService from '../../services/rentedFields';
 import CustomScaleBar from './CustomScaleBar';
 import ProductSummaryBar from './ProductSummaryBar';
 import { Map as MapboxMap, Marker, NavigationControl, FullscreenControl } from 'react-map-gl';
- 
+
 import { cachedReverseGeocode } from '../../utils/geocoding';
 import { getProductIcon, productCategories } from '../../utils/productIcons';
 import { orderService } from '../../services/orders';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { configureGlobeMap, DARK_MAP_STYLE } from '../../utils/mapConfig';
+import './FarmMap.css';
+import weatherService from '../../services/weather';
+
 
 // Detect mobile screens
 const useIsMobile = () => {
@@ -39,11 +43,11 @@ const useIsMobile = () => {
 
 
 
-const EnhancedFarmMap = forwardRef(({ 
-  onProductSelect, 
-  userType, 
+const EnhancedFarmMap = forwardRef(({
+  onProductSelect,
+  userType,
   user,
-  purchasedProductIds = [], 
+  purchasedProductIds = [],
   onFieldCreate,
   searchQuery,
   onFarmsLoad,
@@ -82,6 +86,7 @@ const EnhancedFarmMap = forwardRef(({
   const [insufficientFunds, setInsufficientFunds] = useState(false);
   const [selectedHarvestDate, setSelectedHarvestDate] = useState(null);
   const [productLocations, setProductLocations] = useState(new Map());
+  const [productWeather, setProductWeather] = useState(new Map());
   const [deliveryMode, setDeliveryMode] = useState('existing');
   const [existingDeliveryAddress, setExistingDeliveryAddress] = useState('');
   const [newDeliveryAddress, setNewDeliveryAddress] = useState({
@@ -108,7 +113,7 @@ const EnhancedFarmMap = forwardRef(({
   const [addressSuggestionsPos, setAddressSuggestionsPos] = useState(null);
   const [userPosition, setUserPosition] = useState(null);
   const [userLocationName, setUserLocationName] = useState('');
- 
+
   const [userCoins, setUserCoins] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const lastNonEmptyFarmsRef = useRef([]);
@@ -136,6 +141,8 @@ const EnhancedFarmMap = forwardRef(({
   const deliveryIconRef = useRef(null);
   const [deliveryPanelLeft, setDeliveryPanelLeft] = useState(54);
   const [fieldOrderStats, setFieldOrderStats] = useState(new Map());
+  const [popupTab, setPopupTab] = useState('details');
+
 
   useEffect(() => {
     setShowDeliveryPanel(false);
@@ -157,7 +164,116 @@ const EnhancedFarmMap = forwardRef(({
     setDeliveryPanelLeft(Math.max(margin, Math.min(maxLeft, left)));
   }, [showDeliveryPanel, isMobile, viewState]);
 
+  const renderWeatherTabContent = () => {
+    if (!selectedProduct) return null;
+    const weather = productWeather.get(String(selectedProduct.id));
+
+    // Fallback UI if data is still loading or unavailable
+    if (!weather || typeof weather === 'string') {
+      return (
+        <div style={{ padding: '16px 8px', textAlign: 'center', color: '#64748b' }}>
+          <div style={{ fontSize: '20px', marginBottom: '8px', animation: 'popupPulse 1.5s infinite alternate ease-in-out' }}>🌤️</div>
+          <div style={{ fontSize: '12px', fontWeight: 600 }}>Fetching weather...</div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ animation: 'cardSlideIn 0.4s ease-out' }}>
+        {/* Compact Weather Summary */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '10px',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img
+              src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`}
+              alt="weather"
+              style={{ width: '40px', height: '40px', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))' }}
+            />
+            <div>
+              <div style={{ fontSize: '18px', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{weather.temperature.toFixed(1)}°C</div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, textTransform: 'capitalize' }}>{weather.description}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Feels Like</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>{weather.feelsLike.toFixed(1)}°C</div>
+          </div>
+        </div>
+
+        {/* Dense Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {[
+            { label: 'Humidity', value: `${weather.humidity}%`, icon: '💧' },
+            { label: 'Wind', value: `${weather.windSpeed}m/s`, icon: '💨' },
+            { label: 'Pressure', value: `${weather.pressure}hPa`, icon: '⏲️' },
+            { label: 'Visibility', value: `${(weather.visibility / 1000).toFixed(1)}km`, icon: '👁️' },
+          ].map((item, idx) => (
+            <div key={idx} style={{
+              background: '#ffffff',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span style={{ fontSize: '12px' }}>{item.icon}</span>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{item.label}</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>{item.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPopupTabs = () => (
+    <div style={{ 
+      display: 'flex', 
+      backgroundColor: '#f1f5f9', 
+      borderRadius: '6px', 
+      padding: '2px',
+      marginBottom: '12px',
+      border: '1px solid #e2e8f0'
+    }}>
+      {['details', 'weather'].map((tab) => (
+        <div
+          key={tab}
+          onClick={() => setPopupTab(tab)}
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            padding: '6px 0',
+            fontSize: '11px',
+            fontWeight: 700,
+            borderRadius: '4px',
+            color: popupTab === tab ? '#0f172a' : '#64748b',
+            backgroundColor: popupTab === tab ? '#ffffff' : 'transparent',
+            boxShadow: popupTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}
+        >
+          {tab}
+        </div>
+      ))}
+    </div>
+  );
+
   const toFiniteNumber = useCallback((v) => {
+
     const n = typeof v === 'string' ? parseFloat(v) : v;
     return Number.isFinite(n) ? n : null;
   }, []);
@@ -619,9 +735,9 @@ const EnhancedFarmMap = forwardRef(({
           setUserPosition({ latitude, longitude });
           cachedReverseGeocode(latitude, longitude)
             .then((name) => setUserLocationName(name))
-            .catch(() => {});
+            .catch(() => { });
         },
-        () => {}
+        () => { }
       );
     }
   }, [userPosition]);
@@ -879,14 +995,14 @@ const EnhancedFarmMap = forwardRef(({
       if (!product) {
         return getProductIcon('Fruits');
       }
-      
+
       // Always use local icon paths based on category/subcategory (like mockFarms.js)
       // Ignore database image data (base64, external URLs) and use local icons instead
       const category = product.subcategory || product.category;
       const iconPath = getProductIcon(category);
-      
+
       console.log('🖼️ getProductImageSrc - Product:', product.name, 'Category:', category, 'Icon:', iconPath);
-      
+
       return iconPath;
     } catch (e) {
       console.warn('Failed to resolve product image, using fallback:', e);
@@ -899,11 +1015,11 @@ const EnhancedFarmMap = forwardRef(({
       console.log('🌍 fetchLocationForProduct: No product', product);
       return;
     }
-    
+
     const productId = product.id;
-    
+
     console.log('🌍 fetchLocationForProduct called for:', product.name, 'ID:', productId, 'Existing location:', product.location, 'UserType:', userType);
-    
+
     // Use functional update to check current state without dependency
     setProductLocations(prev => {
       // Check if we already have the location for this product
@@ -911,22 +1027,22 @@ const EnhancedFarmMap = forwardRef(({
         console.log('🌍 Location already cached for product:', productId, 'Location:', prev.get(productId));
         return prev; // Return same state if already exists
       }
-      
+
       // If product already has a valid location field, use it directly
       if (product.location && product.location !== 'Unknown Location' && !product.location.includes(',')) {
         console.log('🌍 Using existing location for:', productId, 'Location:', product.location);
         setProductLocations(current => new Map(current.set(productId, product.location)));
         return prev;
       }
-      
+
       // Only geocode if we don't have a valid location and have coordinates
       if (!product.coordinates) {
         console.log('🌍 No coordinates available for product:', productId);
         return prev;
       }
-      
+
       const [longitude, latitude] = product.coordinates;
-      
+
       // Fetch location asynchronously only if needed
       (async () => {
         try {
@@ -943,14 +1059,71 @@ const EnhancedFarmMap = forwardRef(({
           setProductLocations(current => new Map(current.set(productId, fallbackLocation)));
         }
       })();
-      
+
       return prev; // Return current state while async operation runs
     });
   }, [userType]); // Add userType to dependencies for debugging
 
+  // Function to fetch real-time weather for a product
+  const fetchWeatherForProduct = useCallback(async (product) => {
+    if (!product) return;
+
+    // Extract coordinates safely (handles both array [lng, lat] and object {lat, lng})
+    let lat, lng;
+    if (Array.isArray(product.coordinates)) {
+      [lng, lat] = product.coordinates;
+    } else if (product.coordinates && typeof product.coordinates === 'object') {
+      lat = product.coordinates.lat || product.coordinates.latitude;
+      lng = product.coordinates.lng || product.coordinates.longitude;
+    }
+
+    if (lat === undefined || lng === undefined) {
+      console.log('🌤️ Weather fetch skipped: Invalid coordinates', product.coordinates);
+      return;
+    }
+
+    const productId = String(product.id);
+    if (!productId || productId === 'undefined') return;
+
+    // Check if we already have weather for this product
+    if (productWeather.has(productId)) {
+      return;
+    }
+
+    console.log(`🌤️ Fetching weather for product ${productId} (${product.name}) at ${lat}, ${lng}`);
+    try {
+      const data = await weatherService.getCurrentWeather(lat, lng);
+      if (data && data.weatherString) {
+        console.log(`🌤️ Weather update for ${productId}:`, data.weatherString);
+        setProductWeather(prev => {
+          const next = new Map(prev);
+          next.set(productId, data);
+          return next;
+        });
+
+      } else {
+        console.warn(`🌤️ No weather data returned for ${productId}. Verify Key in .env and RESTART server.`);
+      }
+    } catch (error) {
+      console.error('🌤️ Failed to fetch weather:', error);
+    }
+  }, [productWeather]);
+
+  // Alert on mount if API Key is missing (requires server restart)
+  useEffect(() => {
+    const key = process.env.REACT_APP_OPENWEATHER_API_KEY;
+    if (!key) {
+      console.error('❌ CRITICAL: REACT_APP_OPENWEATHER_API_KEY is missing! Restart your npm start server.');
+    } else {
+      console.log('✅ OpenWeather API Key detected.');
+    }
+  }, []);
+
+
+
   const handleProductClick = useCallback((event, product) => {
     event.stopPropagation();
-    
+
     // Use functional update to avoid stale state issues
     setSelectedProduct(prevSelected => {
       // If clicking the same product, close the popup
@@ -959,13 +1132,15 @@ const EnhancedFarmMap = forwardRef(({
       }
       return product;
     });
-    
+
     setSelectedShipping(null);
     setQuantity(1);
     setInsufficientFunds(false);
     setSelectedHarvestDate(null);
+    setPopupTab('details');
     setShowPurchaseUI(!isProductPurchased(product));
-    
+
+
     if (mapRef.current && product.coordinates) {
       const map = mapRef.current.getMap();
       isMapAnimatingRef.current = true;
@@ -984,14 +1159,15 @@ const EnhancedFarmMap = forwardRef(({
         setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
       });
     }
-    
-    // Fetch location for the selected product
+
+    // Fetch location and weather for the selected product
     fetchLocationForProduct(product);
-    
+    fetchWeatherForProduct(product);
+
     if (onProductSelect) {
       onProductSelect(product);
     }
-  }, [onProductSelect, fetchLocationForProduct]);
+  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct]);
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -1006,10 +1182,13 @@ const EnhancedFarmMap = forwardRef(({
           offset: [0, -(isMobile ? 160 : 200)],
           easing: (t) => t * (2 - t)
         });
-        
+
         if (autoOpenPopup) {
+          setPopupTab('details');
           setSelectedProduct(farm);
+
           fetchLocationForProduct(farm);
+          fetchWeatherForProduct(farm);
           popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
           setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
         }
@@ -1019,14 +1198,14 @@ const EnhancedFarmMap = forwardRef(({
       console.log('🔄 Manually refreshing farm data...');
       setRefreshTrigger(prev => prev + 1);
     }
-  }), [fetchLocationForProduct]); // Removed viewState dependency to prevent unnecessary re-creation
+  }), [fetchLocationForProduct, fetchWeatherForProduct]); // Removed viewState dependency to prevent unnecessary re-creation
 
-  
+
 
   // Load farms data
   useEffect(() => {
     console.log('🔄 EnhancedFarmMap useEffect triggered - externalFarms:', externalFarms?.length, 'externalFields:', externalFields?.length);
-    
+
     // Prefer fields over farms for map rendering; only accept datasets with usable coordinates
     if (externalFields && externalFields.length > 0) {
       console.log('🔄 Using external fields from props:', externalFields.length);
@@ -1055,7 +1234,7 @@ const EnhancedFarmMap = forwardRef(({
             databaseFields = (response.data || []).map(normalizeField);
             console.log('🗄️ Loaded fields from database:', databaseFields.length);
             console.log('🗄️ Database fields:', databaseFields);
-            
+
             // Check specifically for the watermelon field
             const watermelonField = databaseFields.find(f => f.name === 'My Watermelon');
             if (watermelonField) {
@@ -1067,21 +1246,21 @@ const EnhancedFarmMap = forwardRef(({
             console.error('❌ Failed to load fields from database:', error);
             console.error('❌ Error details:', error.response || error.message);
           }
-          
+
           // Load mock data for demo purposes
           const allFields = databaseFields;
           console.log('🔄 Combined all fields:', allFields.length);
           console.log('🔄 All fields with coordinates:', allFields.filter(f => f.coordinates).length);
-          
+
           // Note: Purchase status and rented fields are now managed via API
           // In a full implementation, we would fetch user orders and rented fields from API
-          
+
           // Set fields directly (purchase status managed via API)
           allFields.forEach(f => { if (f.isPurchased) stablePurchasedIdsRef.current.add(f.id); });
           const filteredFields = allFields.filter(f => !shouldFilterOutByOccupiedArea(f));
           setFarms(allFields);
           setFilteredFarms(filteredFields);
-          
+
           if (mapRef.current && allFields.length > 0) {
             const validFarms = allFields.filter(farm => farm.coordinates);
             console.log('🗺️ Auto-fit Debug - Valid farms for auto-fit:', validFarms.length);
@@ -1095,7 +1274,7 @@ const EnhancedFarmMap = forwardRef(({
                 }
                 return null;
               }).filter(coord => coord !== null);
-              
+
               if (coordinates.length > 0) {
                 if (!hasInitialFlyRef.current) {
                   setTimeout(() => {
@@ -1182,7 +1361,7 @@ const EnhancedFarmMap = forwardRef(({
           farm.farmer?.toLowerCase().includes(searchTerm) ||
           farm.description?.toLowerCase().includes(searchTerm) ||
           farm.location?.toLowerCase().includes(searchTerm) ||
-          farm.products?.some(product => 
+          farm.products?.some(product =>
             product.name?.toLowerCase().replace(/-/g, ' ').includes(searchTerm)
           )
         );
@@ -1362,7 +1541,7 @@ const EnhancedFarmMap = forwardRef(({
       try {
         const d = new Date(date);
         if (isNaN(d.getTime())) return date;
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
       } catch { return date; }
     };
@@ -1407,11 +1586,11 @@ const EnhancedFarmMap = forwardRef(({
     try {
       const dd = new Date(pick);
       if (!isNaN(dd.getTime())) return dd;
-    } catch {}
+    } catch { }
     return null;
   }, [purchasedProducts]);
 
-  
+
 
   const getDaysUntilHarvest = useCallback((prod) => {
     const d = getHarvestDateObj(prod);
@@ -1483,7 +1662,7 @@ const EnhancedFarmMap = forwardRef(({
         if (purchased && du === 0 && !celebratedHarvestIdsRef.current.has(prod.id)) {
           newlyVisible.push(prod.id);
         }
-      } catch {}
+      } catch { }
     });
     if (newlyVisible.length === 0) return;
     newlyVisible.forEach((pid) => {
@@ -1564,7 +1743,7 @@ const EnhancedFarmMap = forwardRef(({
       try {
         const d = new Date(date);
         if (isNaN(d.getTime())) return date;
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
       } catch { return date; }
     };
@@ -1573,7 +1752,7 @@ const EnhancedFarmMap = forwardRef(({
       const normalized = items.filter(it => {
         const d = (() => {
           if (!it?.date) return '';
-          try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {}
+          try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { }
           return typeof it.date === 'string' ? it.date : '';
         })();
         const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
@@ -1658,7 +1837,7 @@ const EnhancedFarmMap = forwardRef(({
     console.log('Current user ID:', currentUser?.id);
     console.log('Product being purchased:', product);
     console.log('=== PURCHASE DEBUG END ===');
-    
+
     if (!currentUser || !currentUser.id) {
       if (onNotification) {
         onNotification('Please log in to make a purchase.', 'error');
@@ -1700,20 +1879,20 @@ const EnhancedFarmMap = forwardRef(({
       setInsufficientFunds(false);
       return;
     }
-    
+
     const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
     const totalCostInCoins = Math.ceil(totalCostInDollars); // 1 coin = $100, so we need totalCostInDollars/100 coins
-    
+
     // Reset insufficient funds error
     setInsufficientFunds(false);
-    
+
     // Check if user has sufficient coins using coinService
     const hasSufficientCoins = await coinService.hasSufficientCoins(currentUser.id, totalCostInCoins);
     if (!hasSufficientCoins) {
       setInsufficientFunds(true);
       return;
     }
-    
+
     // Check if user is trying to purchase from their own farm
     if (currentUser && (product.farmer_id === currentUser.id || product.created_by === currentUser.id)) {
       if (onNotification) {
@@ -1721,7 +1900,7 @@ const EnhancedFarmMap = forwardRef(({
       }
       return;
     }
-    
+
     try {
       // Create order data
       const orderData = {
@@ -1758,9 +1937,9 @@ const EnhancedFarmMap = forwardRef(({
         selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
         created_at: new Date().toISOString()
       };
-      
+
       // Note: Removed deprecated storage service calls - using API only
-      
+
       // Create order via real API
       console.log('Current user for order creation:', currentUser);
       if (currentUser && currentUser.id) {
@@ -1783,12 +1962,12 @@ const EnhancedFarmMap = forwardRef(({
             return base + summary;
           })();
         }
-        
+
         console.log('Creating order with API data:', apiOrderData);
         try {
           const orderResponse = await orderService.createOrder(apiOrderData);
           console.log('Order created successfully:', orderResponse.data);
-          
+
           // Create notification for the farmer
           const farmerId = product.farmer_id || product.created_by;
           if (farmerId) {
@@ -1797,7 +1976,7 @@ const EnhancedFarmMap = forwardRef(({
               message: `New order received! ${currentUser.name || 'A buyer'} purchased ${quantity}m² of your field "${product.name}" for $${totalCostInDollars.toFixed(2)}`,
               type: 'success'
             };
-            
+
             try {
               await notificationsService.create(notificationData);
               console.log('Farmer notification created successfully');
@@ -1816,17 +1995,17 @@ const EnhancedFarmMap = forwardRef(({
         // Fall back to mock service if no user
         await mockOrderService.createOrder(orderData);
       }
-      
+
       // Note: Field purchase status managed via API
-      
+
       // Update UI state
       setPurchasedFarms(prev => new Set([...prev, product.id]));
-      
+
       const totalArea = product.total_area || 1;
       const existing = purchasedProducts.find(p => p.id === product.id);
       if (existing) {
-        const updated = purchasedProducts.map(p => p.id === product.id ? { 
-          ...p, 
+        const updated = purchasedProducts.map(p => p.id === product.id ? {
+          ...p,
           purchased_area: (p.purchased_area || 0) + quantity,
           selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : p.selected_harvest_date,
           selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : p.selected_harvest_label,
@@ -1836,7 +2015,7 @@ const EnhancedFarmMap = forwardRef(({
             const next = nextItem ? [...prev, nextItem] : prev;
             const seen = new Set();
             return next.filter(it => {
-              const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })();
+              const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
               const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
               if (seen.has(k)) return false; seen.add(k); return true;
             });
@@ -1856,7 +2035,7 @@ const EnhancedFarmMap = forwardRef(({
           selected_harvests: (() => {
             if (!selectedHarvestDate) return [];
             const it = { date: selectedHarvestDate.date, label: selectedHarvestDate.label };
-            const d = (() => { try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })();
+            const d = (() => { try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
             const k = `${d}|${(it.label || '').trim().toLowerCase()}`;
             const s = new Set();
             return [{ date: d || it.date, label: (it.label || '').trim() }].filter(x => { const kk = `${x.date || ''}|${(x.label || '').trim().toLowerCase()}`; if (s.has(kk)) return false; s.add(kk); return true; });
@@ -1896,13 +2075,13 @@ const EnhancedFarmMap = forwardRef(({
             const sh = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
             const shs = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
             const added = sh.date || sh.label ? [...shs, sh] : shs;
-          const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
-          const createdAt = o.created_at || o.createdAt || null;
-          const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
-          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
-          const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
-          const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
-          byField.set(fid, {
+            const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+            const createdAt = o.created_at || o.createdAt || null;
+            const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+            const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+            const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+            const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
+            byField.set(fid, {
               id: fid,
               name,
               category,
@@ -1916,10 +2095,10 @@ const EnhancedFarmMap = forwardRef(({
               last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
               last_order_purchased: (curTs >= prevTs)
                 ? ((o.purchased === true)
-                    || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
-                    || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+                  || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                  || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
                 : (prev.last_order_purchased === true)
-          });
+            });
           }
           const list = Array.from(byField.values());
           setPurchasedProducts(prev => {
@@ -1936,7 +2115,7 @@ const EnhancedFarmMap = forwardRef(({
                 const shIncoming = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
                 const combined = [...shPrev, ...shIncoming];
                 const s = new Set();
-                existing.selected_harvests = combined.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; });
+                existing.selected_harvests = combined.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; });
                 const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
                 const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
                 if (prevTs > curTs) {
@@ -1953,14 +2132,14 @@ const EnhancedFarmMap = forwardRef(({
           });
           list.forEach(p => stablePurchasedIdsRef.current.add(p.id));
           setRefreshTrigger(prev => prev + 1);
-        } catch {}
+        } catch { }
       })());
       if (onNotificationRefresh) onNotificationRefresh();
-      
+
       // Update UI to reflect purchase status (using API-based approach)
       // The purchase status is now managed via the database, so we just update the local UI state
       // In a full implementation, we would reload the fields from the API to get updated status
-      
+
       // If this is a farmer-created field, create a farm order and send notification
       if (product.isFarmerCreated) {
         const farmOrder = {
@@ -1977,13 +2156,13 @@ const EnhancedFarmMap = forwardRef(({
           shippingMethod: selectedShipping || 'Delivery',
           mode_of_shipping: selectedShipping || 'Delivery'
         };
-        
+
         // Farm orders and notifications are now managed via API
         // TODO: Implement API calls for farm orders and notifications
-        
+
         // Note: Notification already sent above, no need for duplicate notification
       }
-      
+
     } catch (error) {
       console.error('Failed to create order:', error);
       if (onNotification) {
@@ -2035,7 +2214,7 @@ const EnhancedFarmMap = forwardRef(({
           const sh2 = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
           const shs2 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
           const added2 = sh2.date || sh2.label ? [...shs2, sh2] : shs2;
-          const uniq2 = (() => { const s = new Set(); return added2.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+          const uniq2 = (() => { const s = new Set(); return added2.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
           const createdAt = o.created_at || o.createdAt || null;
           const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
           const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
@@ -2056,8 +2235,8 @@ const EnhancedFarmMap = forwardRef(({
             last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
             last_order_purchased: (curTs >= prevTs)
               ? ((o.purchased === true)
-                  || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
-                  || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+                || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
               : (prev.last_order_purchased === true)
           });
         }
@@ -2076,7 +2255,7 @@ const EnhancedFarmMap = forwardRef(({
               const shIncoming2 = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
               const combined2 = [...shPrev2, ...shIncoming2];
               const s2 = new Set();
-              existing.selected_harvests = combined2.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s2.has(k)) return false; s2.add(k); return true; });
+              existing.selected_harvests = combined2.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s2.has(k)) return false; s2.add(k); return true; });
               const mPrev = Array.isArray(existing.shipping_modes) ? existing.shipping_modes : [];
               const mIncoming = Array.isArray(p.shipping_modes) ? p.shipping_modes : [];
               const mCombined = [...mPrev, ...mIncoming];
@@ -2102,83 +2281,83 @@ const EnhancedFarmMap = forwardRef(({
           const res2 = await orderService.getBuyerOrders();
           const orders = res2?.data?.orders || [];
           const byField = new Map();
-        for (const o of orders) {
-          const fid = o.field_id || o.fieldId;
-          if (!fid) continue;
-          const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
-          const qtyRaw3 = o.quantity ?? o.area_rented ?? o.area ?? 0;
-          const qty = typeof qtyRaw3 === 'string' ? parseFloat(qtyRaw3) : qtyRaw3;
-          const field = farms.find(f => f.id === fid) || {};
-          const name = field.name || o.product_name || o.name;
-          const category = field.subcategory || field.category || o.crop_type;
-          const total_area = field.total_area || 0;
-          const coordinates = field.coordinates;
-          const sh3 = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
-          const shs3 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
-          const added3 = sh3.date || sh3.label ? [...shs3, sh3] : shs3;
-          const uniq3 = (() => { const s = new Set(); return added3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
-          const createdAt = o.created_at || o.createdAt || null;
-          const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
-          const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
-          const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
-          const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
-          byField.set(fid, {
-            id: fid,
-            name,
-            category,
-            total_area,
-            purchased_area: (prev.purchased_area || 0) + qty,
-            coordinates,
-            selected_harvests: uniq3,
-            shipping_modes: (() => { const pm = Array.isArray(prev.shipping_modes) ? prev.shipping_modes : []; const m = (o.mode_of_shipping || o.shipping_method || '').trim(); const canon = m.toLowerCase() === 'pickup' ? 'Pickup' : (m.toLowerCase() === 'delivery' ? 'Delivery' : (m ? m : null)); const added = canon ? [...pm, canon] : pm; const s = new Set(); return added.filter(x => { const k = (x || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })(),
-            delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
-            last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
-            last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
-            last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
-            last_order_purchased: (curTs >= prevTs)
-              ? ((o.purchased === true)
+          for (const o of orders) {
+            const fid = o.field_id || o.fieldId;
+            if (!fid) continue;
+            const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
+            const qtyRaw3 = o.quantity ?? o.area_rented ?? o.area ?? 0;
+            const qty = typeof qtyRaw3 === 'string' ? parseFloat(qtyRaw3) : qtyRaw3;
+            const field = farms.find(f => f.id === fid) || {};
+            const name = field.name || o.product_name || o.name;
+            const category = field.subcategory || field.category || o.crop_type;
+            const total_area = field.total_area || 0;
+            const coordinates = field.coordinates;
+            const sh3 = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
+            const shs3 = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
+            const added3 = sh3.date || sh3.label ? [...shs3, sh3] : shs3;
+            const uniq3 = (() => { const s = new Set(); return added3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+            const createdAt = o.created_at || o.createdAt || null;
+            const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+            const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+            const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+            const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
+            byField.set(fid, {
+              id: fid,
+              name,
+              category,
+              total_area,
+              purchased_area: (prev.purchased_area || 0) + qty,
+              coordinates,
+              selected_harvests: uniq3,
+              shipping_modes: (() => { const pm = Array.isArray(prev.shipping_modes) ? prev.shipping_modes : []; const m = (o.mode_of_shipping || o.shipping_method || '').trim(); const canon = m.toLowerCase() === 'pickup' ? 'Pickup' : (m.toLowerCase() === 'delivery' ? 'Delivery' : (m ? m : null)); const added = canon ? [...pm, canon] : pm; const s = new Set(); return added.filter(x => { const k = (x || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })(),
+              delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
+              last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
+              last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
+              last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
+              last_order_purchased: (curTs >= prevTs)
+                ? ((o.purchased === true)
                   || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
                   || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
-              : (prev.last_order_purchased === true)
-          });
-        }
+                : (prev.last_order_purchased === true)
+            });
+          }
           const list = Array.from(byField.values());
           setPurchasedProducts(prev => {
             const map = new Map();
-          list.forEach(item => map.set(String(item.id ?? item.field_id), { ...item }));
-          prev.forEach(p => {
-            const key = String(p.id ?? p.field_id);
-            const existing = map.get(key);
-            if (existing) {
-              const ex = typeof existing.purchased_area === 'string' ? parseFloat(existing.purchased_area) : (existing.purchased_area || 0);
-              const pv = typeof p.purchased_area === 'string' ? parseFloat(p.purchased_area) : (p.purchased_area || 0);
-              existing.purchased_area = Math.max(ex, pv);
-              const shPrev3 = Array.isArray(existing.selected_harvests) ? existing.selected_harvests : [];
-              const shIncoming3 = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
-              const combined3 = [...shPrev3, ...shIncoming3];
-              const s3 = new Set();
-              existing.selected_harvests = combined3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s3.has(k)) return false; s3.add(k); return true; });
-              const mPrev = Array.isArray(existing.shipping_modes) ? existing.shipping_modes : [];
-              const mIncoming = Array.isArray(p.shipping_modes) ? p.shipping_modes : [];
-              const mCombined = [...mPrev, ...mIncoming];
-              const ms = new Set();
-              existing.shipping_modes = mCombined.filter(x => { const k = (x || '').toLowerCase(); if (ms.has(k)) return false; ms.add(k); return true; });
-              const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
-              const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
-              if (prevTs > curTs) {
-                existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
-                existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
-                existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
-                existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+            list.forEach(item => map.set(String(item.id ?? item.field_id), { ...item }));
+            prev.forEach(p => {
+              const key = String(p.id ?? p.field_id);
+              const existing = map.get(key);
+              if (existing) {
+                const ex = typeof existing.purchased_area === 'string' ? parseFloat(existing.purchased_area) : (existing.purchased_area || 0);
+                const pv = typeof p.purchased_area === 'string' ? parseFloat(p.purchased_area) : (p.purchased_area || 0);
+                existing.purchased_area = Math.max(ex, pv);
+                const shPrev3 = Array.isArray(existing.selected_harvests) ? existing.selected_harvests : [];
+                const shIncoming3 = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
+                const combined3 = [...shPrev3, ...shIncoming3];
+                const s3 = new Set();
+                existing.selected_harvests = combined3.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s3.has(k)) return false; s3.add(k); return true; });
+                const mPrev = Array.isArray(existing.shipping_modes) ? existing.shipping_modes : [];
+                const mIncoming = Array.isArray(p.shipping_modes) ? p.shipping_modes : [];
+                const mCombined = [...mPrev, ...mIncoming];
+                const ms = new Set();
+                existing.shipping_modes = mCombined.filter(x => { const k = (x || '').toLowerCase(); if (ms.has(k)) return false; ms.add(k); return true; });
+                const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
+                const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
+                if (prevTs > curTs) {
+                  existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
+                  existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
+                  existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
+                  existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+                }
+              } else {
+                map.set(key, { ...p });
               }
-            } else {
-              map.set(key, { ...p });
-            }
+            });
+            return Array.from(map.values());
           });
-          return Array.from(map.values());
-        });
           list.forEach(p => stablePurchasedIdsRef.current.add(p.id));
-        } catch {}
+        } catch { }
       }
     };
     loadPurchasedFromDb();
@@ -2319,13 +2498,19 @@ const EnhancedFarmMap = forwardRef(({
       : { height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' };
 
     return (
-      <div style={containerStyle}>
+      <div style={{
+        ...containerStyle,
+        background: 'radial-gradient(ellipse at bottom, #0d1b2a 0%, #000000 100%)',
+        overflow: 'hidden'
+      }}>
+        <div className="stars-bg" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
         <MapboxMap
           ref={mapRef}
           {...viewState}
           onMove={evt => setViewState(evt.viewState)}
           attributionControl={false}
-          mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
+          mapStyle={DARK_MAP_STYLE}
+          onLoad={(e) => configureGlobeMap(e.target)}
           style={{ position: 'absolute', inset: 0 }}
           mapboxAccessToken={MAPBOX_TOKEN}
           projection="globe"
@@ -2351,9 +2536,13 @@ const EnhancedFarmMap = forwardRef(({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  setPopupTab('details');
                   setSelectedProduct(f);
+
                   fetchLocationForProduct(f);
+                  fetchWeatherForProduct(f);
                   const coords = f?.coordinates;
+
                   if (mapRef.current && Array.isArray(coords) && coords.length >= 2) {
                     const map = mapRef.current.getMap?.();
                     const currentZoom = map && typeof map.getZoom === 'function' ? map.getZoom() : viewState.zoom;
@@ -2400,7 +2589,7 @@ const EnhancedFarmMap = forwardRef(({
                 backgroundColor: 'white',
                 borderRadius: isMobile ? '8px' : '12px',
                 padding: '0',
-                width: isMobile ? '235px' : '300px',
+                width: isMobile ? '235px' : '280px',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
                 border: '1px solid #e9ecef',
                 fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -2436,7 +2625,13 @@ const EnhancedFarmMap = forwardRef(({
                 </div>
               </div>
 
-              <div style={{ padding: isMobile ? '7px 10px 10px' : '8px 12px 12px' }}>
+              <div style={{ 
+                padding: isMobile ? '7px 10px 10px' : '8px 12px 12px',
+                maxHeight: '75vh',
+                overflowY: 'auto',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '7px' : '9px', marginBottom: isMobile ? '8px' : '10px' }}>
                   <div style={{
                     width: isMobile ? '44px' : '52px',
@@ -2469,17 +2664,10 @@ const EnhancedFarmMap = forwardRef(({
 
                     <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z"/></svg>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z" /></svg>
                       </span>
                       <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px', marginLeft: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {productLocations.get(selectedProduct.id) || selectedProduct.location || 'Unknown location'}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
-                      <span style={{ fontSize: isMobile ? '9px' : '11px' }}>🌤️</span>
-                      <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d' }}>
-                        {selectedProduct.weather || 'Not specified'}
                       </div>
                     </div>
                   </div>
@@ -2487,31 +2675,40 @@ const EnhancedFarmMap = forwardRef(({
 
                 <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: isMobile ? '7px 0' : '9px 0' }} />
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-                  <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>
-                    Rented: {formatAreaInt(getOccupiedArea(selectedProduct))}m²
-                  </div>
-                  <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px' }}>
-                    Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²
-                  </div>
-                </div>
+                {/* Tabs Header */}
+                {renderPopupTabs()}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V10h14v9z"/></svg>
-                    </span>
-                    <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>Harvest Dates</div>
+                {/* Tab Content */}
+                {popupTab === 'details' ? (
+                  <div style={{ animation: 'cardSlideIn 0.3s ease-out' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>
+                        Rented: {formatAreaInt(getOccupiedArea(selectedProduct))}m²
+                      </div>
+                      <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px' }}>
+                        Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V10h14v9z" /></svg>
+                        </span>
+                        <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '9px' : '11px' }}>Harvest Dates</div>
+                      </div>
+                      <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px', textAlign: 'right', marginLeft: '10px' }}>
+                        {(() => {
+                          const list = getSelectedHarvestList(selectedProduct);
+                          const uniq = Array.from(new Set(list));
+                          return uniq.length ? uniq.join(', ') : 'Not specified';
+                        })()}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '9px' : '11px', textAlign: 'right', marginLeft: '10px' }}>
-                    {(() => {
-                      const list = getSelectedHarvestList(selectedProduct);
-                      const uniq = Array.from(new Set(list));
-                      return uniq.length ? uniq.join(', ') : 'Not specified';
-                    })()}
-                  </div>
-                </div>
+                ) : renderWeatherTabContent()}
               </div>
+
             </div>
           </div>
         )}
@@ -2520,18 +2717,24 @@ const EnhancedFarmMap = forwardRef(({
   }
 
   return (
-    <div style={{ height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' }}>
+    <div style={{
+      height, width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate',
+      background: 'radial-gradient(ellipse at bottom, #0d1b2a 0%, #000000 100%)',
+      overflow: 'hidden'
+    }}>
+      <div className="stars-bg" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
       <MapboxMap
         ref={mapRef}
         {...viewState}
         onMove={evt => setViewState(evt.viewState)}
         attributionControl={false}
         onClick={() => {
-              setSelectedProduct(null);
-              setPopupPosition(null); // Also clear popup position
-              setInsufficientFunds(false);
-            }}
-        mapStyle="mapbox://styles/superfroggy/cmfwppeyl00dl01r0287fe98o"
+          setSelectedProduct(null);
+          setPopupPosition(null); // Also clear popup position
+          setInsufficientFunds(false);
+        }}
+        mapStyle={DARK_MAP_STYLE}
+        onLoad={(e) => configureGlobeMap(e.target)}
         style={{ width: '100%', height: '100%', marginTop: embedded ? '0px' : '-65px' }}
         mapboxAccessToken={MAPBOX_TOKEN}
         projection="globe"
@@ -2544,7 +2747,7 @@ const EnhancedFarmMap = forwardRef(({
 
         <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
         <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
-        
+
         {/* Current Location Marker with Pulsing Animation */}
         {currentLocation && (
           <Marker
@@ -2613,8 +2816,8 @@ const EnhancedFarmMap = forwardRef(({
             </div>
           </Marker>
         )}
-        
-        <div 
+
+        <div
           style={{
             position: 'absolute',
             top: embedded ? (isMobile ? '110px' : '120px') : (isMobile ? '220px' : '265px'),
@@ -2630,7 +2833,7 @@ const EnhancedFarmMap = forwardRef(({
                     const { latitude, longitude } = pos.coords;
                     setCurrentLocation({ latitude, longitude });
                     if (mapRef.current) {
-                      mapRef.current.flyTo({ center: [longitude, latitude], zoom: 10, duration: 1000, essential: true});
+                      mapRef.current.flyTo({ center: [longitude, latitude], zoom: 10, duration: 1000, essential: true });
                     }
                   },
                   () => {
@@ -2663,9 +2866,9 @@ const EnhancedFarmMap = forwardRef(({
             📍
           </button>
         </div>
-        
+
         {/* Home Control Button */}
-        <div 
+        <div
           style={{
             position: 'absolute',
             top: isMobile ? '150px' : '200px',
@@ -2710,201 +2913,201 @@ const EnhancedFarmMap = forwardRef(({
         {(() => {
           console.log('🔍 MARKER RENDER DEBUG - filteredFarms length:', filteredFarms.length);
           console.log('🔍 MARKER RENDER DEBUG - filteredFarms:', filteredFarms.map(f => ({ id: f.id, name: f.name, coordinates: f.coordinates })));
-          
+
           return filteredFarms.map((product) => {
             console.log('🎯 EnhancedFarmMap Debug - Processing product:', product.name, 'category:', product.category, 'coordinates:', product.coordinates);
-          
-          // Handle coordinate format conversion and null checks
-          let longitude, latitude;
-          
-          if (!product.coordinates) {
-            console.warn('⚠️ Skipping product with no coordinates:', product.name);
-            return null; // Skip rendering if no coordinates
-          }
-          
-          if (Array.isArray(product.coordinates)) {
-            // Array format: [longitude, latitude]
-            longitude = product.coordinates[0];
-            latitude = product.coordinates[1];
-          } else if (typeof product.coordinates === 'object') {
-            // Object format: { lat: ..., lng: ... } or { latitude: ..., longitude: ... }
-            longitude = product.coordinates.lng || product.coordinates.longitude;
-            latitude = product.coordinates.lat || product.coordinates.latitude;
-          } else {
-            return null; // Skip if coordinates format is unknown
-          }
-          
-          // Skip if coordinates are still null/undefined
-          if (longitude == null || latitude == null) {
-            return null;
-          }
-          
-          console.log('🗺️ Rendering marker for:', product.name, 'at', latitude, longitude);
-          
-          return (
-            <Marker
-              key={product.id}
-              longitude={longitude}
-              latitude={latitude}
-              anchor="center"
-            >
-            <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
-              {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
-                <img
-                  src={'/icons/effects/fric.gif'}
-                  style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    width: `${harvestGifSize}px`,
-                    height: `${harvestGifSize}px`,
-                    transform: 'translate(-50%, -50%)',
-                    pointerEvents: 'none',
-                    zIndex: 9999,
-                    willChange: 'transform',
-                  }}
-                />
-              )}
-              {isProductPurchased(product) && (() => {
-                const size = isMobile ? 46 : 60;
-                const strokeW = isMobile ? 4 : 5;
-                const innerR = isMobile ? 18 : 22;
-                const { progress } = getHarvestProgressInfo(product);
-                const grad = getRingGradientByHarvest(product);
-                const occ = getOccupiedArea(product);
-                const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
-                const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
-                const r = (size / 2) - (strokeW / 2);
-                const circumference = 2 * Math.PI * r;
-                const dash = Math.max(0, Math.min(circumference, progress * circumference));
-                const path = getPiePath(innerR, occRatio);
-                const cx = size / 2;
-                const cy = size / 2;
-                const ringGradId = `ringGrad-${product.id}`;
-                const glowId = `ringGlow-${product.id}`;
-                const rentGradId = `rentGrad-${product.id}`;
-                
-                return (
-                  <svg
-                    width={size}
-                    height={size}
-                    style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1 }}
-                  >
-                    <defs>
-                      <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor={grad.start} stopOpacity="0.95" />
-                        <stop offset="100%" stopColor={grad.end} stopOpacity="0.95" />
-                      </linearGradient>
-                      <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-                        <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#FFD8A8" floodOpacity="0.45" />
-                      </filter>
-                      <radialGradient id={rentGradId} cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stopColor="rgba(33,150,243,0.7)" />
-                        <stop offset="100%" stopColor="rgba(33,150,243,0.4)" />
-                      </radialGradient>
-                    </defs>
-                    <circle cx={cx} cy={cy} r={r} stroke={'rgba(255,255,255,0.30)'} strokeWidth={strokeW} fill="none" />
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={r}
-                      stroke={`url(#${ringGradId})`}
-                      strokeWidth={strokeW}
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeDasharray={`${dash} ${circumference}`}
-                      strokeDashoffset={0}
-                      transform={`rotate(-90 ${cx} ${cy})`}
-                      filter={`url(#${glowId})`}
-                    />
-                    <path d={path} fill={`url(#${rentGradId})`} stroke={'rgba(33,150,243,0.85)'} strokeWidth={1.1} transform={`translate(${cx - innerR}, ${cy - innerR})`} />
-                  </svg>
-                );
-              })()}
-              {(isProductPurchased(product) && isHarvestWithinGrace(product, 4)) && (() => {
-                const modes = getShippingModes(product).map(m => (m || '').toLowerCase());
-                const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
-                return mode ? addShippingOrbit(product, mode) : null;
-              })()}
-              <img
-                src={getProductImageSrc(product)}
-                alt={product.name || product.productName || 'Product'}
-                onError={(e) => { 
-                  // Debug: image failed, fallback to product icon
-                  // eslint-disable-next-line no-console
-                  console.warn('[Marker Image Error] Fallback to icon:', product.id, product.name, product.image);
-                  const fallback = getProductIcon(product.subcategory || product.category);
-                  if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
-                }}
-                style={{
-                  width: isMobile ? '20px' : '30px',
-                  height: isMobile ? '20px' : '30px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  position: 'relative',
-                  zIndex: 5,
-                  border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                  filter: blinkingFarms.has(product.id) 
-                    ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
-                    : isProductPurchased(product) 
-                    ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                    : rentedFields.has(product.id)
-                    ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
-                    : product.isFarmerCreated
-                    ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                    : 'none',
-                  backgroundColor: 'transparent',
-                  padding: '0',
-                  transition: 'all 0.3s ease',
-                  transformOrigin: 'center bottom',
 
-                  animation: blinkingFarms.has(product.id) 
-                    ? 'glow-blink 0.8s infinite' 
-                    : isProductPurchased(product) 
-                    ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite' 
-                    : rentedFields.has(product.id)
-                    ? 'glow-steady-green 2s infinite'
-                    : product.isFarmerCreated
-                    ? 'glow-farmer-created 3s infinite'
-                    : 'none',
-                  ...(harvestingIds.has(product.id) ? { animation: 'harvest-bounce 700ms ease-in-out infinite' } : {})
-                }}
-              />
-              {/* Farmer Created Badge */}
-              {product.isFarmerCreated && (
-                <div style={{
-                  position: 'absolute',
-                  top: isMobile ? '-5px' : '-8px',
-                  right: isMobile ? '-5px' : '-8px',
-                  width: isMobile ? '12px' : '16px',
-                  height: isMobile ? '12px' : '16px',
-                  backgroundColor: '#4CAF50',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: isMobile ? '8px' : '10px',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  border: '2px solid white',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                  zIndex: 10
-                }}>
-                  F
+            // Handle coordinate format conversion and null checks
+            let longitude, latitude;
+
+            if (!product.coordinates) {
+              console.warn('⚠️ Skipping product with no coordinates:', product.name);
+              return null; // Skip rendering if no coordinates
+            }
+
+            if (Array.isArray(product.coordinates)) {
+              // Array format: [longitude, latitude]
+              longitude = product.coordinates[0];
+              latitude = product.coordinates[1];
+            } else if (typeof product.coordinates === 'object') {
+              // Object format: { lat: ..., lng: ... } or { latitude: ..., longitude: ... }
+              longitude = product.coordinates.lng || product.coordinates.longitude;
+              latitude = product.coordinates.lat || product.coordinates.latitude;
+            } else {
+              return null; // Skip if coordinates format is unknown
+            }
+
+            // Skip if coordinates are still null/undefined
+            if (longitude == null || latitude == null) {
+              return null;
+            }
+
+            console.log('🗺️ Rendering marker for:', product.name, 'at', latitude, longitude);
+
+            return (
+              <Marker
+                key={product.id}
+                longitude={longitude}
+                latitude={latitude}
+                anchor="center"
+              >
+                <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
+                  {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
+                    <img
+                      src={'/icons/effects/fric.gif'}
+                      style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: '50%',
+                        width: `${harvestGifSize}px`,
+                        height: `${harvestGifSize}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 9999,
+                        willChange: 'transform',
+                      }}
+                    />
+                  )}
+                  {isProductPurchased(product) && (() => {
+                    const size = isMobile ? 46 : 60;
+                    const strokeW = isMobile ? 4 : 5;
+                    const innerR = isMobile ? 18 : 22;
+                    const { progress } = getHarvestProgressInfo(product);
+                    const grad = getRingGradientByHarvest(product);
+                    const occ = getOccupiedArea(product);
+                    const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
+                    const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
+                    const r = (size / 2) - (strokeW / 2);
+                    const circumference = 2 * Math.PI * r;
+                    const dash = Math.max(0, Math.min(circumference, progress * circumference));
+                    const path = getPiePath(innerR, occRatio);
+                    const cx = size / 2;
+                    const cy = size / 2;
+                    const ringGradId = `ringGrad-${product.id}`;
+                    const glowId = `ringGlow-${product.id}`;
+                    const rentGradId = `rentGrad-${product.id}`;
+
+                    return (
+                      <svg
+                        width={size}
+                        height={size}
+                        style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1 }}
+                      >
+                        <defs>
+                          <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor={grad.start} stopOpacity="0.95" />
+                            <stop offset="100%" stopColor={grad.end} stopOpacity="0.95" />
+                          </linearGradient>
+                          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+                            <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#FFD8A8" floodOpacity="0.45" />
+                          </filter>
+                          <radialGradient id={rentGradId} cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="rgba(33,150,243,0.7)" />
+                            <stop offset="100%" stopColor="rgba(33,150,243,0.4)" />
+                          </radialGradient>
+                        </defs>
+                        <circle cx={cx} cy={cy} r={r} stroke={'rgba(255,255,255,0.30)'} strokeWidth={strokeW} fill="none" />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={r}
+                          stroke={`url(#${ringGradId})`}
+                          strokeWidth={strokeW}
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeDasharray={`${dash} ${circumference}`}
+                          strokeDashoffset={0}
+                          transform={`rotate(-90 ${cx} ${cy})`}
+                          filter={`url(#${glowId})`}
+                        />
+                        <path d={path} fill={`url(#${rentGradId})`} stroke={'rgba(33,150,243,0.85)'} strokeWidth={1.1} transform={`translate(${cx - innerR}, ${cy - innerR})`} />
+                      </svg>
+                    );
+                  })()}
+                  {(isProductPurchased(product) && isHarvestWithinGrace(product, 4)) && (() => {
+                    const modes = getShippingModes(product).map(m => (m || '').toLowerCase());
+                    const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
+                    return mode ? addShippingOrbit(product, mode) : null;
+                  })()}
+                  <img
+                    src={getProductImageSrc(product)}
+                    alt={product.name || product.productName || 'Product'}
+                    onError={(e) => {
+                      // Debug: image failed, fallback to product icon
+                      // eslint-disable-next-line no-console
+                      console.warn('[Marker Image Error] Fallback to icon:', product.id, product.name, product.image);
+                      const fallback = getProductIcon(product.subcategory || product.category);
+                      if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                    }}
+                    style={{
+                      width: isMobile ? '20px' : '30px',
+                      height: isMobile ? '20px' : '30px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      display: 'block',
+                      position: 'relative',
+                      zIndex: 5,
+                      border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
+                      filter: blinkingFarms.has(product.id)
+                        ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
+                        : isProductPurchased(product)
+                          ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
+                          : rentedFields.has(product.id)
+                            ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
+                            : product.isFarmerCreated
+                              ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
+                              : 'none',
+                      backgroundColor: 'transparent',
+                      padding: '0',
+                      transition: 'all 0.3s ease',
+                      transformOrigin: 'center bottom',
+
+                      animation: blinkingFarms.has(product.id)
+                        ? 'glow-blink 0.8s infinite'
+                        : isProductPurchased(product)
+                          ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite'
+                          : rentedFields.has(product.id)
+                            ? 'glow-steady-green 2s infinite'
+                            : product.isFarmerCreated
+                              ? 'glow-farmer-created 3s infinite'
+                              : 'none',
+                      ...(harvestingIds.has(product.id) ? { animation: 'harvest-bounce 700ms ease-in-out infinite' } : {})
+                    }}
+                  />
+                  {/* Farmer Created Badge */}
+                  {product.isFarmerCreated && (
+                    <div style={{
+                      position: 'absolute',
+                      top: isMobile ? '-5px' : '-8px',
+                      right: isMobile ? '-5px' : '-8px',
+                      width: isMobile ? '12px' : '16px',
+                      height: isMobile ? '12px' : '16px',
+                      backgroundColor: '#4CAF50',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: isMobile ? '8px' : '10px',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      border: '2px solid white',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      zIndex: 10
+                    }}>
+                      F
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </Marker>
-          );
-        }).filter(Boolean);
+              </Marker>
+            );
+          }).filter(Boolean);
         })()}
 
 
       </MapboxMap>
 
       {/* Delivery Toggle Icon - top-left of map container */}
-      <div 
+      <div
         style={{
           position: 'absolute',
           top: isMobile ? '60px' : '120px',
@@ -2926,7 +3129,7 @@ const EnhancedFarmMap = forwardRef(({
             fontWeight: 'bold',
             boxShadow: '0 2px 8px rgba(33,150,243,0.15)',
             width: '40px',
-            height: '40px', 
+            height: '40px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
@@ -3006,23 +3209,23 @@ const EnhancedFarmMap = forwardRef(({
 
       <div ref={deliveryFlyLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1101 }}>
         {deliveryFlyCards.map(c => (
-            <div
-              key={c.id}
-              style={{
-                position: 'absolute',
-                left: c.x,
-                top: c.y,
-                transform: c.stage === 'arrive' ? 'translate(-50%, -50%) scale(0.6)' : 'translate(-50%, -50%)',
-                transition: 'left 2400ms cubic-bezier(0.22, 1, 0.36, 1), top 2400ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease',
-                animation: c.stage === 'fly' ? 'flipTravelY 900ms ease-in-out' : undefined,
+          <div
+            key={c.id}
+            style={{
+              position: 'absolute',
+              left: c.x,
+              top: c.y,
+              transform: c.stage === 'arrive' ? 'translate(-50%, -50%) scale(0.6)' : 'translate(-50%, -50%)',
+              transition: 'left 2400ms cubic-bezier(0.22, 1, 0.36, 1), top 2400ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms ease',
+              animation: c.stage === 'fly' ? 'flipTravelY 900ms ease-in-out' : undefined,
               width: isMobile ? 64 : 76,
-                borderRadius: isMobile ? 8 : 10,
-                overflow: 'hidden',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                border: '1px solid #ffe0b2',
-                background: 'linear-gradient(135deg, #ffffff 0%, #fff7e6 100%)'
-              }}
-            >
+              borderRadius: isMobile ? 8 : 10,
+              overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+              border: '1px solid #ffe0b2',
+              background: 'linear-gradient(135deg, #ffffff 0%, #fff7e6 100%)'
+            }}
+          >
             <div style={{ width: '100%', height: isMobile ? 28 : 32 }}>
               <img src={getProductImageSrc(c.product)} alt={c.product.name || 'Product'} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { e.currentTarget.src = getProductIcon(c.product.subcategory || c.product.category); }} />
             </div>
@@ -3034,13 +3237,13 @@ const EnhancedFarmMap = forwardRef(({
                 </div>
               )}
             </div>
-            </div>
+          </div>
         ))}
       </div>
 
       {/* Product Summary Bar */}
-      <ProductSummaryBar 
-        purchasedProducts={purchasedSummary} 
+      <ProductSummaryBar
+        purchasedProducts={purchasedSummary}
         onProductClick={handleSummaryProductClick}
         summaryRef={summaryBarRef}
         onIconPositionsUpdate={setIconTargets}
@@ -3050,979 +3253,1003 @@ const EnhancedFarmMap = forwardRef(({
 
       {/* Custom Popup */}
       {selectedProduct && popupPosition && (
-  <div
-  key={`popup-${selectedProduct.id}`}
-    style={{
-      position: 'absolute',
-      left: popupPosition.left,
-      top: popupPosition.top,
-      transform: popupPosition.transform || 'translate(-50%, -50%)',
-      zIndex: 1000,
-      transition: 'left 450ms ease, top 450ms ease, transform 450ms ease',
-      animation: !popupPosition.transform ? 'cardSlideIn 600ms ease both' : undefined
-    }}
-  >
-    <div
-      style={{
-        backgroundColor: 'white',
-        borderRadius: isMobile ? '8px' : '12px',
-        padding: '0',
-        width: isMobile ? '280px' : '380px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-        border: '1px solid #e9ecef',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
-      {/* Header with close button and webcam icon */}
-      <div style={{ position: 'relative', padding: isMobile ? '6px 12px 0' : '8px 16px 0' }}>
         <div
-          onClick={() => {
-          setSelectedProduct(null);
-          setInsufficientFunds(false);
-        }}
+          key={`popup-${selectedProduct.id}`}
           style={{
-            cursor: 'pointer',
-            fontSize: isMobile ? '12px' : '14px',
-            color: '#6c757d',
-            width: isMobile ? '20px' : '24px',
-            height: isMobile ? '20px' : '24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '50%',
-            backgroundColor: '#f0f0f0',
             position: 'absolute',
-            top: isMobile ? '6px' : '8px',
-            right: isMobile ? '6px' : '8px',
-            fontWeight: 'bold',
-            zIndex: 10
+            left: popupPosition.left,
+            top: popupPosition.top,
+            transform: popupPosition.transform || 'translate(-50%, -50%)',
+            zIndex: 1000,
+            transition: 'left 450ms ease, top 450ms ease, transform 450ms ease',
+            animation: !popupPosition.transform ? 'cardSlideIn 600ms ease both' : undefined
           }}
         >
-          ✕
-        </div>
-        
-        {/* Edit button for farmers - only show for farmer's own fields */}
-        {userType === 'farmer' && selectedProduct.isOwnField && onEditField && (
-          <div style={{
-            position: 'absolute',
-            top: isMobile ? '6px' : '8px',
-            right: isMobile ? '60px' : '72px',
-            width: isMobile ? '28px' : '32px',
-            height: isMobile ? '28px' : '32px',
-            backgroundColor: '#28a745',
-            borderRadius: isMobile ? '6px' : '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(40, 167, 69, 0.3)',
-            transition: 'all 0.2s ease',
-            border: '2px solid white',
-            zIndex: 10
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.backgroundColor = '#218838';
-            e.target.style.transform = 'scale(1.1)';
-            e.target.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.backgroundColor = '#28a745';
-            e.target.style.transform = 'scale(1)';
-            e.target.style.boxShadow = '0 2px 8px rgba(40, 167, 69, 0.3)';
-          }}
-          onClick={() => onEditField(selectedProduct)}
-          title="Edit Field"
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: isMobile ? '8px' : '12px',
+              padding: '0',
+              width: isMobile ? '280px' : '340px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+              border: '1px solid #e9ecef',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              position: 'relative',
+              overflow: 'hidden'
+            }}
           >
-            <svg width={isMobile ? "14" : "16"} height={isMobile ? "14" : "16"} viewBox="0 0 24 24" fill="white">
-              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-            </svg>
-          </div>
-        )}
-
-        {/* Webcam icon - positioned in header (visible in both views) */}
-        <div style={{
-          position: 'absolute',
-          top: isMobile ? '6px' : '8px',
-          right: isMobile ? '32px' : '40px',
-          width: isMobile ? '28px' : '32px',
-          height: isMobile ? '28px' : '32px',
-          backgroundColor: '#007bff',
-          borderRadius: isMobile ? '6px' : '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0, 123, 255, 0.3)',
-          transition: 'all 0.2s ease',
-          border: '2px solid white',
-          zIndex: 10
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.backgroundColor = '#0056b3';
-          e.target.style.transform = 'scale(1.1)';
-          e.target.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.4)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.backgroundColor = '#007bff';
-          e.target.style.transform = 'scale(1)';
-          e.target.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
-        }}
-        onClick={() => window.open('https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1', '_blank', 'noopener,noreferrer')}
-        title="View Live Camera Feed"
-        >
-          <svg width={isMobile ? "16" : "18"} height={isMobile ? "16" : "18"} viewBox="0 0 24 24" fill="white">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
-          </svg>
-        </div>
-        
-        {/* Location */}
-        {showPurchaseUI && (
-          <div style={{
-            fontSize: isMobile ? '9px' : '10px',
-            color: '#6c757d',
-            marginBottom: isMobile ? '6px' : '8px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            fontWeight: 500
-          }}>
-            {(() => {
-              const cachedLocation = productLocations.get(selectedProduct.id);
-              const fallbackLocation = selectedProduct.location;
-              const displayLocation = cachedLocation || fallbackLocation || 'LOADING LOCATION...';
-              console.log('🌍 POPUP DISPLAY - Product:', selectedProduct.name, 'ID:', selectedProduct.id, 'UserType:', userType, 'Cached:', cachedLocation, 'Fallback:', fallbackLocation, 'Display:', displayLocation);
-              return displayLocation;
-            })()}
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div style={{ padding: isMobile ? '0 12px 12px' : '0 16px 16px', position: 'relative' }}>
-        <style>
-          {`@keyframes popupPulse { 0% { transform: scale(1); } 100% { transform: scale(1.07); } }`}
-        </style>
-        {/* Main Content Row */}
-        <div style={{ display: 'flex', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '10px' : '12px' }}>
-          {showPurchaseUI && (
-            <>
-              {/* Left side - Product Image */}
-              <div style={{ 
-                width: isMobile ? '60px' : '70px', 
-                height: isMobile ? '60px' : '70px', 
-                backgroundColor: '#f8f9fa', 
-                borderRadius: isMobile ? '4px' : '6px',
-                flexShrink: 0
-              }}>
-                <img
-                  src={getProductImageSrc(selectedProduct)}
-                  alt={selectedProduct.name || selectedProduct.productName || 'Product'}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: isMobile ? '4px' : '6px' }}
-                  onError={(e) => { e.currentTarget.src = getProductIcon(selectedProduct?.subcategory || selectedProduct?.category); }}
-                />
+            {/* Header with close button and webcam icon */}
+            <div style={{ position: 'relative', padding: isMobile ? '6px 12px 0' : '8px 16px 0' }}>
+              <div
+                onClick={() => {
+                  setSelectedProduct(null);
+                  setInsufficientFunds(false);
+                }}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: isMobile ? '12px' : '14px',
+                  color: '#6c757d',
+                  width: isMobile ? '20px' : '24px',
+                  height: isMobile ? '20px' : '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  backgroundColor: '#f0f0f0',
+                  position: 'absolute',
+                  top: isMobile ? '6px' : '8px',
+                  right: isMobile ? '6px' : '8px',
+                  fontWeight: 'bold',
+                  zIndex: 10
+                }}
+              >
+                ✕
               </div>
 
-              {/* Middle - Product Info */}
-              <div style={{ flex: 1 }}>
-                {/* Product Name and Category */}
-                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '2px' }}>
-                  {selectedProduct.category || 'Category'}
-                </div>
-                <div style={{ fontSize: isMobile ? '12px' : '14px', fontWeight: 600, color: '#212529', marginBottom: '2px' }}>
-                  {selectedProduct.name || 'Product Name'}
-                </div>
-                
-                {/* Farm Name */}
-                {selectedProduct.farmName && (
-                  <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#28a745', marginBottom: '2px', fontWeight: 500 }}>
-                    🏡 {selectedProduct.farmName}
-                  </div>
-                )}
-                
-                {/* Farmer Name */}
-                <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d', marginBottom: isMobile ? '6px' : '8px' }}>
-                  ({selectedProduct.farmer_name || (selectedProduct.isOwnField && user?.name) || user?.name || 'Farmer Name'})
-                </div>
-
-                {/* Rating */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '2px' }}>
-                  {[1,2,3,4,5].map((star) => (
-                    <span key={star} style={{ color: star <= 4 ? '#ffc107' : '#e9ecef', fontSize: isMobile ? '10px' : '12px' }}>★</span>
-                  ))}
-                </div>
-
-                {/* Weather */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <span style={{ fontSize: isMobile ? '10px' : '12px' }}>🌤️</span>
-                  <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d' }}>
-                    {selectedProduct.weather || '6.4°C - overcast clouds'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right side - Area Info */}
-              <div style={{ 
-                width: isMobile ? '60px' : '70px', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'flex-end',
-                justifyContent: 'center'
-              }}>
-                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '3px' }}>
-                  {formatAreaInt(getOccupiedArea(selectedProduct))}/{formatAreaInt(selectedProduct.total_area || 0)}m²
-                </div>
+              {/* Edit button for farmers - only show for farmer's own fields */}
+              {userType === 'farmer' && selectedProduct.isOwnField && onEditField && (
                 <div style={{
-                  width: '100%',
-                  height: isMobile ? '4px' : '6px',
-                  backgroundColor: '#e9ecef',
-                  borderRadius: isMobile ? '2px' : '3px',
-                  overflow: 'hidden',
-                  marginBottom: '3px'
-                }}>
-                  <div style={{
-                    width: `${Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%`,
-                    height: '100%',
-                    backgroundColor: '#28a745'
-                  }} />
+                  position: 'absolute',
+                  top: isMobile ? '6px' : '8px',
+                  right: isMobile ? '60px' : '72px',
+                  width: isMobile ? '28px' : '32px',
+                  height: isMobile ? '28px' : '32px',
+                  backgroundColor: '#28a745',
+                  borderRadius: isMobile ? '6px' : '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(40, 167, 69, 0.3)',
+                  transition: 'all 0.2s ease',
+                  border: '2px solid white',
+                  zIndex: 10
+                }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = '#218838';
+                    e.target.style.transform = 'scale(1.1)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = '#28a745';
+                    e.target.style.transform = 'scale(1)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(40, 167, 69, 0.3)';
+                  }}
+                  onClick={() => onEditField(selectedProduct)}
+                  title="Edit Field"
+                >
+                  <svg width={isMobile ? "14" : "16"} height={isMobile ? "14" : "16"} viewBox="0 0 24 24" fill="white">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                  </svg>
                 </div>
-                <div style={{ 
-                  fontSize: isMobile ? '9px' : '11px', 
-                  color: '#28a745', 
-                  fontWeight: 600,
-                  textAlign: 'right'
-                }}>
-                  {Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-        {showPurchaseUI && (
-        <>
-        {/* Divider Line */}
-        <div style={{ height: '1px', backgroundColor: '#e9ecef', margin: isMobile ? '10px 0' : '12px 0' }} />
+              )}
 
-        {/* Harvest Dates */}
-        <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '10px' : '12px' }}>
-          {(() => {
-            const harvestDates = selectedProduct.harvest_dates || selectedProduct.harvestDates;
-            const singleDate = selectedProduct.harvest_date || selectedProduct.harvestDate;
-            
-            // Function to format a date
-            const formatDate = (date) => {
-              if (!date) return null;
-              
-              // If it's already in the desired format, return as is
-              if (typeof date === 'string' && /^\d{1,2}\s\w{3}\s\d{4}$/.test(date)) {
-                return date;
-              }
-              
-              // Try to parse and format the date
-              try {
-                const parsedDate = new Date(date);
-                if (isNaN(parsedDate.getTime())) return date; // Return original if invalid
-                
-                const day = parsedDate.getDate();
-                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                const month = months[parsedDate.getMonth()];
-                const year = parsedDate.getFullYear();
-                
-                return `${day} ${month} ${year}`;
-              } catch (e) {
-                return date; // Return original if parsing fails
-              }
-            };
-            
-            // Handle multiple harvest dates - make them selectable
-            if (harvestDates && Array.isArray(harvestDates) && harvestDates.length > 0) {
-              const validDates = harvestDates.filter(hd => hd.date && hd.date.trim() !== '');
-              
-              if (validDates.length === 0) {
-                return 'Estimated harvest Date: Not specified';
-              }
-              
-              if (validDates.length === 1) {
-                const formattedDate = formatDate(validDates[0].date);
-                const label = validDates[0].label ? ` (${validDates[0].label})` : '';
-                const dateObj = validDates[0];
-                
-                // Auto-select the single date if not already selected
-                if (!selectedHarvestDate) {
-                  setSelectedHarvestDate(dateObj);
-                }
-                
-                return (
-                  <div>
-                    <div style={{ marginBottom: '4px', fontWeight: '500' }}>Estimated harvest Date:</div>
-                    <div 
-                      style={{ 
-                        marginLeft: '8px', 
-                        fontSize: '11px',
-                        padding: '4px 8px',
-                        backgroundColor: '#007bff',
-                        color: 'white',
-                        borderRadius: '4px',
-                        display: 'inline-block',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {formattedDate}{label}
-                    </div>
-                  </div>
-                );
-              }
-              
-              // Multiple dates - make them selectable
-              return (
-                <div>
-                  <div style={{ marginBottom: '6px', fontWeight: '500' }}>Select harvest Date:</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {validDates.map((hd, index) => {
-                      const formattedDate = formatDate(hd.date);
-                      const label = hd.label ? ` (${hd.label})` : '';
-                      const isSelected = selectedHarvestDate && selectedHarvestDate.date === hd.date;
-                      
-                      return (
-                        <div 
-                          key={index} 
-                          onClick={() => setSelectedHarvestDate(hd)}
-                          style={{ 
-                            marginLeft: '8px', 
-                            fontSize: '11px',
-                            padding: '4px 8px',
-                            backgroundColor: isSelected ? '#007bff' : '#f8f9fa',
-                            color: isSelected ? 'white' : '#6c757d',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            border: isSelected ? 'none' : '1px solid #e9ecef',
-                            fontWeight: isSelected ? '500' : 'normal',
-                            transition: 'all 0.2s ease',
-                            width: '70px',
-                            textAlign: 'center',
-                          }}
-                        >
-                          {formattedDate}{label}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {!selectedHarvestDate && (
-                    <div style={{ 
-                      fontSize: '10px', 
-                      color: '#dc3545', 
-                      marginTop: '4px',
-                      marginLeft: '8px'
+              {/* Webcam icon - positioned in header (visible in both views) */}
+              <div style={{
+                position: 'absolute',
+                top: isMobile ? '6px' : '8px',
+                right: isMobile ? '32px' : '40px',
+                width: isMobile ? '28px' : '32px',
+                height: isMobile ? '28px' : '32px',
+                backgroundColor: '#007bff',
+                borderRadius: isMobile ? '6px' : '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0, 123, 255, 0.3)',
+                transition: 'all 0.2s ease',
+                border: '2px solid white',
+                zIndex: 10
+              }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = '#0056b3';
+                  e.target.style.transform = 'scale(1.1)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = '#007bff';
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
+                }}
+                onClick={() => window.open('https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1', '_blank', 'noopener,noreferrer')}
+                title="View Live Camera Feed"
+              >
+                <svg width={isMobile ? "16" : "18"} height={isMobile ? "16" : "18"} viewBox="0 0 24 24" fill="white">
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z" />
+                </svg>
+              </div>
+
+              {/* Location */}
+              {showPurchaseUI && (
+                <div style={{
+                  fontSize: isMobile ? '9px' : '10px',
+                  color: '#6c757d',
+                  marginBottom: isMobile ? '6px' : '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  fontWeight: 500
+                }}>
+                  {(() => {
+                    const cachedLocation = productLocations.get(selectedProduct.id);
+                    const fallbackLocation = selectedProduct.location;
+                    const displayLocation = cachedLocation || fallbackLocation || 'LOADING LOCATION...';
+                    console.log('🌍 POPUP DISPLAY - Product:', selectedProduct.name, 'ID:', selectedProduct.id, 'UserType:', userType, 'Cached:', cachedLocation, 'Fallback:', fallbackLocation, 'Display:', displayLocation);
+                    return displayLocation;
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Content */}
+            <div style={{ 
+              padding: isMobile ? '0 12px 12px' : '0 16px 16px', 
+              position: 'relative',
+              maxHeight: '75vh',
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none'
+            }}>
+              <style>
+                {`@keyframes popupPulse { 0% { transform: scale(1); } 100% { transform: scale(1.07); } }`}
+              </style>
+              {/* Main Content Row */}
+              <div style={{ display: 'flex', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '10px' : '12px' }}>
+                {showPurchaseUI && (
+                  <>
+                    {/* Left side - Product Image */}
+                    <div style={{
+                      width: isMobile ? '60px' : '70px',
+                      height: isMobile ? '60px' : '70px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: isMobile ? '4px' : '6px',
+                      flexShrink: 0
                     }}>
-                      Please select a harvest date to proceed
+                      <img
+                        src={getProductImageSrc(selectedProduct)}
+                        alt={selectedProduct.name || selectedProduct.productName || 'Product'}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: isMobile ? '4px' : '6px' }}
+                        onError={(e) => { e.currentTarget.src = getProductIcon(selectedProduct?.subcategory || selectedProduct?.category); }}
+                      />
                     </div>
+
+                    {/* Middle - Product Info */}
+                    <div style={{ flex: 1 }}>
+                      {/* Product Name and Category */}
+                      <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '2px' }}>
+                        {selectedProduct.category || 'Category'}
+                      </div>
+                      <div style={{ fontSize: isMobile ? '12px' : '14px', fontWeight: 600, color: '#212529', marginBottom: '2px' }}>
+                        {selectedProduct.name || 'Product Name'}
+                      </div>
+
+                      {/* Farm Name */}
+                      {selectedProduct.farmName && (
+                        <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#28a745', marginBottom: '2px', fontWeight: 500 }}>
+                          🏡 {selectedProduct.farmName}
+                        </div>
+                      )}
+
+                      {/* Farmer Name */}
+                      <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d', marginBottom: isMobile ? '6px' : '8px' }}>
+                        ({selectedProduct.farmer_name || (selectedProduct.isOwnField && user?.name) || user?.name || 'Farmer Name'})
+                      </div>
+
+                      {/* Rating */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '2px' }}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span key={star} style={{ color: star <= 4 ? '#ffc107' : '#e9ecef', fontSize: isMobile ? '10px' : '12px' }}>★</span>
+                        ))}
+                      </div>
+
+                      {/* Weather */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <span style={{ fontSize: isMobile ? '10px' : '12px' }}>🌤️</span>
+                        <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d' }}>
+                          {productWeather.get(String(selectedProduct.id))?.weatherString || selectedProduct.weather || 'Unknown weather'}
+
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right side - Area Info */}
+                    <div style={{
+                      width: isMobile ? '60px' : '70px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
+                      justifyContent: 'center'
+                    }}>
+                      <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '3px' }}>
+                        {formatAreaInt(getOccupiedArea(selectedProduct))}/{formatAreaInt(selectedProduct.total_area || 0)}m²
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: isMobile ? '4px' : '6px',
+                        backgroundColor: '#e9ecef',
+                        borderRadius: isMobile ? '2px' : '3px',
+                        overflow: 'hidden',
+                        marginBottom: '3px'
+                      }}>
+                        <div style={{
+                          width: `${Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%`,
+                          height: '100%',
+                          backgroundColor: '#28a745'
+                        }} />
+                      </div>
+                      <div style={{
+                        fontSize: isMobile ? '9px' : '11px',
+                        color: '#28a745',
+                        fontWeight: 600,
+                        textAlign: 'right'
+                      }}>
+                        {Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Tab Navigation */}
+              {renderPopupTabs()}
+
+              {/* Tab Content */}
+              {popupTab === 'details' ? (
+                <div style={{ animation: 'cardSlideIn 0.3s ease-out' }}>
+                  {showPurchaseUI && (
+                    <>
+                      {/* Divider Line */}
+                      <div style={{ height: '1px', backgroundColor: '#e9ecef', margin: isMobile ? '10px 0' : '12px 0' }} />
+
+                      {/* Harvest Dates */}
+                      <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '10px' : '12px' }}>
+                        {(() => {
+                          const harvestDates = selectedProduct.harvest_dates || selectedProduct.harvestDates;
+                          const singleDate = selectedProduct.harvest_date || selectedProduct.harvestDate;
+
+                          // Function to format a date
+                          const formatDate = (date) => {
+                            if (!date) return null;
+
+                            // If it's already in the desired format, return as is
+                            if (typeof date === 'string' && /^\d{1,2}\s\w{3}\s\d{4}$/.test(date)) {
+                              return date;
+                            }
+
+                            // Try to parse and format the date
+                            try {
+                              const parsedDate = new Date(date);
+                              if (isNaN(parsedDate.getTime())) return date; // Return original if invalid
+
+                              const day = parsedDate.getDate();
+                              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                              const month = months[parsedDate.getMonth()];
+                              const year = parsedDate.getFullYear();
+
+                              return `${day} ${month} ${year}`;
+                            } catch (e) {
+                              return date; // Return original if parsing fails
+                            }
+                          };
+
+                          // Handle multiple harvest dates - make them selectable
+                          if (harvestDates && Array.isArray(harvestDates) && harvestDates.length > 0) {
+                            const validDates = harvestDates.filter(hd => hd.date && hd.date.trim() !== '');
+
+                            if (validDates.length === 0) {
+                              return 'Estimated harvest Date: Not specified';
+                            }
+
+                            if (validDates.length === 1) {
+                              const formattedDate = formatDate(validDates[0].date);
+                              const label = validDates[0].label ? ` (${validDates[0].label})` : '';
+                              const dateObj = validDates[0];
+
+                              // Auto-select the single date if not already selected
+                              if (!selectedHarvestDate) {
+                                setSelectedHarvestDate(dateObj);
+                              }
+
+                              return (
+                                <div>
+                                  <div style={{ marginBottom: '4px', fontWeight: '500' }}>Estimated harvest Date:</div>
+                                  <div
+                                    style={{
+                                      marginLeft: '8px',
+                                      fontSize: '11px',
+                                      padding: '4px 8px',
+                                      backgroundColor: '#007bff',
+                                      color: 'white',
+                                      borderRadius: '4px',
+                                      display: 'inline-block',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {formattedDate}{label}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Multiple dates - make them selectable
+                            return (
+                              <div>
+                                <div style={{ marginBottom: '6px', fontWeight: '500' }}>Select harvest Date:</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {validDates.map((hd, index) => {
+                                    const formattedDate = formatDate(hd.date);
+                                    const label = hd.label ? ` (${hd.label})` : '';
+                                    const isSelected = selectedHarvestDate && selectedHarvestDate.date === hd.date;
+
+                                    return (
+                                      <div
+                                        key={index}
+                                        onClick={() => setSelectedHarvestDate(hd)}
+                                        style={{
+                                          marginLeft: '8px',
+                                          fontSize: '11px',
+                                          padding: '4px 8px',
+                                          backgroundColor: isSelected ? '#007bff' : '#f8f9fa',
+                                          color: isSelected ? 'white' : '#6c757d',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          border: isSelected ? 'none' : '1px solid #e9ecef',
+                                          fontWeight: isSelected ? '500' : 'normal',
+                                          transition: 'all 0.2s ease',
+                                          width: '70px',
+                                          textAlign: 'center',
+                                        }}
+                                      >
+                                        {formattedDate}{label}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {!selectedHarvestDate && (
+                                  <div style={{
+                                    fontSize: '10px',
+                                    color: '#dc3545',
+                                    marginTop: '4px',
+                                    marginLeft: '8px'
+                                  }}>
+                                    Please select a harvest date to proceed
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Fallback to single date
+                          const formattedDate = formatDate(singleDate);
+                          if (singleDate) {
+                            // Auto-select the single date if not already selected
+                            if (!selectedHarvestDate) {
+                              setSelectedHarvestDate({ date: singleDate, label: '' });
+                            }
+
+                            return (
+                              <div>
+                                <div style={{ marginBottom: '4px', fontWeight: '500' }}>Estimated harvest Date:</div>
+                                <div
+                                  style={{
+                                    marginLeft: '8px',
+                                    fontSize: '11px',
+                                    padding: '4px 8px',
+                                    backgroundColor: '#007bff',
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    display: 'inline-block'
+                                  }}
+                                >
+                                  {formattedDate || 'Not specified'}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return 'Estimated harvest Date: Not specified';
+                        })()}
+                      </div>
+
+
+
+                      {/* Bottom Section */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        {/* Left Side - Quantity, Price, Shipping */}
+                        <div style={{ flex: 1 }}>
+                          {/* Quantity Selector */}
+                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <button
+                                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                                style={{
+                                  width: isMobile ? '20px' : '24px',
+                                  height: isMobile ? '20px' : '24px',
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  backgroundColor: '#f8f9fa',
+                                  borderRadius: '3px',
+                                  border: '1px solid #e9ecef',
+                                  color: '#6c757d',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={quantity}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value) || 1;
+                                  setQuantity(Math.max(1, value));
+                                  setInsufficientFunds(false);
+                                }}
+                                style={{
+                                  width: isMobile ? '32px' : '40px',
+                                  height: isMobile ? '20px' : '24px',
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  fontWeight: 600,
+                                  textAlign: 'center',
+                                  border: '1px solid #e9ecef',
+                                  borderRadius: '3px',
+                                  backgroundColor: '#fff',
+                                  color: '#212529',
+                                  outline: 'none'
+                                }}
+                              />
+                              <button
+                                onClick={() => setQuantity(quantity + 1)}
+                                style={{
+                                  width: isMobile ? '20px' : '24px',
+                                  height: isMobile ? '20px' : '24px',
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  backgroundColor: '#f8f9fa',
+                                  borderRadius: '3px',
+                                  border: '1px solid #e9ecef',
+                                  color: '#6c757d',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                +
+                              </button>
+                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>m²</div>
+                            </div>
+                          </div>
+
+                          {/* Price Info */}
+                          <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
+                            <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                              Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
+                            </div>
+                            <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                              Exp Prod {selectedProduct.production_rate || selectedProduct.productionRate || 'N/A'} {selectedProduct.production_rate_unit || 'Kg'}
+                            </div>
+                          </div>
+
+                          {/* Shipping Options */}
+                          {showPurchaseUI && (
+                            <div>
+                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
+                                Shipping Options:
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                {(() => {
+                                  const availableOptions = [];
+                                  if (selectedProduct.shipping_pickup) availableOptions.push('Pickup');
+                                  if (selectedProduct.shipping_delivery) availableOptions.push('Delivery');
+                                  const options = (availableOptions.length > 0 ? availableOptions : ['Delivery', 'Pickup']);
+                                  const deliveryAllowed = isDeliveryAllowed(selectedProduct);
+                                  return options.map((option) => {
+                                    const isDelivery = option === 'Delivery';
+                                    const disabled = isDelivery && !deliveryAllowed;
+                                    return (
+                                      <div
+                                        key={option}
+                                        role="button"
+                                        aria-pressed={selectedShipping === option}
+                                        aria-disabled={disabled}
+                                        tabIndex={disabled ? -1 : 0}
+                                        onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { setSelectedShipping(option); setShippingError(false); } }}
+                                        onClick={() => { if (disabled) return; setSelectedShipping(option); setShippingError(false); }}
+                                        onMouseEnter={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.06)' : 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; }}
+                                        onMouseLeave={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.05)' : 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                                        style={{
+                                          padding: '4px 8px',
+                                          backgroundColor: disabled ? '#f0f0f0' : (selectedShipping === option ? '#007bff' : '#f8f9fa'),
+                                          color: disabled ? '#9aa0a6' : (selectedShipping === option ? 'white' : '#6c757d'),
+                                          borderRadius: '4px',
+                                          fontSize: '11px',
+                                          cursor: disabled ? 'not-allowed' : 'pointer',
+                                          border: disabled ? '1px solid #e9ecef' : (selectedShipping ? (selectedShipping === option ? 'none' : '1px solid #e9ecef') : (shippingError ? '2px solid #ef4444' : '1px solid #e9ecef')),
+                                          fontWeight: 500,
+                                          transition: 'background-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease',
+                                          transform: selectedShipping === option ? 'scale(1.05)' : 'scale(1)',
+                                          opacity: disabled ? 0.7 : 1
+                                        }}
+                                      >
+                                        {option}
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+
+                              {!isDeliveryAllowed(selectedProduct) && (
+                                <div style={{
+                                  width: '98%',
+                                  margin: isMobile ? '6px 0 6px 0' : '8px 0 8px 0',
+                                  color: '#ef4444',
+                                  fontWeight: 600,
+                                  fontSize: isMobile ? '9px' : '11px',
+                                  textAlign: 'left'
+                                }}>
+                                  Delivery is unavailable at your location.
+                                  <div style={{ marginTop: isMobile ? '4px' : '6px', color: '#ef4444', fontWeight: 600, textAlign: 'left', fontSize: isMobile ? '9px' : '11px' }}>
+                                    {(() => {
+                                      const scopeRaw = selectedProduct.shipping_scope || selectedProduct.shippingScope || 'Global';
+                                      const scope = String(scopeRaw || '').toLowerCase();
+                                      const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+                                      const p = extractCityCountry(locStr);
+                                      if (scope === 'city' && p.city) return `Delivery is only available in ${p.city}`;
+                                      if (scope === 'country' && p.country) return `Delivery is only available in ${p.country}`;
+                                      return '';
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div style={{ marginTop: isMobile ? '6px' : '8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      checked={orderForSomeoneElse}
+                                      onChange={(e) => setOrderForSomeoneElse(e.target.checked)}
+                                      color="primary"
+                                      size={isMobile ? 'small' : 'medium'}
+                                      sx={{
+                                        '& .MuiSvgIcon-root': { fontSize: isMobile ? 16 : 18 },
+                                        '&.MuiCheckbox-root': { padding: isMobile ? '2px' : '4px' }
+                                      }}
+                                    />
+                                  }
+                                  label="Order for someone else"
+                                  sx={{
+                                    marginLeft: 0,
+                                    '.MuiFormControlLabel-label': { fontSize: isMobile ? '10px' : '12px', fontWeight: 600, color: '#4a5568' }
+                                  }}
+                                />
+                              </div>
+
+
+
+                              {selectedShipping === 'Delivery' && (
+                                <div style={{ marginTop: isMobile ? '8px' : '10px' }}>
+                                  <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
+                                    Delivery Address:
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', marginBottom: isMobile ? '6px' : '8px' }}>
+                                    <div
+                                      role="button"
+                                      aria-pressed={deliveryMode === 'existing'}
+                                      onClick={() => { setDeliveryMode('existing'); setShowAddressOverlay(false); }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: deliveryMode === 'existing' ? '#ff9800' : '#f8f9fa',
+                                        color: deliveryMode === 'existing' ? '#fff' : '#6c757d',
+                                        borderRadius: '4px',
+                                        border: deliveryMode === 'existing' ? 'none' : '1px solid #e9ecef',
+                                        fontWeight: 500,
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        transition: 'transform 150ms ease, box-shadow 150ms ease',
+                                        transform: deliveryMode === 'existing' ? 'scale(1.05)' : 'scale(1)'
+                                      }}
+                                    >
+                                      Use saved address
+                                    </div>
+                                    <div
+                                      role="button"
+                                      aria-pressed={deliveryMode === 'new'}
+                                      onClick={() => { setDeliveryMode('new'); setShowAddressOverlay(true); }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: deliveryMode === 'new' ? '#ff9800' : '#f8f9fa',
+                                        color: deliveryMode === 'new' ? '#fff' : '#6c757d',
+                                        borderRadius: '4px',
+                                        border: deliveryMode === 'new' ? 'none' : '1px solid #e9ecef',
+                                        fontWeight: 500,
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        transition: 'transform 150ms ease, box-shadow 150ms ease',
+                                        transform: deliveryMode === 'new' ? 'scale(1.05)' : 'scale(1)'
+                                      }}
+                                    >
+                                      Add new address
+                                    </div>
+                                  </div>
+
+                                  {deliveryMode === 'existing' ? (
+                                    <div style={{
+                                      backgroundColor: '#fff8e1',
+                                      border: '1px solid #ff9800',
+                                      borderRadius: isMobile ? '6px' : '8px',
+                                      padding: isMobile ? '8px' : '10px',
+                                      fontSize: isMobile ? '10px' : '12px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px'
+                                    }}>
+                                      {existingDeliveryAddress ? (
+                                        <div style={{ color: '#7a5a00', fontWeight: 600 }}>{existingDeliveryAddress}</div>
+                                      ) : (
+                                        <>
+                                          <span style={{ fontSize: isMobile ? '12px' : '14px' }}>⚠️</span>
+                                          <div style={{ color: '#7a5a00', fontWeight: 600 }}>No saved address. Please add a new address.</div>
+                                        </>
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right Side - Buy Now Button and Total Price */}
+                        <div style={{
+                          width: isMobile ? '80px' : '100px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          marginLeft: isMobile ? '8px' : '12px'
+                        }}>
+                          {showPurchaseUI && (
+                            shippingError ? (
+                              <div style={{
+                                width: isMobile ? '92%' : '98%',
+                                margin: isMobile ? '0 0 6px 0' : '0 8px 8px 0',
+                                backgroundColor: 'rgba(255,255,255,0.96)',
+                                border: '1px solid #ef4444',
+                                borderRadius: isMobile ? '6px' : '8px',
+                                padding: isMobile ? '6px 8px' : '8px 12px',
+                                color: '#ef4444',
+                                fontWeight: 700,
+                                fontSize: isMobile ? '11px' : '12px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                animation: 'popupPulse 600ms ease-in-out infinite alternate',
+                                willChange: 'transform',
+                                textAlign: 'center',
+                              }}>
+                                Please select a shipping option
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleBuyNow(selectedProduct)}
+                                disabled={!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: '#007bff',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: isMobile ? '4px' : '6px',
+                                  padding: isMobile ? '6px 0' : '8px 0',
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  fontWeight: 600,
+                                  cursor: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 'not-allowed' : 'pointer',
+                                  opacity: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 0.7 : 1,
+                                  marginBottom: isMobile ? '6px' : '8px',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                BUY NOW
+                              </button>
+                            )
+                          )}
+
+                          {/* Total Price */}
+                          <div style={{
+                            fontSize: isMobile ? '10px' : '12px',
+                            fontWeight: 600,
+                            color: '#212529',
+                            textAlign: 'center',
+                            marginBottom: isMobile ? '4px' : '6px'
+                          }}>
+                            Total Price ${((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity).toFixed(2)}
+                          </div>
+
+                          {/* User Coins */}
+                          <div style={{
+                            fontSize: isMobile ? '9px' : '11px',
+                            color: '#6c757d',
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ marginBottom: '1px' }}>Available Coins: {userCoins}</div>
+                          </div>
+
+                          {/* Insufficient Funds Error */}
+                          {insufficientFunds && (
+                            <div style={{
+                              fontSize: isMobile ? '9px' : '11px',
+                              color: '#dc3545',
+                              textAlign: 'center',
+                              marginTop: isMobile ? '6px' : '8px',
+                              fontWeight: 600
+                            }}>
+                              Can't be bought - you have insufficient coins!
+                            </div>
+                          )}
+                        </div> {/* Closes 3919 */}
+                      </div> {/* Closes 3676 */}
+                    </>
                   )}
                 </div>
-              );
-            }
-            
-            // Fallback to single date
-            const formattedDate = formatDate(singleDate);
-            if (singleDate) {
-              // Auto-select the single date if not already selected
-              if (!selectedHarvestDate) {
-                setSelectedHarvestDate({ date: singleDate, label: '' });
-              }
-              
-              return (
-                <div>
-                  <div style={{ marginBottom: '4px', fontWeight: '500' }}>Estimated harvest Date:</div>
-                  <div 
-                    style={{ 
-                      marginLeft: '8px', 
-                      fontSize: '11px',
-                      padding: '4px 8px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      borderRadius: '4px',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {formattedDate || 'Not specified'}
-                  </div>
-                </div>
-              );
-            }
-            
-            return 'Estimated harvest Date: Not specified';
-          })()}
-        </div>
+              ) : renderWeatherTabContent()}
 
-        
 
-        {/* Bottom Section */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          {/* Left Side - Quantity, Price, Shipping */}
-          <div style={{ flex: 1 }}>
-            {/* Quantity Selector */}
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  style={{
-                    width: isMobile ? '20px' : '24px',
-                    height: isMobile ? '20px' : '24px',
-                    fontSize: isMobile ? '10px' : '12px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '3px',
-                    border: '1px solid #e9ecef',
-                    color: '#6c757d',
-                    cursor: 'pointer'
-                  }}
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  min="1"
-                  value={quantity}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 1;
-                    setQuantity(Math.max(1, value));
-                    setInsufficientFunds(false);
-                  }}
-                  style={{
-                    width: isMobile ? '32px' : '40px',
-                    height: isMobile ? '20px' : '24px',
-                    fontSize: isMobile ? '10px' : '12px',
-                    fontWeight: 600,
-                    textAlign: 'center',
-                    border: '1px solid #e9ecef',
-                    borderRadius: '3px',
-                    backgroundColor: '#fff',
-                    color: '#212529',
-                    outline: 'none'
-                  }}
-                />
-                <button
-                  onClick={() => setQuantity(quantity + 1)}
-                  style={{
-                    width: isMobile ? '20px' : '24px',
-                    height: isMobile ? '20px' : '24px',
-                    fontSize: isMobile ? '10px' : '12px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '3px',
-                    border: '1px solid #e9ecef',
-                    color: '#6c757d',
-                    cursor: 'pointer'
-                  }}
-                >
-                  +
-                </button>
-                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>m²</div>
-              </div>
-            </div>
 
-            {/* Price Info */}
-            <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
-              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
-              </div>
-              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                Exp Prod {selectedProduct.production_rate || selectedProduct.productionRate || 'N/A'} {selectedProduct.production_rate_unit || 'Kg'}
-              </div>
-            </div>
-
-            {/* Shipping Options */}
-            {showPurchaseUI && (
-            <div>
-              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
-                Shipping Options:
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {(() => {
-                  const availableOptions = [];
-                  if (selectedProduct.shipping_pickup) availableOptions.push('Pickup');
-                  if (selectedProduct.shipping_delivery) availableOptions.push('Delivery');
-                  const options = (availableOptions.length > 0 ? availableOptions : ['Delivery', 'Pickup']);
-                  const deliveryAllowed = isDeliveryAllowed(selectedProduct);
-                  return options.map((option) => {
-                    const isDelivery = option === 'Delivery';
-                    const disabled = isDelivery && !deliveryAllowed;
-                    return (
-                      <div
-                        key={option}
-                        role="button"
-                        aria-pressed={selectedShipping === option}
-                        aria-disabled={disabled}
-                        tabIndex={disabled ? -1 : 0}
-                        onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { setSelectedShipping(option); setShippingError(false); } }}
-                        onClick={() => { if (disabled) return; setSelectedShipping(option); setShippingError(false); }}
-                        onMouseEnter={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.06)' : 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'; }}
-                        onMouseLeave={(e) => { if (disabled) return; e.currentTarget.style.transform = selectedShipping === option ? 'scale(1.05)' : 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                        style={{
-                          padding: '4px 8px',
-                          backgroundColor: disabled ? '#f0f0f0' : (selectedShipping === option ? '#007bff' : '#f8f9fa'),
-                          color: disabled ? '#9aa0a6' : (selectedShipping === option ? 'white' : '#6c757d'),
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          border: disabled ? '1px solid #e9ecef' : (selectedShipping ? (selectedShipping === option ? 'none' : '1px solid #e9ecef') : (shippingError ? '2px solid #ef4444' : '1px solid #e9ecef')),
-                          fontWeight: 500,
-                          transition: 'background-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease',
-                          transform: selectedShipping === option ? 'scale(1.05)' : 'scale(1)',
-                          opacity: disabled ? 0.7 : 1
-                        }}
-                      >
-                        {option}
+              {showAddressOverlay && (
+                <div style={{ position: 'absolute', top: isMobile ? -34 : -30, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
+                  <div style={{ backgroundColor: 'white', width: isMobile ? '280px' : '380px', borderRadius: isMobile ? '8px' : '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', border: '1px solid #e9ecef', fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
+                    <div style={{ position: 'relative', padding: isMobile ? '6px 12px 0' : '8px 16px 0' }}>
+                      <div style={{ fontWeight: 700, color: '#212529', fontSize: isMobile ? '12px' : '14px', paddingBottom: isMobile ? '6px' : '8px' }}>Add Delivery Address</div>
+                      <div onClick={() => setShowAddressOverlay(false)} style={{ cursor: 'pointer', fontSize: isMobile ? '12px' : '14px', color: '#6c757d', width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#f0f0f0', position: 'absolute', top: isMobile ? '6px' : '8px', right: isMobile ? '6px' : '8px', fontWeight: 'bold', zIndex: 10 }}>✕</div>
+                    </div>
+                    <div ref={addressOverlayContentRef} style={{ position: 'relative', padding: isMobile ? '8px' : '10px', maxHeight: isMobile ? '70vh' : '72vh', overflowY: 'auto' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '8px' : '10px' }}>
+                        <TextField label="Full name" variant="outlined" size="small" fullWidth value={newDeliveryAddress.name} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, name: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                        <TextField label="Phone" variant="outlined" size="small" fullWidth value={newDeliveryAddress.phone} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, phone: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
                       </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {!isDeliveryAllowed(selectedProduct) && (
-                <div style={{
-                  width: '98%',
-                  margin: isMobile ? '6px 0 6px 0' : '8px 0 8px 0',
-                  color: '#ef4444',
-                  fontWeight: 600,
-                  fontSize: isMobile ? '9px' : '11px',
-                  textAlign: 'left'
-                }}>
-                  Delivery is unavailable at your location.
-                  <div style={{ marginTop: isMobile ? '4px' : '6px', color: '#ef4444', fontWeight: 600, textAlign: 'left', fontSize: isMobile ? '9px' : '11px' }}>
-                    {(() => {
-                      const scopeRaw = selectedProduct.shipping_scope || selectedProduct.shippingScope || 'Global';
-                      const scope = String(scopeRaw || '').toLowerCase();
-                      const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
-                      const p = extractCityCountry(locStr);
-                      if (scope === 'city' && p.city) return `Delivery is only available in ${p.city}`;
-                      if (scope === 'country' && p.country) return `Delivery is only available in ${p.country}`;
-                      return '';
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: isMobile ? '6px' : '8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={orderForSomeoneElse}
-                      onChange={(e) => setOrderForSomeoneElse(e.target.checked)}
-                      color="primary"
-                      size={isMobile ? 'small' : 'medium'}
-                      sx={{
-                        '& .MuiSvgIcon-root': { fontSize: isMobile ? 16 : 18 },
-                        '&.MuiCheckbox-root': { padding: isMobile ? '2px' : '4px' }
-                      }}
-                    />
-                  }
-                  label="Order for someone else"
-                  sx={{
-                    marginLeft: 0,
-                    '.MuiFormControlLabel-label': { fontSize: isMobile ? '10px' : '12px', fontWeight: 600, color: '#4a5568' }
-                  }}
-                />
-              </div>
-
-              
-
-            {selectedShipping === 'Delivery' && (
-              <div style={{ marginTop: isMobile ? '8px' : '10px' }}>
-                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
-                  Delivery Address:
-                </div>
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: isMobile ? '6px' : '8px' }}>
-                    <div
-                      role="button"
-                      aria-pressed={deliveryMode === 'existing'}
-                      onClick={() => { setDeliveryMode('existing'); setShowAddressOverlay(false); }}
-                      style={{
-                        padding: '4px 8px',
-                        backgroundColor: deliveryMode === 'existing' ? '#ff9800' : '#f8f9fa',
-                        color: deliveryMode === 'existing' ? '#fff' : '#6c757d',
-                        borderRadius: '4px',
-                        border: deliveryMode === 'existing' ? 'none' : '1px solid #e9ecef',
-                        fontWeight: 500,
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        transition: 'transform 150ms ease, box-shadow 150ms ease',
-                        transform: deliveryMode === 'existing' ? 'scale(1.05)' : 'scale(1)'
-                      }}
-                    >
-                      Use saved address
-                    </div>
-                    <div
-                      role="button"
-                      aria-pressed={deliveryMode === 'new'}
-                      onClick={() => { setDeliveryMode('new'); setShowAddressOverlay(true); }}
-                      style={{
-                        padding: '4px 8px',
-                        backgroundColor: deliveryMode === 'new' ? '#ff9800' : '#f8f9fa',
-                        color: deliveryMode === 'new' ? '#fff' : '#6c757d',
-                        borderRadius: '4px',
-                        border: deliveryMode === 'new' ? 'none' : '1px solid #e9ecef',
-                        fontWeight: 500,
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        transition: 'transform 150ms ease, box-shadow 150ms ease',
-                        transform: deliveryMode === 'new' ? 'scale(1.05)' : 'scale(1)'
-                      }}
-                    >
-                      Add new address
-                    </div>
-                  </div>
-
-                  {deliveryMode === 'existing' ? (
-                    <div style={{
-                      backgroundColor: '#fff8e1',
-                      border: '1px solid #ff9800',
-                      borderRadius: isMobile ? '6px' : '8px',
-                      padding: isMobile ? '8px' : '10px',
-                      fontSize: isMobile ? '10px' : '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      {existingDeliveryAddress ? (
-                        <div style={{ color: '#7a5a00', fontWeight: 600 }}>{existingDeliveryAddress}</div>
-                      ) : (
-                        <>
-                          <span style={{ fontSize: isMobile ? '12px' : '14px' }}>⚠️</span>
-                          <div style={{ color: '#7a5a00', fontWeight: 600 }}>No saved address. Please add a new address.</div>
-                        </>
+                      <div ref={addressLine1Ref} style={{ marginBottom: isMobile ? '8px' : '10px' }}>
+                        <TextField
+                          label="Address line 1"
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          value={newDeliveryAddress.line1}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setNewDeliveryAddress({ ...newDeliveryAddress, line1: v });
+                            if (addressSearchTimeoutRef.current) clearTimeout(addressSearchTimeoutRef.current);
+                            addressSearchTimeoutRef.current = setTimeout(() => { fetchAddressSuggestions(v); }, 300);
+                          }}
+                          onBlur={() => { setAddressSuggestions([]); setAddressSuggestionsPos(null); }}
+                          sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }}
+                        />
+                      </div>
+                      <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
+                        <TextField label="Address line 2 (optional)" variant="outlined" size="small" fullWidth value={newDeliveryAddress.line2} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, line2: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '8px' : '10px' }}>
+                        <TextField label="City" variant="outlined" size="small" fullWidth value={newDeliveryAddress.city} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, city: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                        <TextField label="State" variant="outlined" size="small" fullWidth value={newDeliveryAddress.state} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, state: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                        <TextField label="ZIP" variant="outlined" size="small" fullWidth value={newDeliveryAddress.zip} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, zip: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                      </div>
+                      <TextField label="Country" variant="outlined" size="small" fullWidth value={newDeliveryAddress.country} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, country: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
+                      {addressError && (<div style={{ color: '#ef4444', fontSize: isMobile ? '10px' : '12px', marginTop: isMobile ? '8px' : '10px', fontWeight: 600 }}>{addressError}</div>)}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
+                        <button onClick={() => {
+                          const scopeRaw = selectedProduct?.shipping_scope || selectedProduct?.shippingScope || 'Global';
+                          const scope = String(scopeRaw || '').toLowerCase();
+                          let valid = true;
+                          if (scope !== 'global') {
+                            const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
+                            const p = extractCityCountry(locStr);
+                            if (scope === 'city') {
+                              const rCity = (newDeliveryAddress.city || '').trim().toLowerCase();
+                              valid = Boolean(p.city && rCity && p.city.toLowerCase() === rCity);
+                            } else if (scope === 'country') {
+                              const rCountry = (newDeliveryAddress.country || '').trim().toLowerCase();
+                              valid = Boolean(p.country && rCountry && p.country.toLowerCase() === rCountry);
+                            }
+                          }
+                          if (!valid) { setAddressError('Address is outside the delivery region.'); return; }
+                          const summary = `${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
+                          setExistingDeliveryAddress(summary);
+                          setDeliveryMode('existing');
+                          setShowAddressOverlay(false);
+                          setAddressError('');
+                        }} style={{ backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '8px 12px' : '10px 14px', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', fontWeight: 600 }}>Save Address</button>
+                      </div>
+                      {addressSuggestionsPos && addressSuggestions.length > 0 && (
+                        <Paper
+                          style={{
+                            position: 'absolute',
+                            top: addressSuggestionsPos.top,
+                            left: addressSuggestionsPos.left,
+                            minWidth: addressSuggestionsPos.width,
+                            maxHeight: isMobile ? 150 : 200,
+                            overflow: 'auto',
+                            borderRadius: isMobile ? 8 : 12,
+                            border: '1px solid #e8f5e8',
+                            boxShadow: '0 4px 20px rgba(76, 175, 80, 0.1)',
+                            zIndex: 1102,
+                            backgroundColor: '#fff'
+                          }}
+                        >
+                          {addressSuggestions.map((place, idx) => (
+                            <Box
+                              key={`addr-sugg-${idx}`}
+                              onClick={() => applyAddressSelection(place)}
+                              style={{
+                                padding: isMobile ? '12px' : '14px',
+                                cursor: 'pointer',
+                                borderBottom: idx < addressSuggestions.length - 1 ? '1px solid #f0f7f0' : 'none',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#f8fdf8';
+                                e.currentTarget.style.borderLeft = '3px solid #4caf50';
+                                e.currentTarget.style.paddingLeft = isMobile ? '14px' : '16px';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.borderLeft = 'none';
+                                e.currentTarget.style.paddingLeft = isMobile ? '12px' : '14px';
+                              }}
+                            >
+                              <Typography style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: '#2e7d32', marginBottom: 2 }}>
+                                {place.name}
+                              </Typography>
+                              <Typography style={{ fontSize: isMobile ? 9 : 11, color: '#666' }}>
+                                {place.formatted_address}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Paper>
                       )}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               )}
 
-            </div>
-            )}
-          </div>
 
-          {/* Right Side - Buy Now Button and Total Price */}
-          <div style={{ 
-            width: isMobile ? '80px' : '100px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center',
-            marginLeft: isMobile ? '8px' : '12px'
-          }}>
-            {showPurchaseUI && (
-              shippingError ? (
-                <div style={{
-                  width: isMobile ? '92%' : '98%',
-                  margin: isMobile ? '0 0 6px 0' : '0 8px 8px 0',
-                  backgroundColor: 'rgba(255,255,255,0.96)',
-                  border: '1px solid #ef4444',
-                  borderRadius: isMobile ? '6px' : '8px',
-                  padding: isMobile ? '6px 8px' : '8px 12px',
-                  color: '#ef4444',
-                  fontWeight: 700,
-                  fontSize: isMobile ? '11px' : '12px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  animation: 'popupPulse 600ms ease-in-out infinite alternate',
-                  willChange: 'transform',
-                  textAlign: 'center',
-                }}>
-                  Please select a shipping option
+              {/* Rented Field Card when not in purchase mode */}
+              {!showPurchaseUI && (
+                <div style={{ padding: isMobile ? '8px' : '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '10px' : '12px' }}>
+                    <div style={{
+                      width: isMobile ? '60px' : '70px',
+                      height: isMobile ? '60px' : '70px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: isMobile ? '4px' : '6px',
+                      flexShrink: 0,
+                      overflow: 'hidden'
+                    }}>
+                      <img
+                        src={getProductImageSrc(selectedProduct)}
+                        alt={selectedProduct.name || 'Product'}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => { e.currentTarget.src = getProductIcon(selectedProduct?.subcategory || selectedProduct?.category); }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '12px' : '14px', lineHeight: 1.3 }}>
+                        {selectedProduct.name || selectedProduct.farmName}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', marginTop: '2px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z" /></svg>
+                        </span>
+                        <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px', marginLeft: '6px' }}>
+                          {productLocations.get(selectedProduct.id) || selectedProduct.location}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                        <span style={{ fontSize: isMobile ? '10px' : '12px' }}>🌤️</span>
+                        <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                          {productWeather.get(String(selectedProduct.id))?.weatherString || selectedProduct.weather || 'Unknown weather'}
+
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'inline-block', backgroundColor: '#22c55e', color: 'white', borderRadius: isMobile ? '10px' : '12px', padding: isMobile ? '3px 8px' : '4px 10px', fontSize: isMobile ? '10px' : '11px', fontWeight: 600, marginBottom: isMobile ? '8px' : '10px' }}>
+                    Active
+                  </div>
+
+                  <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: isMobile ? '8px 0' : '10px 0' }} />
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#10b981"><path d="M5 21h14v-2H5v2zm7-18l-5 5h3v4h4v-4h3l-5-5z" /></svg>
+                      </span>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Crop Type</div>
+                    </div>
+                    <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>{selectedProduct.subcategory || selectedProduct.category}</div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V10h14v9z" /></svg>
+                      </span>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Harvest Date</div>
+                    </div>
+                    <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>
+                      {(() => { const list = getSelectedHarvestList(selectedProduct); const uniq = Array.from(new Set(list)); return uniq.length ? uniq.join(', ') : 'Not specified'; })()}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b"><path d="M20 8h-3V4H7v4H4v12h16V8zm-9 0V6h2v2h-2zm9 10H4v-8h16v8z" /></svg>
+                      </span>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Mode of Shipping</div>
+                    </div>
+                    <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>
+                      {(function () { const modes = getShippingModes(selectedProduct); return modes.length ? modes.join(', ') : 'Not specified'; })()}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
+                    <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Your rented: {formatAreaInt(((() => { const pidA = selectedProduct?.id ?? selectedProduct?.field_id; const byId = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(pidA)); if (byId) return byId.purchased_area || 0; const canonProd = canonicalizeCategory(selectedProduct?.subcategory || selectedProduct?.category || selectedProduct?.category_key || selectedProduct?.id); const matches = purchasedProducts.filter(p => { const kp = canonicalizeCategory(p?.subcategory || p?.category || p?.category_key || p?.id); return kp.key === canonProd.key; }); return matches.length === 1 ? (matches[0].purchased_area || 0) : 0; })()))}m²</div>
+                    <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²</div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Occupied area</div>
+                      <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>{Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%</div>
+                    </div>
+                    <div style={{ height: isMobile ? '6px' : '8px', borderRadius: '4px', backgroundColor: '#e9ecef', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%`, height: '100%', backgroundColor: '#10b981' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
+                    <button onClick={() => setShowPurchaseUI(true)} style={{
+                      width: '100%',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: isMobile ? '8px 0' : '10px 0',
+                      fontSize: isMobile ? '11px' : '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      marginTop: '8px',
+                      boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+                      transition: 'all 0.2s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.025em'
+                    }}>
+                      Buy More Area
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => handleBuyNow(selectedProduct)}
-                  disabled={!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)}
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: isMobile ? '4px' : '6px',
-                    padding: isMobile ? '6px 0' : '8px 0',
-                    fontSize: isMobile ? '10px' : '12px',
-                    fontWeight: 600,
-                    cursor: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 'not-allowed' : 'pointer',
-                    opacity: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 0.7 : 1,
-                    marginBottom: isMobile ? '6px' : '8px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  BUY NOW
-                </button>
-              )
-            )}
-
-            {/* Total Price */}
-            <div style={{ 
-              fontSize: isMobile ? '10px' : '12px', 
-              fontWeight: 600, 
-              color: '#212529', 
-              textAlign: 'center',
-              marginBottom: isMobile ? '4px' : '6px'
-            }}>
-              Total Price ${((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity).toFixed(2)}
+              )}
             </div>
-
-            {/* User Coins */}
-            <div style={{
-              fontSize: isMobile ? '9px' : '11px',
-              color: '#6c757d',
-              textAlign: 'center'
-            }}>
-              <div style={{ marginBottom: '1px' }}>Available Coins: {userCoins}</div>
-            </div>
-
-            {/* Insufficient Funds Error */}
-            {insufficientFunds && (
-              <div style={{
-                fontSize: isMobile ? '9px' : '11px',
-                color: '#dc3545',
-                textAlign: 'center',
-                marginTop: isMobile ? '6px' : '8px',
-                fontWeight: 600
-              }}>
-                Can't be bought - you have insufficient coins!
-              </div>
-            )}
           </div>
         </div>
-        {showAddressOverlay && (
-          <div style={{ position: 'absolute', top: isMobile ? -34 : -30, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
-            <div style={{ backgroundColor: 'white', width: isMobile ? '280px' : '380px', borderRadius: isMobile ? '8px' : '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', border: '1px solid #e9ecef', fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
-              <div style={{ position: 'relative', padding: isMobile ? '6px 12px 0' : '8px 16px 0' }}>
-                <div style={{ fontWeight: 700, color: '#212529', fontSize: isMobile ? '12px' : '14px', paddingBottom: isMobile ? '6px' : '8px' }}>Add Delivery Address</div>
-                <div onClick={() => setShowAddressOverlay(false)} style={{ cursor: 'pointer', fontSize: isMobile ? '12px' : '14px', color: '#6c757d', width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: '#f0f0f0', position: 'absolute', top: isMobile ? '6px' : '8px', right: isMobile ? '6px' : '8px', fontWeight: 'bold', zIndex: 10 }}>✕</div>
-              </div>
-              <div ref={addressOverlayContentRef} style={{ position: 'relative', padding: isMobile ? '8px' : '10px', maxHeight: isMobile ? '70vh' : '72vh', overflowY: 'auto' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '8px' : '10px' }}>
-                  <TextField label="Full name" variant="outlined" size="small" fullWidth value={newDeliveryAddress.name} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, name: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                  <TextField label="Phone" variant="outlined" size="small" fullWidth value={newDeliveryAddress.phone} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, phone: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                </div>
-                <div ref={addressLine1Ref} style={{ marginBottom: isMobile ? '8px' : '10px' }}>
-                <TextField 
-                  label="Address line 1" 
-                  variant="outlined" 
-                  size="small" 
-                  fullWidth 
-                  value={newDeliveryAddress.line1} 
-                  onChange={e => {
-                    const v = e.target.value;
-                    setNewDeliveryAddress({ ...newDeliveryAddress, line1: v });
-                    if (addressSearchTimeoutRef.current) clearTimeout(addressSearchTimeoutRef.current);
-                    addressSearchTimeoutRef.current = setTimeout(() => { fetchAddressSuggestions(v); }, 300);
-                  }} 
-                  onBlur={() => { setAddressSuggestions([]); setAddressSuggestionsPos(null); }}
-                  sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} 
-                />
-                </div>
-                <div style={{ marginBottom: isMobile ? '8px' : '10px' }}>
-                  <TextField label="Address line 2 (optional)" variant="outlined" size="small" fullWidth value={newDeliveryAddress.line2} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, line2: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '8px' : '10px' }}>
-                  <TextField label="City" variant="outlined" size="small" fullWidth value={newDeliveryAddress.city} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, city: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                  <TextField label="State" variant="outlined" size="small" fullWidth value={newDeliveryAddress.state} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, state: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                  <TextField label="ZIP" variant="outlined" size="small" fullWidth value={newDeliveryAddress.zip} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, zip: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                </div>
-                <TextField label="Country" variant="outlined" size="small" fullWidth value={newDeliveryAddress.country} onChange={e => setNewDeliveryAddress({ ...newDeliveryAddress, country: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '8px' : '10px' }, '& .MuiOutlinedInput-root': { borderRadius: isMobile ? '6px' : '8px' }, '& .MuiInputLabel-root': { fontSize: isMobile ? '11px' : '12px' } }} />
-                {addressError && (<div style={{ color: '#ef4444', fontSize: isMobile ? '10px' : '12px', marginTop: isMobile ? '8px' : '10px', fontWeight: 600 }}>{addressError}</div>)}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
-                  <button onClick={() => {
-                    const scopeRaw = selectedProduct?.shipping_scope || selectedProduct?.shippingScope || 'Global';
-                    const scope = String(scopeRaw || '').toLowerCase();
-                    let valid = true;
-                    if (scope !== 'global') {
-                      const locStr = productLocations.get(selectedProduct.id) || selectedProduct.location || '';
-                      const p = extractCityCountry(locStr);
-                      if (scope === 'city') {
-                        const rCity = (newDeliveryAddress.city || '').trim().toLowerCase();
-                        valid = Boolean(p.city && rCity && p.city.toLowerCase() === rCity);
-                      } else if (scope === 'country') {
-                        const rCountry = (newDeliveryAddress.country || '').trim().toLowerCase();
-                        valid = Boolean(p.country && rCountry && p.country.toLowerCase() === rCountry);
-                      }
-                    }
-                    if (!valid) { setAddressError('Address is outside the delivery region.'); return; }
-                    const summary = `${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
-                    setExistingDeliveryAddress(summary);
-                    setDeliveryMode('existing');
-                    setShowAddressOverlay(false);
-                    setAddressError('');
-                  }} style={{ backgroundColor: '#ff9800', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '8px 12px' : '10px 14px', fontSize: isMobile ? '12px' : '13px', cursor: 'pointer', fontWeight: 600 }}>Save Address</button>
-                </div>
-                {addressSuggestionsPos && addressSuggestions.length > 0 && (
-                  <Paper 
-                    style={{ 
-                      position: 'absolute', 
-                      top: addressSuggestionsPos.top, 
-                      left: addressSuggestionsPos.left, 
-                      minWidth: addressSuggestionsPos.width, 
-                      maxHeight: isMobile ? 150 : 200, 
-                      overflow: 'auto', 
-                      borderRadius: isMobile ? 8 : 12, 
-                      border: '1px solid #e8f5e8', 
-                      boxShadow: '0 4px 20px rgba(76, 175, 80, 0.1)', 
-                      zIndex: 1102, 
-                      backgroundColor: '#fff'
-                    }}
-                  >
-                    {addressSuggestions.map((place, idx) => (
-                      <Box 
-                        key={`addr-sugg-${idx}`} 
-                        onClick={() => applyAddressSelection(place)} 
-                        style={{ 
-                          padding: isMobile ? '12px' : '14px', 
-                          cursor: 'pointer', 
-                          borderBottom: idx < addressSuggestions.length - 1 ? '1px solid #f0f7f0' : 'none',
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => { 
-                          e.currentTarget.style.backgroundColor = '#f8fdf8'; 
-                          e.currentTarget.style.borderLeft = '3px solid #4caf50'; 
-                          e.currentTarget.style.paddingLeft = isMobile ? '14px' : '16px';
-                        }}
-                        onMouseLeave={(e) => { 
-                          e.currentTarget.style.backgroundColor = 'transparent'; 
-                          e.currentTarget.style.borderLeft = 'none'; 
-                          e.currentTarget.style.paddingLeft = isMobile ? '12px' : '14px';
-                        }}
-                      >
-                        <Typography style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: '#2e7d32', marginBottom: 2 }}>
-                          {place.name}
-                        </Typography>
-                        <Typography style={{ fontSize: isMobile ? 9 : 11, color: '#666' }}>
-                          {place.formatted_address}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Paper>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        
-        </>
-        )}
-
-        {/* Rented Field Card when not in purchase mode */}
-        {!showPurchaseUI && (
-          <div style={{ padding: isMobile ? '8px' : '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', marginBottom: isMobile ? '10px' : '12px' }}>
-              <div style={{ 
-                width: isMobile ? '60px' : '70px', 
-                height: isMobile ? '60px' : '70px', 
-                backgroundColor: '#f8f9fa', 
-                borderRadius: isMobile ? '4px' : '6px',
-                flexShrink: 0,
-                overflow: 'hidden'
-              }}>
-                <img
-                  src={getProductImageSrc(selectedProduct)}
-                  alt={selectedProduct.name || 'Product'}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={(e) => { e.currentTarget.src = getProductIcon(selectedProduct?.subcategory || selectedProduct?.category); }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '12px' : '14px', lineHeight: 1.3 }}>
-                  {selectedProduct.name || selectedProduct.farmName}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '2px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#64748b"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5s2.5 1.1 2.5 2.5S13.4 11.5 12 11.5z"/></svg>
-                  </span>
-                  <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px', marginLeft: '6px' }}>
-                    {productLocations.get(selectedProduct.id) || selectedProduct.location}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
-                  <span style={{ fontSize: isMobile ? '10px' : '12px' }}>🌤️</span>
-                  <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                    {selectedProduct.weather || '6.4°C - overcast clouds'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'inline-block', backgroundColor: '#22c55e', color: 'white', borderRadius: isMobile ? '10px' : '12px', padding: isMobile ? '3px 8px' : '4px 10px', fontSize: isMobile ? '10px' : '11px', fontWeight: 600, marginBottom: isMobile ? '8px' : '10px' }}>
-              Active
-            </div>
-
-            <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: isMobile ? '8px 0' : '10px 0' }} />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#10b981"><path d="M5 21h14v-2H5v2zm7-18l-5 5h3v4h4v-4h3l-5-5z"/></svg>
-                </span>
-                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Crop Type</div>
-              </div>
-              <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>{selectedProduct.subcategory || selectedProduct.category}</div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v13c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 15H5V10h14v9z"/></svg>
-                </span>
-                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Harvest Date</div>
-              </div>
-              <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>
-                {(() => { const list = getSelectedHarvestList(selectedProduct); const uniq = Array.from(new Set(list)); return uniq.length ? uniq.join(', ') : 'Not specified'; })()}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b"><path d="M20 8h-3V4H7v4H4v12h16V8zm-9 0V6h2v2h-2zm9 10H4v-8h16v8z"/></svg>
-                </span>
-                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Mode of Shipping</div>
-              </div>
-              <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>
-                {(function(){ const modes = getShippingModes(selectedProduct); return modes.length ? modes.join(', ') : 'Not specified'; })()}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-              <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Your rented: {formatAreaInt(((() => { const pidA = selectedProduct?.id ?? selectedProduct?.field_id; const byId = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(pidA)); if (byId) return byId.purchased_area || 0; const canonProd = canonicalizeCategory(selectedProduct?.subcategory || selectedProduct?.category || selectedProduct?.category_key || selectedProduct?.id); const matches = purchasedProducts.filter(p => { const kp = canonicalizeCategory(p?.subcategory || p?.category || p?.category_key || p?.id); return kp.key === canonProd.key; }); return matches.length === 1 ? (matches[0].purchased_area || 0) : 0; })()))}m²</div>
-              <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²</div>
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Occupied area</div>
-                <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>{Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%</div>
-            </div>
-              <div style={{ height: isMobile ? '6px' : '8px', borderRadius: '4px', backgroundColor: '#e9ecef', overflow: 'hidden' }}>
-                <div style={{ width: `${Math.round(((getOccupiedArea(selectedProduct) || 0) / (selectedProduct.total_area || 1)) * 100)}%`, height: '100%', backgroundColor: '#10b981' }} />
-              </div>
-            </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
-              <button onClick={() => setShowPurchaseUI(true)} style={{
-                width: '100%',
-                backgroundColor: '#ff9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: isMobile ? '4px' : '6px',
-                padding: isMobile ? '6px 0' : '8px 0',
-                fontSize: isMobile ? '10px' : '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                marginBottom: isMobile ? '6px' : '8px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}>
-                BUY MORE
-              </button>
-              </div>
-          </div>
-        )}
-      </div>
-    </div>
-  </div>
-)}
+      )
+      }
 
       {/* Keyframes for animations */}
-      <style>
+      < style >
         {`
           @keyframes glow-blink {
             0% { 
@@ -4163,8 +4390,8 @@ const EnhancedFarmMap = forwardRef(({
             }
           }
         `}
-      </style>
-    </div>
+      </style >
+    </div >
   );
 });
 
