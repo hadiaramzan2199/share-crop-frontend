@@ -119,6 +119,24 @@ const EnhancedFarmMap = forwardRef(({
   const summaryBarRef = useRef(null);
   const [iconTargets, setIconTargets] = useState({});
   const [harvestingIds, setHarvestingIds] = useState(new Set());
+
+  // Define isProductPurchased early to avoid TDZ errors
+  const isProductPurchased = useCallback((prod) => {
+    if (!prod) return false;
+    if (stablePurchasedIdsRef.current.has(prod.id)) return true;
+    const occupied = typeof prod.occupied_area === 'string' ? parseFloat(prod.occupied_area) : prod.occupied_area;
+    const purchasedArea = typeof prod.purchased_area === 'string' ? parseFloat(prod.purchased_area) : prod.purchased_area;
+    const totalArea = typeof prod.total_area === 'string' ? parseFloat(prod.total_area) : prod.total_area;
+    const availableArea = typeof prod.available_area === 'string' ? parseFloat(prod.available_area) : prod.available_area;
+    const derived = Boolean(
+      prod.isPurchased || prod.is_purchased || prod.purchased ||
+      (typeof prod.purchase_status === 'string' && prod.purchase_status.toLowerCase() === 'purchased') ||
+      (Number.isFinite(occupied) && occupied > 0) ||
+      (Number.isFinite(purchasedArea) && purchasedArea > 0) ||
+      (Number.isFinite(totalArea) && Number.isFinite(availableArea) && totalArea > 0 && availableArea < totalArea)
+    );
+    return derived || purchasedFarms.has(prod.id) || purchasedProductIds.includes(prod.id);
+  }, [purchasedFarms, purchasedProductIds]);
   const [selectedIcons, setSelectedIcons] = useState(new Set());
   const [showPurchaseUI, setShowPurchaseUI] = useState(true);
   const celebratedHarvestIdsRef = useRef(new Set());
@@ -1163,6 +1181,8 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
 
+  // isProductPurchased function moved to top of component
+
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     zoomToFarm: (farm, autoOpenPopup = true) => {
@@ -1449,22 +1469,6 @@ const EnhancedFarmMap = forwardRef(({
   //   const farm = farms.find(f => f.id === productId);
   //   return (farm && !!farm.isPurchased) || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
   // }, [farms, purchasedFarms, purchasedProductIds]);
-  const isProductPurchased = useCallback((prod) => {
-    if (!prod) return false;
-    if (stablePurchasedIdsRef.current.has(prod.id)) return true;
-    const occupied = typeof prod.occupied_area === 'string' ? parseFloat(prod.occupied_area) : prod.occupied_area;
-    const purchasedArea = typeof prod.purchased_area === 'string' ? parseFloat(prod.purchased_area) : prod.purchased_area;
-    const totalArea = typeof prod.total_area === 'string' ? parseFloat(prod.total_area) : prod.total_area;
-    const availableArea = typeof prod.available_area === 'string' ? parseFloat(prod.available_area) : prod.available_area;
-    const derived = Boolean(
-      prod.isPurchased || prod.is_purchased || prod.purchased ||
-      (typeof prod.purchase_status === 'string' && prod.purchase_status.toLowerCase() === 'purchased') ||
-      (Number.isFinite(occupied) && occupied > 0) ||
-      (Number.isFinite(purchasedArea) && purchasedArea > 0) ||
-      (Number.isFinite(totalArea) && Number.isFinite(availableArea) && totalArea > 0 && availableArea < totalArea)
-    );
-    return derived || purchasedFarms.has(prod.id) || purchasedProductIds.includes(prod.id);
-  }, [purchasedFarms, purchasedProductIds]);
 
   const getOccupiedArea = (prod) => {
     const useOrderStats = Boolean(minimal && userType === 'admin');
