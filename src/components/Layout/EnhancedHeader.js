@@ -457,31 +457,60 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     }
   };
 
-  const farmerMenuItems = [
-    { text: 'Rented Fields', icon: <Landscape />, path: '/farmer/rented-fields' },
-    { text: 'My Farms', icon: <Agriculture />, path: '/farmer/my-farms' },
-    { text: 'My Orders', icon: <History />, path: '/farmer/orders' },
-    { text: 'Farm Orders', icon: <Receipt />, path: '/farmer/farm-orders' },
-    { text: 'License Info', icon: <Nature />, path: '/farmer/license-info' },
-    { text: 'Transaction', icon: <AccountBalance />, path: '/farmer/transaction' },
-    { text: 'Profile', icon: <Person />, path: '/farmer/profile' },
-    { text: 'Messages', icon: <Message />, path: '/farmer/messages' },
-    { text: 'Change Currency', icon: <CurrencyExchange />, path: '/farmer/currency' },
-    { text: 'Settings', icon: <Settings />, path: '/farmer/settings' },
-    { text: 'Complaints', icon: <ReportProblem />, path: '/farmer/complaints' },
-  ];
+  // Simplified menu configuration with clean categories
+  const getMenuConfig = (userType) => {
+    const isFarmer = userType === 'farmer';
+    
+    // Main sections
+    const sections = [
+      {
+        id: 'main',
+        title: 'Farms & Fields',
+        items: [
+          { text: 'Rented Fields', icon: <Landscape />, path: isFarmer ? '/farmer/rented-fields' : '/buyer/rented-fields' },
+          { text: 'My Farms', icon: <Agriculture />, path: '/farmer/my-farms' },
+        ]
+      },
+      {
+        id: 'orders',
+        title: 'Orders',
+        items: [
+          { text: 'My Orders', icon: <History />, path: isFarmer ? '/farmer/orders' : '/buyer/orders' },
+          { text: 'Farm Orders', icon: <Receipt />, path: '/farmer/farm-orders' },
+        ]
+      },
+      {
+        id: 'account',
+        title: 'Account',
+        items: [
+          { text: 'Profile', icon: <Person />, path: isFarmer ? '/farmer/profile' : '/buyer/profile' },
+          { text: 'Messages', icon: <Message />, path: isFarmer ? '/farmer/messages' : '/buyer/messages' },
+          { text: 'Change Currency', icon: <CurrencyExchange />, path: isFarmer ? '/farmer/currency' : '/buyer/currency' },
+          { text: 'Settings', icon: <Settings />, path: isFarmer ? '/farmer/settings' : '/buyer/settings' },
+        ]
+      },
+      {
+        id: 'info',
+        title: 'Information',
+        items: [
+          { text: 'License Info', icon: <Nature />, path: isFarmer ? '/farmer/license-info' : '/buyer/license-info' },
+          { text: 'Transaction', icon: <AccountBalance />, path: isFarmer ? '/farmer/transaction' : '/buyer/transaction' },
+          { text: 'Complaints', icon: <ReportProblem />, path: isFarmer ? '/farmer/complaints' : '/buyer/complaints' },
+        ]
+      }
+    ];
 
-  const buyerMenuItems = [
-    { text: 'Rented Fields', icon: <Landscape />, path: '/buyer/rented-fields' },
-    { text: 'My Orders', icon: <History />, path: '/buyer/orders' },
-    { text: 'Profile', icon: <Person />, path: '/buyer/profile' },
-    { text: 'Messages', icon: <Message />, path: '/buyer/messages' },
-    { text: 'Change Currency', icon: <CurrencyExchange />, path: '/buyer/currency' },
-    { text: 'Settings', icon: <Settings />, path: '/buyer/settings' },
-    { text: 'Complaints', icon: <ReportProblem />, path: '/buyer/complaints' },
-  ];
+    // Filter out farmer-specific items for buyers
+    if (!isFarmer) {
+      sections[0].items = sections[0].items.filter(item => item.text !== 'My Farms');
+      sections[1].items = sections[1].items.filter(item => item.text !== 'Farm Orders');
+      sections[3].items = sections[3].items.filter(item => item.text !== 'Transaction');
+    }
 
-  const menuItems = userType === 'farmer' ? farmerMenuItems : buyerMenuItems;
+    return sections;
+  };
+
+  const menuSections = getMenuConfig(userType);
 
   const appBarRef = useRef(null);
 
@@ -1249,48 +1278,80 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
           <Divider />
 
-          <List sx={{ py: isMobile ? 0.5 : 1 }}>
-            {menuItems.map((item) => (
-              <ListItem
-                button
-                key={item.text}
-                onClick={() => handleNavigation(item.path)}
-                selected={location.pathname === item.path}
-                sx={{
-                  py: isMobile ? 0.5 : 1,
-                  px: isMobile ? 1.5 : 2,
-                  minHeight: isMobile ? 40 : 48,
-                  '&.Mui-selected': {
-                    backgroundColor: 'primary.light',
-                    color: 'primary.main',
-                    '& .MuiListItemIcon-root': {
-                      color: 'primary.main',
-                    },
-                  },
-                  '&.Mui-selected:hover': {
-                    backgroundColor: 'primary.light',
-                  },
-                }}
-              >
-                <ListItemIcon sx={{
-                  color: 'inherit',
-                  minWidth: isMobile ? 32 : 40,
-                  '& svg': {
-                    fontSize: isMobile ? '1.2rem' : '1.5rem'
-                  }
+          {/* Simplified Menu with Clean Categories */}
+          <Box sx={{ py: isMobile ? 0.5 : 1 }}>
+            {menuSections.map((section) => (
+              <Box key={section.id} sx={{ mb: isMobile ? 0.5 : 1 }}>
+                {/* Section Header - Minimal styling */}
+                <Box sx={{ 
+                  px: isMobile ? 1.5 : 2, 
+                  py: isMobile ? 0.25 : 0.5,
+                  display: 'flex',
+                  alignItems: 'center'
                 }}>
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{
-                    fontSize: isMobile ? '0.85rem' : '1rem',
-                    fontWeight: location.pathname === item.path ? 600 : 400
-                  }}
-                />
-              </ListItem>
+                  <ListItemText
+                    primary={section.title}
+                    primaryTypographyProps={{
+                      fontSize: isMobile ? '0.7rem' : '0.75rem',
+                      fontWeight: 600,
+                      color: 'text.secondary',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                  />
+                </Box>
+                
+                {/* Section Items - Clean and spaced */}
+                <List component="div" disablePadding>
+                  {section.items.map((item) => (
+                    <ListItem
+                      button
+                      key={item.path}
+                      onClick={() => handleNavigation(item.path)}
+                      selected={location.pathname === item.path}
+                      sx={{
+                        py: isMobile ? 0.5 : 0.75,
+                        px: isMobile ? 2 : 2.5,
+                        minHeight: isMobile ? 32 : 40,
+                        borderRadius: '4px',
+                        mx: isMobile ? 0.5 : 1,
+                        mb: 0.25,
+                        transition: 'all 0.2s ease',
+                        '&.Mui-selected': {
+                          backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                          color: '#2E7D32',
+                          '& .MuiListItemIcon-root': {
+                            color: '#2E7D32',
+                          },
+                        },
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                          transform: 'translateX(2px)',
+                        },
+                      }}
+                    >
+                      <ListItemIcon sx={{
+                        color: 'inherit',
+                        minWidth: isMobile ? 24 : 32,
+                        '& svg': {
+                          fontSize: isMobile ? '0.9rem' : '1rem'
+                        }
+                      }}>
+                        {item.icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={item.text}
+                        primaryTypographyProps={{
+                          fontSize: isMobile ? '0.8rem' : '0.85rem',
+                          fontWeight: location.pathname === item.path ? 500 : 400
+                        }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
             ))}
-          </List>
+          </Box>
 
           <Divider />
 

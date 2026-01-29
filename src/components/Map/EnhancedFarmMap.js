@@ -21,6 +21,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { configureGlobeMap, DARK_MAP_STYLE } from '../../utils/mapConfig';
 import './FarmMap.css';
 import weatherService from '../../services/weather';
+import WebcamPopup from '../Common/WebcamPopup';
 
 
 // Detect mobile screens
@@ -137,6 +138,143 @@ const EnhancedFarmMap = forwardRef(({
     );
     return derived || purchasedFarms.has(prod.id) || purchasedProductIds.includes(prod.id);
   }, [purchasedFarms, purchasedProductIds]);
+
+  // Function to fetch location for a product
+  const fetchLocationForProduct = useCallback(async (product) => {
+    if (!product) {
+      console.log('🌍 fetchLocationForProduct: No product', product);
+      return;
+    }
+
+    const productId = product.id;
+
+    console.log('🌍 fetchLocationForProduct called for:', product.name, 'ID:', productId, 'Existing location:', product.location, 'UserType:', userType);
+
+    // Use functional update to check current state without dependency
+    setProductLocations(prev => {
+      // Check if we already have the location for this product
+      if (prev.has(productId)) {
+        console.log('🌍 Location already cached for product:', productId, 'Location:', prev.get(productId));
+        return prev; // Return same state if already exists
+      }
+
+      // If product already has a valid location field, use it directly
+      if (product.location && product.location !== 'Unknown Location' && !product.location.includes(',')) {
+        console.log('🌍 Using existing location for:', productId, 'Location:', product.location);
+        setProductLocations(current => new Map(current.set(productId, product.location)));
+        return prev;
+      }
+
+      // Only geocode if we don't have a valid location and have coordinates
+      if (!product.coordinates) {
+        console.log('🌍 No coordinates available for product:', productId);
+        return prev;
+      }
+
+      const [longitude, latitude] = product.coordinates;
+
+      // Fetch location asynchronously only if needed
+      (async () => {
+        try {
+          console.log('🌍 Starting geocoding for:', productId, 'at coords:', latitude, longitude);
+          // Fix: Pass latitude first, then longitude to match the geocoding function signature
+          const locationName = await cachedReverseGeocode(latitude, longitude);
+          console.log('🌍 Geocoding successful for:', productId, 'Location:', locationName);
+          setProductLocations(current => new Map(current.set(productId, locationName)));
+        } catch (error) {
+          console.error('🌍 Failed to fetch location for product:', productId, error);
+          // Set fallback location
+          const fallbackLocation = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+          setProductLocations(current => new Map(current.set(productId, fallbackLocation)));
+        }
+      })();
+
+      return prev;
+    });
+  }, [productLocations, userType]);
+
+  // Function to fetch weather for a product
+  const fetchWeatherForProduct = useCallback(async (product) => {
+    if (!product || !product.coordinates) {
+      console.log('🌤️ fetchWeatherForProduct: No product or coordinates');
+      return;
+    }
+
+    const productId = product.id;
+    const [longitude, latitude] = product.coordinates;
+
+    // Check if we already have weather data for this product
+    if (productWeather.has(productId)) {
+      console.log('🌤️ Weather already cached for product:', productId);
+      return;
+    }
+
+    console.log(`🌤️ Fetching weather for product ${productId} (${product.name}) at ${latitude}, ${longitude}`);
+    try {
+      const data = await weatherService.getCurrentWeather(latitude, longitude);
+      if (data && data.weatherString) {
+        console.log(`🌤️ Weather update for ${productId}:`, data.weatherString);
+        setProductWeather(prev => {
+          const next = new Map(prev);
+          next.set(productId, data);
+          return next;
+        });
+
+      } else {
+        console.warn(`🌤️ No weather data returned for ${productId}. Verify Key in .env and RESTART server.`);
+      }
+    } catch (error) {
+      console.error('🌤️ Failed to fetch weather:', error);
+    }
+  }, [productWeather]);
+
+  const handleProductClick = useCallback((event, product) => {
+    event.stopPropagation();
+
+    // Use functional update to avoid stale state issues
+    setSelectedProduct(prevSelected => {
+      // If clicking the same product, close the popup
+      if (prevSelected && prevSelected.id === product.id) {
+        return null;
+      }
+      return product;
+    });
+
+    setSelectedShipping(null);
+    setQuantity(1);
+    setInsufficientFunds(false);
+    setSelectedHarvestDate(null);
+    setPopupTab('details');
+    setShowPurchaseUI(!isProductPurchased(product));
+
+
+    if (mapRef.current && product.coordinates) {
+      const map = mapRef.current.getMap();
+      isMapAnimatingRef.current = true;
+      popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+      setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+      map.flyTo({
+        center: product.coordinates,
+        zoom: 8,
+        duration: 1200,
+        essential: true,
+        offset: [0, -(isMobile ? 160 : 200)],
+        easing: (t) => t * (2 - t)
+      });
+      map.once('moveend', () => {
+        isMapAnimatingRef.current = false;
+        setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+      });
+    }
+
+    // Fetch location and weather for the selected product
+    fetchLocationForProduct(product);
+    fetchWeatherForProduct(product);
+
+    if (onProductSelect) {
+      onProductSelect(product);
+    }
+  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
   const [selectedIcons, setSelectedIcons] = useState(new Set());
   const [showPurchaseUI, setShowPurchaseUI] = useState(true);
   const celebratedHarvestIdsRef = useRef(new Set());
@@ -155,6 +293,8 @@ const EnhancedFarmMap = forwardRef(({
   const [deliveryPanelLeft, setDeliveryPanelLeft] = useState(54);
   const [fieldOrderStats, setFieldOrderStats] = useState(new Map());
   const [popupTab, setPopupTab] = useState('details');
+  const [webcamPopupOpen, setWebcamPopupOpen] = useState(false);
+  const [selectedFarmForWebcam, setSelectedFarmForWebcam] = useState(null);
 
   const extractCityCountry = useCallback((s) => {
     const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -1021,105 +1161,6 @@ const EnhancedFarmMap = forwardRef(({
       return getProductIcon(product?.subcategory || product?.category || 'Fruits');
     }
   }, []);
-  // Function to fetch location for a product
-  const fetchLocationForProduct = useCallback(async (product) => {
-    if (!product) {
-      console.log('🌍 fetchLocationForProduct: No product', product);
-      return;
-    }
-
-    const productId = product.id;
-
-    console.log('🌍 fetchLocationForProduct called for:', product.name, 'ID:', productId, 'Existing location:', product.location, 'UserType:', userType);
-
-    // Use functional update to check current state without dependency
-    setProductLocations(prev => {
-      // Check if we already have the location for this product
-      if (prev.has(productId)) {
-        console.log('🌍 Location already cached for product:', productId, 'Location:', prev.get(productId));
-        return prev; // Return same state if already exists
-      }
-
-      // If product already has a valid location field, use it directly
-      if (product.location && product.location !== 'Unknown Location' && !product.location.includes(',')) {
-        console.log('🌍 Using existing location for:', productId, 'Location:', product.location);
-        setProductLocations(current => new Map(current.set(productId, product.location)));
-        return prev;
-      }
-
-      // Only geocode if we don't have a valid location and have coordinates
-      if (!product.coordinates) {
-        console.log('🌍 No coordinates available for product:', productId);
-        return prev;
-      }
-
-      const [longitude, latitude] = product.coordinates;
-
-      // Fetch location asynchronously only if needed
-      (async () => {
-        try {
-          console.log('🌍 Starting geocoding for:', productId, 'at coords:', latitude, longitude);
-          // Fix: Pass latitude first, then longitude to match the geocoding function signature
-          const locationName = await cachedReverseGeocode(latitude, longitude);
-          console.log('🌍 Geocoding successful for:', productId, 'Location:', locationName);
-          setProductLocations(current => new Map(current.set(productId, locationName)));
-        } catch (error) {
-          console.error('🌍 Failed to fetch location for product:', productId, error);
-          // Set fallback location
-          const fallbackLocation = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-          console.log('🌍 Using fallback location for:', productId, 'Fallback:', fallbackLocation);
-          setProductLocations(current => new Map(current.set(productId, fallbackLocation)));
-        }
-      })();
-
-      return prev; // Return current state while async operation runs
-    });
-  }, [userType]); // Add userType to dependencies for debugging
-
-  // Function to fetch real-time weather for a product
-  const fetchWeatherForProduct = useCallback(async (product) => {
-    if (!product) return;
-
-    // Extract coordinates safely (handles both array [lng, lat] and object {lat, lng})
-    let lat, lng;
-    if (Array.isArray(product.coordinates)) {
-      [lng, lat] = product.coordinates;
-    } else if (product.coordinates && typeof product.coordinates === 'object') {
-      lat = product.coordinates.lat || product.coordinates.latitude;
-      lng = product.coordinates.lng || product.coordinates.longitude;
-    }
-
-    if (lat === undefined || lng === undefined) {
-      console.log('🌤️ Weather fetch skipped: Invalid coordinates', product.coordinates);
-      return;
-    }
-
-    const productId = String(product.id);
-    if (!productId || productId === 'undefined') return;
-
-    // Check if we already have weather for this product
-    if (productWeather.has(productId)) {
-      return;
-    }
-
-    console.log(`🌤️ Fetching weather for product ${productId} (${product.name}) at ${lat}, ${lng}`);
-    try {
-      const data = await weatherService.getCurrentWeather(lat, lng);
-      if (data && data.weatherString) {
-        console.log(`🌤️ Weather update for ${productId}:`, data.weatherString);
-        setProductWeather(prev => {
-          const next = new Map(prev);
-          next.set(productId, data);
-          return next;
-        });
-
-      } else {
-        console.warn(`🌤️ No weather data returned for ${productId}. Verify Key in .env and RESTART server.`);
-      }
-    } catch (error) {
-      console.error('🌤️ Failed to fetch weather:', error);
-    }
-  }, [productWeather]);
 
   // Alert on mount if API Key is missing (requires server restart)
   useEffect(() => {
@@ -1130,56 +1171,6 @@ const EnhancedFarmMap = forwardRef(({
       console.log('✅ OpenWeather API Key detected.');
     }
   }, []);
-
-
-
-  const handleProductClick = useCallback((event, product) => {
-    event.stopPropagation();
-
-    // Use functional update to avoid stale state issues
-    setSelectedProduct(prevSelected => {
-      // If clicking the same product, close the popup
-      if (prevSelected && prevSelected.id === product.id) {
-        return null;
-      }
-      return product;
-    });
-
-    setSelectedShipping(null);
-    setQuantity(1);
-    setInsufficientFunds(false);
-    setSelectedHarvestDate(null);
-    setPopupTab('details');
-    setShowPurchaseUI(!isProductPurchased(product));
-
-
-    if (mapRef.current && product.coordinates) {
-      const map = mapRef.current.getMap();
-      isMapAnimatingRef.current = true;
-      popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-      setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
-      map.flyTo({
-        center: product.coordinates,
-        zoom: 8,
-        duration: 1200,
-        essential: true,
-        offset: [0, -(isMobile ? 160 : 200)],
-        easing: (t) => t * (2 - t)
-      });
-      map.once('moveend', () => {
-        isMapAnimatingRef.current = false;
-        setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
-      });
-    }
-
-    // Fetch location and weather for the selected product
-    fetchLocationForProduct(product);
-    fetchWeatherForProduct(product);
-
-    if (onProductSelect) {
-      onProductSelect(product);
-    }
-  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
 
   // isProductPurchased function moved to top of component
 
@@ -2951,8 +2942,9 @@ const EnhancedFarmMap = forwardRef(({
               >
                 <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
                   {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
-                    <img
+<img
                       src={'/icons/effects/fric.gif'}
+                      alt="Harvest celebration effect"
                       style={{
                         position: 'absolute',
                         left: '50%',
@@ -3135,9 +3127,10 @@ const EnhancedFarmMap = forwardRef(({
 
       <div ref={harvestLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1050 }}>
         {harvestGifs.map(g => (
-          <img
+<img
             key={`harvest-gif-${g.id}`}
             src={g.src}
+            alt="Harvest animation"
             style={{
               position: 'absolute',
               width: `${g.size}px`,
@@ -3168,9 +3161,10 @@ const EnhancedFarmMap = forwardRef(({
 
       <div ref={burstsLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 999 }}>
         {bursts.map(p => (
-          <img
+<img
             key={p.id}
             src={p.src}
+            alt="Purchase celebration effect"
             style={{
               position: 'absolute',
               width: isMobile ? '32px' : '46px',
@@ -3183,7 +3177,7 @@ const EnhancedFarmMap = forwardRef(({
                   ? `translate(${p.mx - p.x}px, ${p.my - p.y}px) scale(1.15) rotate(${(p.rot || 0) / 2}deg)`
                   : p.stage === 'toBar'
                     ? `translate(${p.tx - p.x}px, ${p.ty - p.y}px) scale(0.82) rotate(${(p.rot || 0) / 3}deg)`
-                    : `translate(${p.tx - p.x}px, ${p.ty - p.y + 10}px) scale(0.62) rotate(0deg)`,
+                    : `translate(${p.tx - p.x}px, ${p.ty - p.y + 10}px) scale(0.62) rotate(0deg)` ,
               opacity: p.stage === 'pop' ? 1 : p.stage === 'toMid' ? 0.95 : p.stage === 'toBar' ? 0.88 : 0.7,
               transition: p.stage === 'pop'
                 ? 'transform 650ms cubic-bezier(0.22, 1, 0.36, 1), opacity 650ms ease'
@@ -3334,41 +3328,56 @@ const EnhancedFarmMap = forwardRef(({
                 </div>
               )}
 
-              {/* Webcam icon - positioned in header (visible in both views) */}
-              <div style={{
-                position: 'absolute',
-                top: isMobile ? '6px' : '8px',
-                right: isMobile ? '32px' : '40px',
-                width: isMobile ? '28px' : '32px',
-                height: isMobile ? '28px' : '32px',
-                backgroundColor: '#007bff',
-                borderRadius: isMobile ? '6px' : '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(0, 123, 255, 0.3)',
-                transition: 'all 0.2s ease',
-                border: '2px solid white',
-                zIndex: 10
-              }}
+              {/* Webcam button - professional design */}
+              <button
+                style={{
+                  position: 'absolute',
+                  top: isMobile ? '45px' : '55px',
+                  right: isMobile ? '8px' : '12px',
+                  backgroundColor: '#007bff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: isMobile ? '4px 8px' : '6px 12px',
+                  color: 'white',
+                  fontSize: isMobile ? '11px' : '12px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: '0 2px 4px rgba(0, 123, 255, 0.3)',
+                  transition: 'all 0.2s ease',
+                  zIndex: 5,
+                  fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                  maxWidth: 'calc(100% - 20px)'
+                }}
                 onMouseEnter={(e) => {
                   e.target.style.backgroundColor = '#0056b3';
-                  e.target.style.transform = 'scale(1.1)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.4)';
+                  e.target.style.boxShadow = '0 4px 8px rgba(0, 123, 255, 0.4)';
+                  e.target.style.transform = 'translateY(-1px)';
                 }}
                 onMouseLeave={(e) => {
                   e.target.style.backgroundColor = '#007bff';
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
+                  e.target.style.boxShadow = '0 2px 4px rgba(0, 123, 255, 0.3)';
+                  e.target.style.transform = 'translateY(0)';
                 }}
-                onClick={() => window.open('https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1', '_blank', 'noopener,noreferrer')}
+                onClick={() => {
+                  setSelectedFarmForWebcam({
+                    name: selectedProduct?.farm_name || selectedProduct?.name || 'Farm',
+                    webcamUrl: selectedProduct?.webcam_url || 'https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1'
+                  });
+                  setWebcamPopupOpen(true);
+                }}
                 title="View Live Camera Feed"
               >
-                <svg width={isMobile ? "16" : "18"} height={isMobile ? "16" : "18"} viewBox="0 0 24 24" fill="white">
-                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z" />
+                <svg width={isMobile ? "12" : "14"} height={isMobile ? "12" : "14"} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7-3.5c0-1-.3-2-.8-2.8l2.4-2.4c.8 1.3 1.3 2.8 1.3 4.4s-.5 3.1-1.3 4.4l-2.4-2.4c.5-.8.8-1.8.8-2.8M4.3 19.3l2.4-2.4c.8.5 1.8.8 2.8.8s2-.3 2.8-.8l2.4 2.4c-1.3.8-2.8 1.3-4.4 1.3s-3.1-.5-4.4-1.3M19.7 4.7l-2.4 2.4c-.8-.5-1.8-.8-2.8-.8s-2 .3-2.8.8L9.3 4.7C10.6 3.9 12.2 3.4 13.8 3.4s3.1.5 4.4 1.3z"/>
+                  <circle cx="12" cy="12" r="3" fill="currentColor"/>
                 </svg>
-              </div>
+                {isMobile ? '' : 'Webcam'}
+              </button>
+
+
 
               {/* Location */}
               {showPurchaseUI && (
@@ -4381,6 +4390,15 @@ const EnhancedFarmMap = forwardRef(({
           }
         `}
       </style >
+
+      {/* Webcam Popup - Global */}
+      <WebcamPopup
+        open={webcamPopupOpen}
+        onClose={() => setWebcamPopupOpen(false)}
+        webcamUrl={selectedFarmForWebcam?.webcamUrl}
+        farmName={selectedFarmForWebcam?.name}
+      />
+
     </div >
   );
 });
