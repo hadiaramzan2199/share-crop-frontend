@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -49,7 +49,6 @@ import {
   Nature,
   AccountBalance,
   Add,
-  HomeWork,
   ExpandMore,
   ReportProblem,
   Notifications
@@ -127,7 +126,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
 
   // Get user-specific coins when user changes
-  const loadUserCoins = async () => {
+  const loadUserCoins = useCallback(async () => {
     if (user && user.id) {
       try {
         const coins = await coinService.getUserCoins(user.id);
@@ -139,14 +138,14 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     } else {
       setUserCoins(12500); // Default for logged out users
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     loadUserCoins();
-  }, [user]);
+  }, [loadUserCoins]);
 
   // Handle Unread Count and Realtime Notifications
-  const fetchUnreadStats = async () => {
+  const fetchUnreadStats = useCallback(async () => {
     if (!user || !user.id) return;
     try {
       const convs = await messagingService.getConversations();
@@ -156,7 +155,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     } catch (err) {
       console.error('Error fetching unread stats:', err);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user && user.id) {
@@ -192,7 +191,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
         };
       }
     }
-  }, [user]);
+  }, [user, fetchUnreadStats]);
 
   // Expose refresh function to parent components
   useImperativeHandle(ref, () => ({
@@ -293,65 +292,65 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     setFilterAnchorEl(null);
   };
 
-  const isHarvestToday = (f) => {
-    const today = new Date();
-    const toDate = (val) => {
-      if (!val) return null;
-      if (typeof val === 'string') {
-        const s = val.trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-          const d0 = new Date(`${s}T00:00:00`);
-          if (!isNaN(d0.getTime())) return d0;
-        }
-      }
-      const d = new Date(val);
-      if (!isNaN(d.getTime())) return d;
-      const s = String(val);
-      const parts = s.split(/[-/\s]/);
-      if (parts.length >= 3) {
-        const tryStr = `${parts[0]} ${parts[1]} ${parts[2]}`;
-        const d2 = new Date(tryStr);
-        if (!isNaN(d2.getTime())) return d2;
-      }
-      return null;
-    };
-    const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    const list = Array.isArray(f?.harvestDates) ? f.harvestDates : Array.isArray(f?.harvest_dates) ? f.harvest_dates : [];
-    for (const hd of list) {
-      const d = toDate(hd?.date || hd);
-      if (sameDay(d, today)) return true;
-    }
-    const single = f?.harvest_date || f?.harvestDate;
-    const d = toDate(single);
-    return sameDay(d, today);
-  };
+  // const isHarvestToday = (f) => {
+  //   const today = new Date();
+  //   const toDate = (val) => {
+  //     if (!val) return null;
+  //     if (typeof val === 'string') {
+  //       const s = val.trim();
+  //       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+  //         const d0 = new Date(`${s}T00:00:00`);
+  //         if (!isNaN(d0.getTime())) return d0;
+  //       }
+  //     }
+  //     const d = new Date(val);
+  //     if (!isNaN(d.getTime())) return d;
+  //     const s = String(val);
+  //     const parts = s.split(/[-/\s]/);
+  //     if (parts.length >= 3) {
+  //       const tryStr = `${parts[0]} ${parts[1]} ${parts[2]}`;
+  //       const d2 = new Date(tryStr);
+  //       if (!isNaN(d2.getTime())) return d2;
+  //     }
+  //     return null;
+  //   };
+  //   const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  //   const list = Array.isArray(f?.harvestDates) ? f.harvestDates : Array.isArray(f?.harvest_dates) ? f.harvest_dates : [];
+  //   for (const hd of list) {
+  //     const d = toDate(hd?.date || hd);
+  //     if (sameDay(d, today)) return true;
+  //   }
+  //   const single = f?.harvest_date || f?.harvestDate;
+  //   const d = toDate(single);
+  //   return sameDay(d, today);
+  // };
 
-  const hasPickupShipping = (f) => {
-    const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
-    const list = Array.isArray(f?.shipping_modes) ? f.shipping_modes : [];
-    const lower = list.map(m => normalize(m));
-    const single = normalize(f?.shipping_option || f?.mode_of_shipping || f?.shipping_method || '');
-    const hasArrayInfo = lower.length > 0;
-    const hasSingleInfo = single.length > 0;
-    const hasPickupWord = (v) => v.includes('pickup') || v.includes('pick') || v.includes('selfpickup') || v.includes('selfpick');
-    const hasDeliveryWord = (v) => v.includes('delivery');
+  // const hasPickupShipping = (f) => {
+  //   const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  //   const list = Array.isArray(f?.shipping_modes) ? f.shipping_modes : [];
+  //   const lower = list.map(m => normalize(m));
+  //   const single = normalize(f?.shipping_option || f?.mode_of_shipping || f?.shipping_method || '');
+  //   const hasArrayInfo = lower.length > 0;
+  //   const hasSingleInfo = single.length > 0;
+  //   const hasPickupWord = (v) => v.includes('pickup') || v.includes('pick') || v.includes('selfpickup') || v.includes('selfpick');
+  //   const hasDeliveryWord = (v) => v.includes('delivery');
 
-    if (hasSingleInfo) {
-      const singleHasPickup = hasPickupWord(single) || single.includes('both');
-      const singleHasDelivery = hasDeliveryWord(single);
-      if (singleHasPickup) return true;
-      if (singleHasDelivery && !singleHasPickup) return false;
-      return false;
-    }
-    if (hasArrayInfo) {
-      const arrayHasPickup = lower.some(v => hasPickupWord(v) || v.includes('both')) || (lower.some(hasPickupWord) && lower.some(hasDeliveryWord));
-      const arrayHasDeliveryOnly = lower.some(hasDeliveryWord) && !arrayHasPickup;
-      if (arrayHasPickup) return true;
-      if (arrayHasDeliveryOnly) return false;
-      return false;
-    }
-    return f?.shipping_pickup === true;
-  };
+  //   if (hasSingleInfo) {
+  //     const singleHasPickup = hasPickupWord(single) || single.includes('both');
+  //     const singleHasDelivery = hasDeliveryWord(single);
+  //     if (singleHasPickup) return true;
+  //     if (singleHasDelivery && !singleHasPickup) return false;
+  //     return false;
+  //   }
+  //   if (hasArrayInfo) {
+  //     const arrayHasPickup = lower.some(v => hasPickupWord(v) || v.includes('both')) || (lower.some(hasPickupWord) && lower.some(hasDeliveryWord));
+  //     const arrayHasDeliveryOnly = lower.some(hasDeliveryWord) && !arrayHasPickup;
+  //     if (arrayHasPickup) return true;
+  //     if (arrayHasDeliveryOnly) return false;
+  //     return false;
+  //   }
+  //   return f?.shipping_pickup === true;
+  // };
 
   useEffect(() => {
     let mounted = true;
@@ -406,15 +405,15 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           const set = new Set();
           return arr.filter(m => { const k = String(m || '').toLowerCase(); if (set.has(k)) return false; set.add(k); return true; });
         };
-        const toDate = (val) => {
-          if (!val) return null;
-          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
-            const d0 = new Date(`${val}T00:00:00`);
-            if (!isNaN(d0.getTime())) return d0;
-          }
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? null : d;
-        };
+        // const toDate = (val) => {
+        //   if (!val) return null;
+        //   if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+        //     const d0 = new Date(`${val}T00:00:00`);
+        //     if (!isNaN(d0.getTime())) return d0;
+        //   }
+        //   const d = new Date(val);
+        //   return isNaN(d.getTime()) ? null : d;
+        // };
         const ready = Array.isArray(fields) ? fields.filter((f) => {
           const last = byField.get(f.id);
           if (!last) return false;
@@ -445,7 +444,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
       mounted = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [user?.id, fields?.length]); // Only depend on user.id and fields.length, not entire objects
+  }, [user, fields]); // Only depend on user.id and fields.length, not entire objects
 
   const handleFilterClear = () => {
     setActiveFilters({ categories: [], subcategories: [], locations: [] });

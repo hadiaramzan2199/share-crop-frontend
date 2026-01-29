@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -50,7 +50,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
   ];
 
   // Search for users by name
-  const searchUsers = async (query) => {
+  const searchUsers = useCallback(async (query) => {
     if (!query || query.trim().length < 2) {
       setUserSearchResults([]);
       return;
@@ -100,7 +100,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
     } finally {
       setSearchingUsers(false);
     }
-  };
+  }, [userId]);
 
   // Debounced user search
   useEffect(() => {
@@ -114,7 +114,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [userSearchQuery]);
+  }, [userSearchQuery, searchUsers]);
 
   const handleSubmit = async () => {
     // Validation
@@ -315,10 +315,6 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
                 if (!option || !value) return false;
                 return option.id === value.id;
               }}
-              getOptionSelected={(option, value) => {
-                if (!option || !value) return false;
-                return option.id === value.id;
-              }}
               value={complainedAgainstUser}
               onChange={(event, newValue) => {
                 setComplainedAgainstUser(newValue);
@@ -338,41 +334,44 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
                       ? "You cannot complain against yourself"
                       : "No users found"
               }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  placeholder="Search user by name..."
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      '& fieldset': {
-                        borderColor: 'rgba(0, 0, 0, 0.23)',
+              renderInput={(params) => {
+                const { InputProps, ...restParams } = params;
+                return (
+                  <TextField
+                    {...restParams}
+                    placeholder="Search user by name..."
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2,
+                        '& fieldset': {
+                          borderColor: 'rgba(0, 0, 0, 0.23)',
+                        },
+                        '&:hover fieldset': {
+                          borderColor: '#4CAF50',
+                        },
+                        '&.Mui-focused fieldset': {
+                          borderColor: '#2E7D32',
+                          borderWidth: 2,
+                        },
                       },
-                      '&:hover fieldset': {
-                        borderColor: '#4CAF50',
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: '#2E7D32',
                       },
-                      '&.Mui-focused fieldset': {
-                        borderColor: '#2E7D32',
-                        borderWidth: 2,
-                      },
-                    },
-                    '& .MuiInputLabel-root.Mui-focused': {
-                      color: '#2E7D32',
-                    },
-                  }}
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <>
-                        <InputAdornment position="start">
-                          <Search sx={{ color: 'text.secondary' }} />
-                        </InputAdornment>
-                        {params.InputProps.startAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
+                    }}
+                    InputProps={{
+                      ...InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <Search sx={{ color: 'text.secondary' }} />
+                          </InputAdornment>
+                          {InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                );
+              }}
               renderOption={(props, option) => {
                 const isAdmin = option.user_type === 'admin';
                 const primaryLabel = isAdmin ? 'Share-Crop Administration' : (option.name || 'Unknown');
@@ -393,7 +392,6 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
                   </Box>
                 );
               }}
-              noOptionsText={userSearchQuery.length < 2 ? "Type at least 2 characters to search" : "No users found"}
               sx={{ width: '100%' }}
             />
             {complainedAgainstUser && (

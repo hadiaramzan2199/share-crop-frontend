@@ -14,16 +14,13 @@ import {
   MenuItem,
   IconButton,
   InputAdornment,
-  Grid,
-  Paper,
-  Chip
+  Grid
 } from '@mui/material';
 import {
   Close,
   LocationOn,
   Agriculture,
   Grass,
-  Eco,
   LocalFlorist,
   Park,
   Terrain,
@@ -32,7 +29,6 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import LocationPicker from './LocationPicker';
-import storageService from '../../services/storage';
 
 // Custom hook to detect mobile screens
 const useIsMobile = () => {
@@ -297,7 +293,7 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
     onClose();
   };
 
-  const selectedIcon = farmIcons.find(icon => icon.value === formData.farmIcon);
+  // const selectedIcon = farmIcons.find(icon => icon.value === formData.farmIcon);
 
   return (
     <>

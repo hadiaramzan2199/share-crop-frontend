@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { storageService } from '../../services/storage';
 import api from '../../services/api'; // Changed to default import
 import { useAuth } from '../../contexts/AuthContext';
-import { getProductIcon } from '../../utils/productIcons';
 
 const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
   const { user } = useAuth();
@@ -21,20 +19,20 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
   const [loading, setLoading] = useState(false);
 
   // Mapping from crop selections to proper subcategories for icon display
-  const cropToSubcategoryMapping = {
-    'Wheat': 'Corn', // Use corn icon as fallback
-    'Corn': 'Corn',
-    'Rice': 'Corn', // Use corn icon as fallback
-    'Soybeans': 'Corn', // Use corn icon as fallback
-    'Tomatoes': 'Tomato',
-    'Potatoes': 'Potatoes',
-    'Carrots': 'Carrot',
-    'Lettuce': 'Salad Greens',
-    'Onions': 'Onions',
-    'Peppers': 'Capsicum',
-    'Apples': 'Green Apple',
-    'Oranges': 'Tangerine'
-  };
+  // const cropToSubcategoryMapping = {
+  //   'Wheat': 'Corn', // Use corn icon as fallback
+  //   'Corn': 'Corn',
+  //   'Rice': 'Corn', // Use corn icon as fallback
+  //   'Soybeans': 'Corn', // Use corn icon as fallback
+  //   'Tomatoes': 'Tomato',
+  //   'Potatoes': 'Potatoes',
+  //   'Carrots': 'Carrot',
+  //   'Lettuce': 'Salad Greens',
+  //   'Onions': 'Onions',
+  //   'Peppers': 'Capsicum',
+  //   'Apples': 'Green Apple',
+  //   'Oranges': 'Tangerine'
+  // };
 
   const handleChange = (e) => {
     const { name, value } = e.target;

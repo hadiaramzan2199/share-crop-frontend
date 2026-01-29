@@ -15,10 +15,8 @@ const CustomScaleBar = ({ map }) => {
       if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
         return; // Style not loaded; unproject may fail
       }
-      const bounds = map.getBounds();
       
       // Calculate the distance for 100 pixels at the current zoom level
-      const y = bounds.getSouth() + (bounds.getNorth() - bounds.getSouth()) / 2;
       const maxWidth = 100; // Maximum width in pixels
       
       // Get distance in meters for maxWidth pixels

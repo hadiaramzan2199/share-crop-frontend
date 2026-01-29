@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react';
-import { Box, Card, CardContent, Chip, Divider, LinearProgress, Typography, Button, IconButton, TextField, Paper, Checkbox, FormControlLabel } from '@mui/material';
-import { LocationOn, Agriculture, CalendarToday, MoreVert, HomeWork } from '@mui/icons-material';
+import { Box, Typography, TextField, Paper, Checkbox, FormControlLabel } from '@mui/material';
+import { HomeWork } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import coinService from '../../services/coinService';
 import fieldsService from '../../services/fields';
@@ -78,8 +78,6 @@ const EnhancedFarmMap = forwardRef(({
   const [farms, setFarms] = useState([]);
   const [filteredFarms, setFilteredFarms] = useState([]);
   const [purchasedFarms, setPurchasedFarms] = useState(new Set());
-  const [rentedFields, setRentedFields] = useState(new Set());
-  const [blinkingFarms, setBlinkingFarms] = useState(new Set());
   const [selectedShipping, setSelectedShipping] = useState(null);
   const [shippingError, setShippingError] = useState(false);
   const [quantity, setQuantity] = useState(1);
@@ -100,13 +98,10 @@ const EnhancedFarmMap = forwardRef(({
     country: ''
   });
   const [orderForSomeoneElse, setOrderForSomeoneElse] = useState(false);
-  const [recipientCity, setRecipientCity] = useState('');
-  const [recipientCountry, setRecipientCountry] = useState('');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [addressError, setAddressError] = useState('');
   const [showAddressOverlay, setShowAddressOverlay] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
-  const [addressSearchLoading, setAddressSearchLoading] = useState(false);
   const addressSearchTimeoutRef = useRef(null);
   const addressOverlayContentRef = useRef(null);
   const addressLine1Ref = useRef(null);
@@ -143,6 +138,12 @@ const EnhancedFarmMap = forwardRef(({
   const [fieldOrderStats, setFieldOrderStats] = useState(new Map());
   const [popupTab, setPopupTab] = useState('details');
 
+  const extractCityCountry = useCallback((s) => {
+    const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+    const city = (parts[0] || '').toLowerCase();
+    const country = (parts[parts.length - 1] || '').toLowerCase();
+    return { city, country };
+  }, []);
 
   useEffect(() => {
     setShowDeliveryPanel(false);
@@ -483,26 +484,26 @@ const EnhancedFarmMap = forwardRef(({
       return Number.isFinite(purchasedArea) && purchasedArea > 0;
     });
   }, [purchasedProducts, farms, canonicalizeCategory]);
-  const getCenterFromCoords = useCallback((coordinates) => {
-    if (!coordinates || coordinates.length === 0) return [viewState.longitude, viewState.latitude];
-    const lngs = coordinates.map(c => c[0]);
-    const lats = coordinates.map(c => c[1]);
-    const avgLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
-    const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-    return [avgLng, avgLat];
-  }, [viewState.longitude, viewState.latitude]);
-  const mergeById = useCallback((a, b) => {
-    const map = new Map();
-    [...a, ...b].forEach(item => {
-      if (item && item.id != null) map.set(item.id, item);
-    });
-    return Array.from(map.values());
-  }, []);
+  // const getCenterFromCoords = useCallback((coordinates) => {
+  //   if (!coordinates || coordinates.length === 0) return [viewState.longitude, viewState.latitude];
+  //   const lngs = coordinates.map(c => c[0]);
+  //   const lats = coordinates.map(c => c[1]);
+  //   const avgLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+  //   const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+  //   return [avgLng, avgLat];
+  // }, [viewState.longitude, viewState.latitude]);
+  // const mergeById = useCallback((a, b) => {
+  //   const map = new Map();
+  //   [...a, ...b].forEach(item => {
+  //     if (item && item.id != null) map.set(item.id, item);
+  //   });
+  //   return Array.from(map.values());
+  // }, []);
 
   const fetchAddressSuggestions = useCallback(async (query) => {
     const q = (query || '').trim();
     if (!q) { setAddressSuggestions([]); return; }
-    setAddressSearchLoading(true);
+    // setAddressSearchLoading(true);
     try {
       if (process.env.REACT_APP_MAPBOX_ACCESS_TOKEN) {
         const resp = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${process.env.REACT_APP_MAPBOX_ACCESS_TOKEN}`);
@@ -568,9 +569,9 @@ const EnhancedFarmMap = forwardRef(({
     } catch (e) {
       setAddressSuggestions([]);
     } finally {
-      setAddressSearchLoading(false);
+      // setAddressSearchLoading(false);
     }
-  }, [orderForSomeoneElse, selectedProduct, productLocations]);
+  }, [orderForSomeoneElse, selectedProduct, productLocations, extractCityCountry]);
 
   const applyAddressSelection = useCallback((place) => {
     let city = newDeliveryAddress.city;
@@ -742,13 +743,6 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, [userPosition]);
 
-  const extractCityCountry = useCallback((s) => {
-    const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
-    const city = (parts[0] || '').toLowerCase();
-    const country = (parts[parts.length - 1] || '').toLowerCase();
-    return { city, country };
-  }, []);
-
   const isDeliveryAllowed = useCallback((prod) => {
     if (!prod) return false;
     const scopeRaw = prod.shipping_scope || prod.shippingScope || 'Global';
@@ -762,7 +756,7 @@ const EnhancedFarmMap = forwardRef(({
     if (scope === 'country') return Boolean(p.country && u.country && p.country === u.country);
     if (scope === 'city') return Boolean(p.city && u.city && p.city === u.city);
     return false;
-  }, [productLocations, orderForSomeoneElse, deliveryMode, newDeliveryAddress, existingDeliveryAddress, userLocationName, currentUser, user, extractCityCountry]);
+  }, [productLocations, orderForSomeoneElse, userLocationName, currentUser, user, extractCityCountry]);
 
   const triggerBurst = useCallback((product, qty) => {
     if (!mapRef.current || !product?.coordinates) return;
@@ -839,72 +833,72 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, [iconTargets]);
 
-  const triggerConfettiBurst = useCallback((product) => {
-    if (!mapRef.current || !product?.coordinates) return;
-    const map = mapRef.current.getMap();
-    const [lng, lat] = product.coordinates;
-    const pt = map.project([lng, lat]);
-    const mapRect = map.getContainer().getBoundingClientRect();
-    const layerRect = burstsLayerRef.current?.getBoundingClientRect() || mapRect;
-    const src = '/icons/effects/confetti.png';
-    const durationMs = 3200;
-    const intervalMs = 180;
-    const total = Math.min(18, Math.max(12, Math.floor(durationMs / intervalMs)));
-    const baseX = mapRect.left + pt.x - layerRect.left;
-    const baseY = mapRect.top + pt.y - layerRect.top;
-    setHarvestingIds(prev => {
-      const next = new Set(prev);
-      next.add(product.id);
-      return next;
-    });
-    setTimeout(() => {
-      setHarvestingIds(prev => {
-        const next = new Set(prev);
-        next.delete(product.id);
-        return next;
-      });
-    }, durationMs);
-    const nowBase = Date.now();
-    for (let i = 0; i < total; i++) {
-      const t = i * intervalMs;
-      setTimeout(() => {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 50 + Math.random() * 55;
-        const popX = baseX + Math.cos(angle) * radius;
-        const popY = baseY + Math.sin(angle) * radius;
-        const id = `${product.id}-conf-${nowBase}-${i}-${Math.random().toString(36).slice(2)}`;
-        const rot = Math.floor(Math.random() * 80) - 40;
-        const particle = {
-          id,
-          src,
-          x: baseX,
-          y: baseY,
-          tx: baseX,
-          ty: baseY + 12,
-          px: popX,
-          py: popY,
-          mx: (baseX + popX) / 2,
-          my: (baseY + popY) / 2,
-          rot,
-          stage: 'pop',
-          expire: Date.now() + 3000
-        };
-        setBursts(prev => [...prev, particle]);
-        setTimeout(() => {
-          setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'toMid' } : p));
-        }, 550);
-        setTimeout(() => {
-          setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'toBar' } : p));
-        }, 1200);
-        setTimeout(() => {
-          setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'fall' } : p));
-        }, 2000);
-        setTimeout(() => {
-          setBursts(prev => prev.filter(p => p.id !== id));
-        }, 2800);
-      }, t);
-    }
-  }, []);
+  // const triggerConfettiBurst = useCallback((product) => {
+  //   if (!mapRef.current || !product?.coordinates) return;
+  //   const map = mapRef.current.getMap();
+  //   const [lng, lat] = product.coordinates;
+  //   const pt = map.project([lng, lat]);
+  //   const mapRect = map.getContainer().getBoundingClientRect();
+  //   const layerRect = burstsLayerRef.current?.getBoundingClientRect() || mapRect;
+  //   const src = '/icons/effects/confetti.png';
+  //   const durationMs = 3200;
+  //   const intervalMs = 180;
+  //   const total = Math.min(18, Math.max(12, Math.floor(durationMs / intervalMs)));
+  //   const baseX = mapRect.left + pt.x - layerRect.left;
+  //   const baseY = mapRect.top + pt.y - layerRect.top;
+  //   setHarvestingIds(prev => {
+  //     const next = new Set(prev);
+  //     next.add(product.id);
+  //     return next;
+  //   });
+  //   setTimeout(() => {
+  //     setHarvestingIds(prev => {
+  //       const next = new Set(prev);
+  //       next.delete(product.id);
+  //       return next;
+  //     });
+  //   }, durationMs);
+  //   const nowBase = Date.now();
+  //   for (let i = 0; i < total; i++) {
+  //     const t = i * intervalMs;
+  //     setTimeout(() => {
+  //       const angle = Math.random() * Math.PI * 2;
+  //       const radius = 50 + Math.random() * 55;
+  //       const popX = baseX + Math.cos(angle) * radius;
+  //       const popY = baseY + Math.sin(angle) * radius;
+  //       const id = `${product.id}-conf-${nowBase}-${i}-${Math.random().toString(36).slice(2)}`;
+  //       const rot = Math.floor(Math.random() * 80) - 40;
+  //       const particle = {
+  //         id,
+  //         src,
+  //         x: baseX,
+  //         y: baseY,
+  //         tx: baseX,
+  //         ty: baseY + 12,
+  //         px: popX,
+  //         py: popY,
+  //         mx: (baseX + popX) / 2,
+  //         my: (baseY + popY) / 2,
+  //         rot,
+  //         stage: 'pop',
+  //         expire: Date.now() + 3000
+  //       };
+  //       setBursts(prev => [...prev, particle]);
+  //       setTimeout(() => {
+  //         setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'toMid' } : p));
+  //       }, 550);
+  //       setTimeout(() => {
+  //         setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'toBar' } : p));
+  //       }, 1200);
+  //       setTimeout(() => {
+  //         setBursts(prev => prev.map(p => p.id === id ? { ...p, stage: 'fall' } : p));
+  //       }, 2000);
+  //       setTimeout(() => {
+  //         setBursts(prev => prev.filter(p => p.id !== id));
+  //       }, 2800);
+  //     }, t);
+  //   }
+  // }, []);
 
   const isHarvestToday = useCallback((f) => {
     const today = new Date();
@@ -913,7 +907,7 @@ const EnhancedFarmMap = forwardRef(({
       const d = new Date(val);
       if (!isNaN(d.getTime())) return d;
       const s = String(val);
-      const parts = s.split(/[-\/\s]/);
+      const parts = s.split(/[-/ ]/);
       if (parts.length >= 3) {
         const tryStr = `${parts[0]} ${parts[1]} ${parts[2]}`;
         const d2 = new Date(tryStr);
@@ -965,7 +959,7 @@ const EnhancedFarmMap = forwardRef(({
         setHarvestGifs(prev => prev.filter(p => p.id !== item.id));
       }, 9200);
     });
-  }, [farms, isHarvestToday, isMobile]);
+  }, [farms, isHarvestToday]);
 
   // Note: Do not persist across reloads. GIFs should show once per page load.
 
@@ -1167,7 +1161,7 @@ const EnhancedFarmMap = forwardRef(({
     if (onProductSelect) {
       onProductSelect(product);
     }
-  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct]);
+  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -1198,7 +1192,7 @@ const EnhancedFarmMap = forwardRef(({
       console.log('🔄 Manually refreshing farm data...');
       setRefreshTrigger(prev => prev + 1);
     }
-  }), [fetchLocationForProduct, fetchWeatherForProduct]); // Removed viewState dependency to prevent unnecessary re-creation
+  }), [fetchLocationForProduct, fetchWeatherForProduct, isMobile]); // Removed viewState dependency to prevent unnecessary re-creation
 
 
 
@@ -1306,7 +1300,7 @@ const EnhancedFarmMap = forwardRef(({
       };
       loadFarms();
     }
-  }, [onFarmsLoad, externalFarms, externalFields, refreshTrigger]); // Refresh when refreshTrigger changes
+  }, [onFarmsLoad, externalFarms, externalFields, refreshTrigger, normalizeField, shouldFilterOutByOccupiedArea]); // Refresh when refreshTrigger changes
 
   useEffect(() => {
     if (farms && farms.length > 0) {
@@ -1374,7 +1368,7 @@ const EnhancedFarmMap = forwardRef(({
       }
       setFilteredFarms(filtered);
     }
-  }, [searchQuery, farms, selectedIcons, externalFilters]);
+  }, [searchQuery, farms, selectedIcons, externalFilters, shouldFilterOutByOccupiedArea]);
 
   // Apply header-provided category/subcategory filters
   useEffect(() => {
@@ -1449,12 +1443,12 @@ const EnhancedFarmMap = forwardRef(({
       });
     }
     setFilteredFarms(filtered);
-  }, [externalFilters, farms, selectedIcons]);
+  }, [externalFilters, farms, selectedIcons, shouldFilterOutByOccupiedArea]);
 
-  const isPurchased = useCallback((productId) => {
-    const farm = farms.find(f => f.id === productId);
-    return (farm && !!farm.isPurchased) || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
-  }, [farms, purchasedFarms, purchasedProductIds]);
+  // const isPurchased = useCallback((productId) => {
+  //   const farm = farms.find(f => f.id === productId);
+  //   return (farm && !!farm.isPurchased) || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
+  // }, [farms, purchasedFarms, purchasedProductIds]);
   const isProductPurchased = useCallback((prod) => {
     if (!prod) return false;
     if (stablePurchasedIdsRef.current.has(prod.id)) return true;
@@ -1515,11 +1509,11 @@ const EnhancedFarmMap = forwardRef(({
     return 0;
   };
 
-  const formatArea = (val) => {
-    const num = typeof val === 'string' ? parseFloat(val) : val;
-    if (!Number.isFinite(num)) return '0.00';
-    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
+  // const formatArea = (val) => {
+  //   const num = typeof val === 'string' ? parseFloat(val) : val;
+  //   if (!Number.isFinite(num)) return '0.00';
+  //   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // };
 
   const formatAreaInt = (val) => {
     const num = typeof val === 'string' ? parseFloat(val) : val;
@@ -1527,30 +1521,30 @@ const EnhancedFarmMap = forwardRef(({
     return Math.round(num).toLocaleString(undefined, { maximumFractionDigits: 0 });
   };
 
-  const getSelectedHarvestText = (prod) => {
-    const entry = purchasedProducts.find(p => (p.id ?? p.field_id) === (prod.id ?? prod.field_id));
-    const label = entry?.selected_harvest_label || prod.selected_harvest_label || (selectedHarvestDate?.label || '');
-    let rawDate = entry?.selected_harvest_date || prod.selected_harvest_date || (selectedHarvestDate?.date || '');
-    if (!rawDate) {
-      const hd = Array.isArray(prod.harvest_dates) ? prod.harvest_dates.find(h => h.selected || h.default || h.isDefault || h.is_selected) || prod.harvest_dates[0] : null;
-      rawDate = hd?.date || prod.harvest_date || prod.harvestDate || '';
-    }
-    const formatDate = (date) => {
-      if (!date) return '';
-      if (typeof date === 'string' && /^\d{1,2}\s\w{3}\s\d{4}$/.test(date)) return date;
-      try {
-        const d = new Date(date);
-        if (isNaN(d.getTime())) return date;
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-      } catch { return date; }
-    };
-    const date = formatDate(rawDate);
-    if (label && date) return `${date} (${label})`;
-    if (date) return date;
-    if (label) return label;
-    return 'Not specified';
-  };
+  // const getSelectedHarvestText = (prod) => {
+  //   const entry = purchasedProducts.find(p => (p.id ?? p.field_id) === (prod.id ?? prod.field_id));
+  //   const label = entry?.selected_harvest_label || prod.selected_harvest_label || (selectedHarvestDate?.label || '');
+  //   let rawDate = entry?.selected_harvest_date || prod.selected_harvest_date || (selectedHarvestDate?.date || '');
+  //   if (!rawDate) {
+  //     const hd = Array.isArray(prod.harvest_dates) ? prod.harvest_dates.find(h => h.selected || h.default || h.isDefault || h.is_selected) || prod.harvest_dates[0] : null;
+  //     rawDate = hd?.date || prod.harvest_date || prod.harvestDate || '';
+  //   }
+  //   const formatDate = (date) => {
+  //     if (!date) return '';
+  //     if (typeof date === 'string' && /^\d{1,2}\s\w{3}\s\d{4}$/.test(date)) return date;
+  //     try {
+  //       const d = new Date(date);
+  //       if (isNaN(d.getTime())) return date;
+  //       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  //       return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  //     } catch { return date; }
+  //   };
+  //   const date = formatDate(rawDate);
+  //   if (label && date) return `${date} (${label})`;
+  //   if (date) return date;
+  //   if (label) return label;
+  //   return 'Not specified';
+  // };
 
   const getHarvestDateObj = useCallback((prod) => {
     const entry = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(prod.id ?? prod.field_id));
@@ -1569,7 +1563,7 @@ const EnhancedFarmMap = forwardRef(({
           if (ts > bestTs) { bestTs = ts; best = raw; }
         } else {
           const s = String(raw);
-          const parts = s.split(/[-\/\s]/);
+          const parts = s.split(/[-/ ]/);
           if (parts.length >= 3) {
             const tryStr = `${parts[0]} ${parts[1]} ${parts[2]}`;
             const d2 = new Date(tryStr);
@@ -1640,10 +1634,10 @@ const EnhancedFarmMap = forwardRef(({
     return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
   }, []);
 
-  const isHarvestReached = useCallback((prod) => {
-    const days = getDaysUntilHarvest(prod);
-    return days !== null && days <= 0;
-  }, [getDaysUntilHarvest]);
+  // const isHarvestReached = useCallback((prod) => {
+  //   const days = getDaysUntilHarvest(prod);
+  //   return days !== null && days <= 0;
+  // }, [getDaysUntilHarvest]);
 
   const isHarvestWithinGrace = useCallback((prod, days = 4) => {
     const du = getDaysUntilHarvest(prod);
@@ -1704,7 +1698,7 @@ const EnhancedFarmMap = forwardRef(({
     const src = mode === 'pickup' ? '/icons/products/pickup.png' : '/icons/products/delivery.png';
     return (
       <div style={{ position: 'absolute', left: '50%', top: '50%', width: `${size}px`, height: `${size}px`, transform: 'translate(-50%, -50%)', zIndex: 20, pointerEvents: 'none' }}>
-        <img ref={ref} src={src} style={{ position: 'absolute', left: '50%', top: '50%', width: `${iconSize}px`, height: `${iconSize}px`, objectFit: 'contain', transform: 'translate(-50%, -50%)', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
+        <img ref={ref} src={src} alt="Shipping Orbit" style={{ position: 'absolute', left: '50%', top: '50%', width: `${iconSize}px`, height: `${iconSize}px`, objectFit: 'contain', transform: 'translate(-50%, -50%)', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
       </div>
     );
   };
@@ -3048,29 +3042,21 @@ const EnhancedFarmMap = forwardRef(({
                       position: 'relative',
                       zIndex: 5,
                       border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                      filter: blinkingFarms.has(product.id)
-                        ? 'drop-shadow(0 0 15px rgba(255, 193, 7, 0.9)) drop-shadow(0 0 30px rgba(255, 193, 7, 0.7))'
-                        : isProductPurchased(product)
-                          ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                          : rentedFields.has(product.id)
-                            ? 'brightness(1.1) drop-shadow(0 0 10px rgba(76, 175, 80, 0.8)) drop-shadow(0 0 20px rgba(76, 175, 80, 0.6))'
-                            : product.isFarmerCreated
-                              ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                              : 'none',
+                      filter: isProductPurchased(product)
+                        ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
+                        : product.isFarmerCreated
+                          ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
+                          : 'none',
                       backgroundColor: 'transparent',
                       padding: '0',
                       transition: 'all 0.3s ease',
                       transformOrigin: 'center bottom',
 
-                      animation: blinkingFarms.has(product.id)
-                        ? 'glow-blink 0.8s infinite'
-                        : isProductPurchased(product)
-                          ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite'
-                          : rentedFields.has(product.id)
-                            ? 'glow-steady-green 2s infinite'
-                            : product.isFarmerCreated
-                              ? 'glow-farmer-created 3s infinite'
-                              : 'none',
+                      animation: isProductPurchased(product)
+                        ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite'
+                        : product.isFarmerCreated
+                          ? 'glow-farmer-created 3s infinite'
+                          : 'none',
                       ...(harvestingIds.has(product.id) ? { animation: 'harvest-bounce 700ms ease-in-out infinite' } : {})
                     }}
                   />

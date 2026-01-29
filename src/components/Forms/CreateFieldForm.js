@@ -15,17 +15,10 @@ import {
   Select,
   MenuItem,
   Paper,
-  Card,
-  CardContent,
   InputAdornment,
   FormControlLabel,
   RadioGroup,
-  Radio,
-  Switch,
-  Divider,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Radio
 } from '@mui/material';
 
 import {
@@ -33,8 +26,6 @@ import {
   LocationOn,
   Add,
   Remove,
-  ExpandMore,
-  MyLocation,
   Agriculture,
   Grass,
   Nature,
@@ -222,36 +213,36 @@ const SectionTitle = styled(Typography)(({ theme }) => ({
   paddingBottom: '8px',
 }));
 
-const StyledRadioGroup = styled(RadioGroup)(({ theme }) => ({
-  '& .MuiFormControlLabel-root': {
-    backgroundColor: '#ffffff',
-    margin: '4px',
-    borderRadius: '12px',
-    border: '2px solid #e8f5e8',
-    padding: '8px 16px',
-    transition: 'all 0.3s ease',
-    '&:hover': {
-      borderColor: '#c8e6c9',
-      boxShadow: '0 4px 12px rgba(76, 175, 80, 0.1)',
-    },
-  },
-  '& .MuiRadio-root.Mui-checked + .MuiFormControlLabel-label': {
-    color: '#4caf50',
-    fontWeight: 600,
-  },
-}));
+// const StyledRadioGroup = styled(RadioGroup)(({ theme }) => ({
+//   '& .MuiFormControlLabel-root': {
+//     backgroundColor: '#ffffff',
+//     margin: '4px',
+//     borderRadius: '12px',
+//     border: '2px solid #e8f5e8',
+//     padding: '8px 16px',
+//     transition: 'all 0.3s ease',
+//     '&:hover': {
+//       borderColor: '#c8e6c9',
+//       boxShadow: '0 4px 12px rgba(76, 175, 80, 0.1)',
+//     },
+//   },
+//   '& .MuiRadio-root.Mui-checked + .MuiFormControlLabel-label': {
+//     color: '#4caf50',
+//     fontWeight: 600,
+//   },
+// }));
 
-const InfoBox = styled(Box)(({ theme }) => ({
-  backgroundColor: '#f8fffe',
-  border: '1px solid #e8f5e8',
-  borderRadius: '12px',
-  padding: '16px',
-  marginBottom: '16px',
-  '& .MuiTypography-root': {
-    color: '#4a5568',
-    fontSize: '0.875rem',
-  },
-}));
+// const InfoBox = styled(Box)(({ theme }) => ({
+//   backgroundColor: '#f8fffe',
+//   border: '1px solid #e8f5e8',
+//   borderRadius: '12px',
+//   padding: '16px',
+//   marginBottom: '16px',
+//   '& .MuiTypography-root': {
+//     color: '#4a5568',
+//     fontSize: '0.875rem',
+//   },
+// }));
 
 const StyledDialogActions = styled(DialogActions)(({ theme, isMobile }) => ({
   padding: isMobile ? '16px 20px' : '24px 32px',
@@ -330,7 +321,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [expandedSection, setExpandedSection] = useState('basic');
+  // const [expandedSection, setExpandedSection] = useState('basic');
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   const categoryData = {
