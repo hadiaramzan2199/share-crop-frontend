@@ -1,20 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
-  Grid,
-  Card,
   Avatar,
   TextField,
   IconButton,
   Badge,
   Paper,
   InputAdornment,
-  Chip,
   Stack,
-  Divider,
   Button,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -29,20 +24,10 @@ import {
 import {
   Send,
   Search,
-  MoreVert,
-  AttachFile,
-  EmojiEmotions,
-  Phone,
-  VideoCall,
-  Info,
-  Circle,
-  CheckCircle,
   Schedule,
-  Agriculture,
   ChatBubbleOutline,
   Add,
   ArrowBack,
-  Done,
   DoneAll
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
@@ -81,7 +66,7 @@ const Messages = () => {
     if (user) {
       fetchConversations(true); // Initial load with spinner
     }
-  }, [user]);
+  }, [user, fetchConversations]);
 
   // 2. Fetch Messages when selecting conversation
   useEffect(() => {
@@ -149,7 +134,7 @@ const Messages = () => {
         };
       }
     }
-  }, [selectedConversation]);
+  }, [selectedConversation, user?.id, fetchMessages]);
 
   // 3. Realtime Subscription for Conversation List
   useEffect(() => {
@@ -177,9 +162,9 @@ const Messages = () => {
         supabase.removeChannel(convChannel);
       };
     }
-  }, [user]);
+  }, [user, fetchConversations]);
 
-  const fetchConversations = async (showSpinner = false) => {
+  const fetchConversations = useCallback(async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
       const data = await messagingService.getConversations();
@@ -189,9 +174,9 @@ const Messages = () => {
     } finally {
       if (showSpinner) setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchMessages = async (convId) => {
+  const fetchMessages = useCallback(async (convId) => {
     try {
       setMsgLoading(true);
       const data = await messagingService.getMessages(convId);
@@ -205,7 +190,7 @@ const Messages = () => {
     } finally {
       setMsgLoading(false);
     }
-  };
+  }, []);
 
   // User Search Logic
   useEffect(() => {
@@ -218,20 +203,20 @@ const Messages = () => {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchUserTerm]);
+  }, [searchUserTerm, searchUsers]);
 
-  const searchUsers = async () => {
+  const searchUsers = useCallback(async () => {
     try {
       setSearching(true);
       const data = await messagingService.searchUsers(searchUserTerm);
       // Filter out current user from search results
-      setFoundUsers(data.filter(u => u.id !== user.id));
+      setFoundUsers(data.filter(u => u.id !== user?.id));
     } catch (err) {
       console.error('Error searching users:', err);
     } finally {
       setSearching(false);
     }
-  };
+  }, [user?.id, searchUserTerm]);
 
   const handleStartNewChat = async (participantId) => {
     try {
@@ -266,7 +251,7 @@ const Messages = () => {
     if (messages.length > 0 && msgLoading === false) {
       scrollToBottom('auto');
     }
-  }, [selectedConversation?.id, msgLoading]);
+  }, [selectedConversation?.id, msgLoading, messages.length]);
 
   // Scroll to bottom on new messages (smooth)
   useEffect(() => {
@@ -424,10 +409,9 @@ const Messages = () => {
           <Box sx={{
             width: { xs: '100%', md: '380px' },
             borderRight: '1px solid #e2e8f0',
-            display: 'flex',
-            flexDirection: 'column',
             height: '100%',
-            display: { xs: selectedConversation ? 'none' : 'flex', md: 'flex' }
+            display: { xs: selectedConversation ? 'none' : 'flex', md: 'flex' },
+            flexDirection: 'column',
           }}>
             {/* Sidebar Header */}
             <Box sx={{
@@ -529,7 +513,6 @@ const Messages = () => {
           {/* Chat Area */}
           <Box sx={{
             flex: 1,
-            display: 'flex',
             flexDirection: 'column',
             height: '100%',
             display: { xs: selectedConversation ? 'flex' : 'none', md: 'flex' }

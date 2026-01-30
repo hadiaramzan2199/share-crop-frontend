@@ -27,15 +27,15 @@ const BuyerView = () => {
   const [farms, setFarms] = useState([]);
   const [fields, setFields] = useState([]);
   // const [products, setProducts] = useState([]); // Removed - using fields directly
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // const [loading, setLoading] = useState(true);
+  // const [error, setError] = useState(null);
   const mapRef = useRef(null);
   const headerRef = useRef(null);
-  const { 
-    notifications, 
-    backendNotifications, 
-    addNotification, 
-    removeNotification, 
+  const {
+    notifications,
+    backendNotifications,
+    addNotification,
+    removeNotification,
     markNotificationAsRead,
     fetchBackendNotifications
   } = useNotifications();
@@ -56,17 +56,15 @@ const BuyerView = () => {
 
   const loadAllFieldsFromStorage = useCallback(async () => {
     if (!currentUser) {
-      setLoading(false);
       return;
     }
     try {
-      setLoading(true);
       const [farmsResponse, fieldsResponse] = await Promise.all([
         farmsService.getAll(),
         fieldsService.getAll(),
       ]);
       setFarms(farmsResponse.data || []);
-      
+
       // Map database field names to frontend expected names
       const mappedFields = (fieldsResponse.data || [])
         .filter(field => field && field.id) // Only include fields with valid id
@@ -80,9 +78,7 @@ const BuyerView = () => {
       setFields(mappedFields);
     } catch (err) {
       console.error('Error loading buyer data:', err);
-      setError('Failed to load data. Please try again later.');
     } finally {
-      setLoading(false);
     }
   }, [currentUser]);
 
@@ -132,7 +128,7 @@ const BuyerView = () => {
 
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <EnhancedHeader 
+      <EnhancedHeader
         ref={headerRef}
         onSearchChange={handleSearchChange}
         fields={fields}
@@ -141,7 +137,7 @@ const BuyerView = () => {
         user={currentUser}
         onLogout={logout}
       />
-      
+
       <Box sx={{
         flexGrow: 1,
         mt: 'var(--app-header-height)',
@@ -175,10 +171,10 @@ const BuyerView = () => {
           <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
-      
+
       {/* Notification System */}
-      <NotificationSystem 
-        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]} 
+      <NotificationSystem
+        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]}
         onRemove={(id) => {
           // Check if it's a backend notification
           const backendNotif = backendNotifications.find(n => n.id === id);
@@ -187,7 +183,7 @@ const BuyerView = () => {
           } else {
             removeNotification(id);
           }
-        }} 
+        }}
       />
     </Box>
   );

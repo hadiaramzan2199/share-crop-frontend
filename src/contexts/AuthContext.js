@@ -1,10 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { mockAuthService } from '../services/mockServices';
-import { USER_ROLES } from '../utils/roles';
 import axios from 'axios'; // Import axios
-import api, { setAuthTokenProvider } from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import { setAuthTokenProvider } from '../services/api';
 const getBaseUrl = () => {
   if (process.env.REACT_APP_API_BASE_URL) return process.env.REACT_APP_API_BASE_URL;
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {

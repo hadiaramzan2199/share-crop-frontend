@@ -30,7 +30,8 @@ const NotificationSystem = ({ notifications, onRemove }) => {
 
     // Cleanup function
     return () => {
-      Object.values(timeoutRefs.current).forEach(timeout => {
+      const currentRefs = timeoutRefs.current;
+      Object.values(currentRefs).forEach(timeout => {
         if (timeout) clearTimeout(timeout);
       });
     };

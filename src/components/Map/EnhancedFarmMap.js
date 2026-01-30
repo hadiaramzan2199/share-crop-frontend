@@ -397,10 +397,10 @@ const EnhancedFarmMap = forwardRef(({
   };
 
   const renderPopupTabs = () => (
-    <div style={{ 
-      display: 'flex', 
-      backgroundColor: '#f1f5f9', 
-      borderRadius: '6px', 
+    <div style={{
+      display: 'flex',
+      backgroundColor: '#f1f5f9',
+      borderRadius: '6px',
       padding: '2px',
       marginBottom: '12px',
       border: '1px solid #e2e8f0'
@@ -2025,7 +2025,6 @@ const EnhancedFarmMap = forwardRef(({
             if (!selectedHarvestDate) return [];
             const it = { date: selectedHarvestDate.date, label: selectedHarvestDate.label };
             const d = (() => { try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
-            const k = `${d}|${(it.label || '').trim().toLowerCase()}`;
             const s = new Set();
             return [{ date: d || it.date, label: (it.label || '').trim() }].filter(x => { const kk = `${x.date || ''}|${(x.label || '').trim().toLowerCase()}`; if (s.has(kk)) return false; s.add(kk); return true; });
           })(),
@@ -2131,6 +2130,7 @@ const EnhancedFarmMap = forwardRef(({
 
       // If this is a farmer-created field, create a farm order and send notification
       if (product.isFarmerCreated) {
+        /*
         const farmOrder = {
           id: `order_${Date.now()}`,
           fieldId: product.id,
@@ -2145,6 +2145,7 @@ const EnhancedFarmMap = forwardRef(({
           shippingMethod: selectedShipping || 'Delivery',
           mode_of_shipping: selectedShipping || 'Delivery'
         };
+        */
 
         // Farm orders and notifications are now managed via API
         // TODO: Implement API calls for farm orders and notifications
@@ -2365,15 +2366,6 @@ const EnhancedFarmMap = forwardRef(({
       const modes = getShippingModes(f).map(m => (m || '').toLowerCase());
       const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
       if (mode !== 'delivery') return;
-      const toDate = (val) => {
-        if (!val) return null;
-        if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
-          const d0 = new Date(`${val}T00:00:00`);
-          if (!isNaN(d0.getTime())) return d0;
-        }
-        const d = new Date(val);
-        return isNaN(d.getTime()) ? null : d;
-      };
       const entry = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(f.id));
       if (!f?.coordinates) return;
       if (deliveryAnimatedIdsRef.current.has(f.id)) return;
@@ -2435,7 +2427,7 @@ const EnhancedFarmMap = forwardRef(({
         run();
       }
     });
-  }, [farms, purchasedProducts, isHarvestToday, showDeliveryPanel]);
+  }, [farms, purchasedProducts, isHarvestToday, showDeliveryPanel, isProductPurchased, isHarvestWithinGrace, getShippingModes, isMobile]);
 
   // Update popup position when selected product changes or view moves; avoid jitter during programmatic animation
   useEffect(() => {
@@ -2614,7 +2606,7 @@ const EnhancedFarmMap = forwardRef(({
                 </div>
               </div>
 
-              <div style={{ 
+              <div style={{
                 padding: isMobile ? '7px 10px 10px' : '8px 12px 12px',
                 maxHeight: '75vh',
                 overflowY: 'auto',
@@ -2942,7 +2934,7 @@ const EnhancedFarmMap = forwardRef(({
               >
                 <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
                   {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
-<img
+                    <img
                       src={'/icons/effects/fric.gif'}
                       alt="Harvest celebration effect"
                       style={{
@@ -3127,7 +3119,7 @@ const EnhancedFarmMap = forwardRef(({
 
       <div ref={harvestLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1050 }}>
         {harvestGifs.map(g => (
-<img
+          <img
             key={`harvest-gif-${g.id}`}
             src={g.src}
             alt="Harvest animation"
@@ -3161,7 +3153,7 @@ const EnhancedFarmMap = forwardRef(({
 
       <div ref={burstsLayerRef} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 999 }}>
         {bursts.map(p => (
-<img
+          <img
             key={p.id}
             src={p.src}
             alt="Purchase celebration effect"
@@ -3177,7 +3169,7 @@ const EnhancedFarmMap = forwardRef(({
                   ? `translate(${p.mx - p.x}px, ${p.my - p.y}px) scale(1.15) rotate(${(p.rot || 0) / 2}deg)`
                   : p.stage === 'toBar'
                     ? `translate(${p.tx - p.x}px, ${p.ty - p.y}px) scale(0.82) rotate(${(p.rot || 0) / 3}deg)`
-                    : `translate(${p.tx - p.x}px, ${p.ty - p.y + 10}px) scale(0.62) rotate(0deg)` ,
+                    : `translate(${p.tx - p.x}px, ${p.ty - p.y + 10}px) scale(0.62) rotate(0deg)`,
               opacity: p.stage === 'pop' ? 1 : p.stage === 'toMid' ? 0.95 : p.stage === 'toBar' ? 0.88 : 0.7,
               transition: p.stage === 'pop'
                 ? 'transform 650ms cubic-bezier(0.22, 1, 0.36, 1), opacity 650ms ease'
@@ -3371,8 +3363,8 @@ const EnhancedFarmMap = forwardRef(({
                 title="View Live Camera Feed"
               >
                 <svg width={isMobile ? "12" : "14"} height={isMobile ? "12" : "14"} viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7-3.5c0-1-.3-2-.8-2.8l2.4-2.4c.8 1.3 1.3 2.8 1.3 4.4s-.5 3.1-1.3 4.4l-2.4-2.4c.5-.8.8-1.8.8-2.8M4.3 19.3l2.4-2.4c.8.5 1.8.8 2.8.8s2-.3 2.8-.8l2.4 2.4c-1.3.8-2.8 1.3-4.4 1.3s-3.1-.5-4.4-1.3M19.7 4.7l-2.4 2.4c-.8-.5-1.8-.8-2.8-.8s-2 .3-2.8.8L9.3 4.7C10.6 3.9 12.2 3.4 13.8 3.4s3.1.5 4.4 1.3z"/>
-                  <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                  <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7-3.5c0-1-.3-2-.8-2.8l2.4-2.4c.8 1.3 1.3 2.8 1.3 4.4s-.5 3.1-1.3 4.4l-2.4-2.4c.5-.8.8-1.8.8-2.8M4.3 19.3l2.4-2.4c.8.5 1.8.8 2.8.8s2-.3 2.8-.8l2.4 2.4c-1.3.8-2.8 1.3-4.4 1.3s-3.1-.5-4.4-1.3M19.7 4.7l-2.4 2.4c-.8-.5-1.8-.8-2.8-.8s-2 .3-2.8.8L9.3 4.7C10.6 3.9 12.2 3.4 13.8 3.4s3.1.5 4.4 1.3z" />
+                  <circle cx="12" cy="12" r="3" fill="currentColor" />
                 </svg>
                 {isMobile ? '' : 'Webcam'}
               </button>
@@ -3401,8 +3393,8 @@ const EnhancedFarmMap = forwardRef(({
             </div>
 
             {/* Content */}
-            <div style={{ 
-              padding: isMobile ? '0 12px 12px' : '0 16px 16px', 
+            <div style={{
+              padding: isMobile ? '0 12px 12px' : '0 16px 16px',
               position: 'relative',
               maxHeight: '75vh',
               overflowY: 'auto',

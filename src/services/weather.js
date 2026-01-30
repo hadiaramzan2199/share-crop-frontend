@@ -57,4 +57,5 @@ class WeatherService {
   }
 }
 
-export default new WeatherService();
+const weatherService = new WeatherService();
+export default weatherService;

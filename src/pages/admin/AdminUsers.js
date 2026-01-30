@@ -1,25 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, Divider, IconButton, Avatar, Stack, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab, Tooltip } from '@mui/material';
+import { Box, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Snackbar, Alert, IconButton, Avatar, TextField, InputAdornment, Select, MenuItem, FormControl, InputLabel, Tabs, Tab, Tooltip } from '@mui/material';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CloseIcon from '@mui/icons-material/Close';
-import PersonIcon from '@mui/icons-material/Person';
-import EmailIcon from '@mui/icons-material/Email';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import PeopleIcon from '@mui/icons-material/People';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import StarIcon from '@mui/icons-material/Star';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
-import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import DescriptionIcon from '@mui/icons-material/Description';
 
@@ -33,11 +23,6 @@ const StatusChip = ({ status }) => {
   return <Chip label={status} size="small" sx={{ bgcolor: c.bg, border: `1px solid ${c.border}`, color: c.color, textTransform: 'capitalize', fontWeight: 600 }} />;
 };
 
-const RoleChip = ({ role }) => {
-  const r = String(role || '').toLowerCase();
-  const c = r === 'farmer' ? { bg: 'rgba(76,175,80,0.1)', border: 'rgba(76,175,80,0.2)', color: '#2E7D32' } : { bg: 'rgba(33,150,243,0.1)', border: 'rgba(33,150,243,0.2)', color: '#1565C0' };
-  return <Chip label={role} size="small" sx={{ bgcolor: c.bg, border: `1px solid ${c.border}`, color: c.color, textTransform: 'capitalize', fontWeight: 600 }} />;
-};
 
 const ConfirmDialog = ({ open, title, content, onClose, onConfirm }) => (
   <Dialog open={open} onClose={onClose}>
@@ -51,7 +36,6 @@ const ConfirmDialog = ({ open, title, content, onClose, onConfirm }) => (
 );
 
 // UserDetailsModal has been replaced by UserDetailPage route
-const STUB_MODE = true; // Placeholder to maintain file structure if needed
 
 const AdminUsers = () => {
   const location = useLocation();
@@ -69,7 +53,6 @@ const AdminUsers = () => {
   const [authError, setAuthError] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [highlightedId, setHighlightedId] = useState(null);
-  const [selectedUser, setSelectedUser] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -77,7 +60,6 @@ const AdminUsers = () => {
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
   const [userComplaints, setUserComplaints] = useState({ made: {}, against: {} }); // { made: { userId: { count, complaints } }, against: { userId: { count, complaints } } }
-  const [loadingComplaints, setLoadingComplaints] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -128,7 +110,6 @@ const AdminUsers = () => {
     };
     const loadComplaints = async () => {
       try {
-        setLoadingComplaints(true);
         const resp = await complaintService.getComplaints({});
         if (!mounted) return;
         const complaints = Array.isArray(resp.data) ? resp.data : [];
@@ -159,7 +140,7 @@ const AdminUsers = () => {
       } catch (e) {
         console.error('Error loading complaints:', e);
       } finally {
-        if (mounted) setLoadingComplaints(false);
+        // loadingComplaints removed
       }
     };
 
@@ -286,28 +267,6 @@ const AdminUsers = () => {
     }
   };
 
-  const openDocs = async (id) => {
-    setDocsUserId(id);
-    setDocsLoading(true);
-    setDocsContent(null);
-    try {
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout')), 10000)
-      );
-      const resp = await Promise.race([
-        adminService.getFarmerDocuments(id),
-        timeoutPromise
-      ]);
-      setDocsContent(resp.data?.documents || null);
-    } catch (err) {
-      console.error('Error loading documents:', err);
-      setDocsContent(null);
-      setFeedback(err.response?.data?.error || err.message || 'Failed to load documents');
-    } finally {
-      setDocsLoading(false);
-    }
-  };
 
   return (
     <Box sx={{ width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 3, mt: { xs: 1.5, sm: 2 }, px: { xs: 0, sm: 0 } }}>
