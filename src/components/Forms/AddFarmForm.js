@@ -25,7 +25,9 @@ import {
   Park,
   Terrain,
   Nature,
-  Yard
+  Yard,
+  CloudUpload,
+  Description
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import LocationPicker from './LocationPicker';
@@ -175,14 +177,16 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
     location: '',
     coordinates: { lat: null, lng: null },
     webcamUrl: '',
-    description: ''
+    webcamUrl: '',
+    description: '',
+    licenseFile: null
   });
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [errors, setErrors] = useState({});
 
   const handleInputChange = (field, value) => {
     console.log(`AddFarmForm - handleInputChange: ${field} = ${value}`);
-    
+
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -198,10 +202,10 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
 
   const handleLocationSelect = (locationData) => {
     // Convert array coordinates [lng, lat] to object format
-    const coordinates = Array.isArray(locationData.coordinates) 
+    const coordinates = Array.isArray(locationData.coordinates)
       ? { lng: locationData.coordinates[0], lat: locationData.coordinates[1] }
       : locationData.coordinates;
-      
+
     setFormData(prev => ({
       ...prev,
       location: locationData.address,
@@ -212,11 +216,11 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.farmName.trim()) {
       newErrors.farmName = 'Farm name is required';
     }
-    
+
     // Strengthen farm icon validation
     if (!formData.farmIcon || formData.farmIcon.trim() === '') {
       newErrors.farmIcon = 'Please select a farm icon';
@@ -227,11 +231,11 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
         newErrors.farmIcon = 'Please select a valid farm icon';
       }
     }
-    
+
     if (!formData.location.trim()) {
       newErrors.location = 'Location is required';
     }
-    
+
     if (!formData.description.trim()) {
       newErrors.description = 'Description is required';
     }
@@ -253,14 +257,14 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
     console.log('AddFarmForm - handleSubmit called');
     console.log('AddFarmForm - formData:', formData);
     console.log('AddFarmForm - farmIcon value:', formData.farmIcon);
-    
+
     // Extra validation check before submission
     if (!formData.farmIcon || formData.farmIcon.trim() === '') {
       setErrors(prev => ({ ...prev, farmIcon: 'Please select a farm icon' }));
       console.log('AddFarmForm - Blocked submission: No farm icon selected');
       return;
     }
-    
+
     if (validateForm()) {
       // Save farm to persistent storage
       const farmData = {
@@ -268,11 +272,11 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
         id: Date.now(),
         created_at: new Date().toISOString()
       };
-      
+
       console.log('AddFarmForm - farmData being passed to onSubmit:', farmData);
-      
+
       // storageService.addFarm(farmData); // Removed this line
-      
+
       onSubmit(farmData);
       handleClose();
     } else {
@@ -287,7 +291,8 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
       location: '',
       coordinates: { lat: null, lng: null },
       webcamUrl: '',
-      description: ''
+      description: '',
+      licenseFile: null
     });
     setErrors({});
     onClose();
@@ -297,8 +302,8 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
 
   return (
     <>
-      <StyledDialog 
-        open={open} 
+      <StyledDialog
+        open={open}
         onClose={handleClose}
         maxWidth={isMobile ? false : "md"}
         fullWidth={!isMobile}
@@ -306,9 +311,9 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
       >
         <StyledDialogTitle isMobile={isMobile}>
           Add New Farm
-          <IconButton 
-            onClick={handleClose} 
-            sx={{ 
+          <IconButton
+            onClick={handleClose}
+            sx={{
               position: 'absolute',
               right: isMobile ? 8 : 16,
               top: isMobile ? 8 : 16,
@@ -346,7 +351,7 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
                 <Select
                   value={formData.farmIcon}
                   onChange={(e) => handleInputChange('farmIcon', e.target.value)}
-                  
+
                   displayEmpty
                   renderValue={(selected) => {
                     if (!selected) {
@@ -398,7 +403,7 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
                         onClick={() => setLocationPickerOpen(true)}
                         edge="end"
                         size={isMobile ? "small" : "medium"}
-                        sx={{ 
+                        sx={{
                           color: '#4caf50',
                           '&:hover': { backgroundColor: 'rgba(76, 175, 80, 0.1)' },
                           '& .MuiSvgIcon-root': {
@@ -449,25 +454,66 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
                 isMobile={isMobile}
               />
             </Grid>
+
+            {/* License Upload */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600, color: '#4a5568', fontSize: isMobile ? '14px' : '0.875rem' }}>
+                Farming License
+              </Typography>
+              <StyledButton
+                variant="outlined"
+                component="label"
+                fullWidth={false}
+                startIcon={<CloudUpload />}
+                sx={{
+                  color: '#059669',
+                  borderColor: '#059669',
+                  width: isMobile ? '100%' : 'auto',
+                  '&:hover': {
+                    borderColor: '#047857',
+                    backgroundColor: 'rgba(5, 150, 105, 0.04)'
+                  }
+                }}
+              >
+                Upload License
+                <input
+                  type="file"
+                  hidden
+                  onChange={(e) => handleInputChange('licenseFile', e.target.files[0])}
+                  accept=".pdf,.jpg,.jpeg,.png"
+                />
+              </StyledButton>
+              {formData.licenseFile && (
+                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Description color="action" fontSize="small" />
+                  <Typography variant="body2" sx={{ color: '#4a5568' }}>
+                    {formData.licenseFile.name}
+                  </Typography>
+                  <IconButton size="small" onClick={() => handleInputChange('licenseFile', null)} color="error">
+                    <Close fontSize="small" />
+                  </IconButton>
+                </Box>
+              )}
+            </Grid>
           </Grid>
         </StyledDialogContent>
 
-        <DialogActions sx={{ 
-          p: isMobile ? 2 : 3, 
-          pt: isMobile ? 1.5 : 2, 
+        <DialogActions sx={{
+          p: isMobile ? 2 : 3,
+          pt: isMobile ? 1.5 : 2,
           background: 'linear-gradient(135deg, #f8fffe 0%, #f1f8e9 100%)',
           flexDirection: isMobile ? 'column' : 'row',
           gap: isMobile ? 1 : 0
         }}>
-          <StyledButton 
+          <StyledButton
             onClick={handleClose}
             variant="outlined"
             fullWidth={isMobile}
             isMobile={isMobile}
-            sx={{ 
+            sx={{
               color: '#666',
               borderColor: '#ddd',
-              '&:hover': { 
+              '&:hover': {
                 backgroundColor: 'rgba(0,0,0,0.04)',
                 borderColor: '#bbb'
               }
@@ -475,12 +521,12 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
           >
             Cancel
           </StyledButton>
-          <StyledButton 
+          <StyledButton
             onClick={handleSubmit}
             variant="contained"
             fullWidth={isMobile}
             isMobile={isMobile}
-            sx={{ 
+            sx={{
               bgcolor: '#4caf50',
               '&:hover': { bgcolor: '#45a049' },
               px: isMobile ? 2 : 3

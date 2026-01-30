@@ -28,6 +28,9 @@ import Settings from './Settings';
 import Complaints from './Complaints';
 import api from '../services/api'; // Changed to default import
 import coinService from '../services/coinService';
+import supabase from '../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
+import { userDocumentsService } from '../services/userDocuments';
 
 const FarmerView = () => {
   const location = useLocation();
@@ -77,7 +80,7 @@ const FarmerView = () => {
       if (user) {
         try {
           console.log('Loading farms for user:', user.id);
-          const farmsResponse = await api.get(`/api/farms`); // Filter by owner to show only farmer's farms
+          const farmsResponse = await api.get(`/api/farms?owner_id=${user.id}`); // Filter by owner to show only farmer's farms
           console.log('Farms response:', farmsResponse.data);
 
           // Map database field names to frontend expected names
@@ -231,7 +234,40 @@ const FarmerView = () => {
         return updatedFarms;
       });
 
-      addNotification('New Farm Created', 'success');
+      // Handle License Upload
+      if (formData.licenseFile) {
+        try {
+          const file = formData.licenseFile;
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${uuidv4()}-${file.name}`;
+          const filePath = `documents/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('user-documents')
+            .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('user-documents')
+            .getPublicUrl(filePath);
+
+          await userDocumentsService.addDocument({
+            user_id: user.id,
+            file_name: file.name,
+            file_url: publicUrl,
+            file_type: fileExt
+          });
+
+          addNotification('New Farm Created & License Uploaded', 'success');
+        } catch (uploadErr) {
+          console.error('Error uploading license:', uploadErr);
+          addNotification('Farm Created, but License Upload Failed', 'warning');
+        }
+      } else {
+        addNotification('New Farm Created', 'success');
+      }
+
       setCreateFarmOpen(false);
     } catch (error) {
       console.error('Error creating farm:', error);

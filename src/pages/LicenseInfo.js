@@ -10,6 +10,7 @@ import {
   Stack,
   Paper,
   Alert,
+  CircularProgress
 } from '@mui/material';
 import {
   MoreVert,
@@ -21,121 +22,103 @@ import {
   Security,
   Upload,
   Nature,
+  Delete,
+  CloudUpload,
+  Description
 } from '@mui/icons-material';
+import { useAuth } from '../contexts/AuthContext';
+import { userDocumentsService } from '../services/userDocuments';
+import supabase from '../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const LicenseInfo = () => {
+  const { user } = useAuth();
   const [licenses, setLicenses] = useState([]);
-  const [certifications, setCertifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Load license and certification data
+  // Determine approval status (fallback to false if not present, allowing edits by default unless explicitly approved)
+  // Logic: If user is approved, they CANNOT delete/upload.
+  const isApproved = user?.approval_status === 'approved';
+
   useEffect(() => {
-    const loadLicenseData = () => {
-      const mockLicenses = [
-        {
-          id: 1,
-          name: 'Organic Farming License',
-          type: 'Organic',
-          status: 'Active',
-          issueDate: '2023-01-15',
-          expiryDate: '2025-01-15',
-          authority: 'USDA Organic',
-          licenseNumber: 'ORG-2023-001',
-          daysToExpiry: 365
-        },
-        {
-          id: 2,
-          name: 'Pesticide Application License',
-          type: 'Pesticide',
-          status: 'Active',
-          issueDate: '2023-03-20',
-          expiryDate: '2024-03-20',
-          authority: 'State Agriculture Dept',
-          licenseNumber: 'PEST-2023-045',
-          daysToExpiry: 45
-        },
-        {
-          id: 3,
-          name: 'Water Rights Permit',
-          type: 'Water',
-          status: 'Pending',
-          issueDate: '2023-06-10',
-          expiryDate: '2026-06-10',
-          authority: 'Water Management Board',
-          licenseNumber: 'WTR-2023-078',
-          daysToExpiry: 730
-        },
-        {
-          id: 4,
-          name: 'Livestock Health Certificate',
-          type: 'Livestock',
-          status: 'Expired',
-          issueDate: '2022-08-15',
-          expiryDate: '2023-08-15',
-          authority: 'Veterinary Services',
-          licenseNumber: 'LIV-2022-156',
-          daysToExpiry: -30
-        }
-      ];
+    if (user?.id) {
+      loadLicenses();
+    }
+  }, [user]);
 
-      const mockCertifications = [
-        {
-          id: 1,
-          name: 'Sustainable Agriculture Certification',
-          type: 'Sustainability',
-          status: 'Active',
-          issueDate: '2023-02-10',
-          expiryDate: '2025-02-10',
-          authority: 'Green Farming Alliance',
-          certNumber: 'SUS-2023-012',
-          daysToExpiry: 400
-        },
-        {
-          id: 2,
-          name: 'Food Safety Certification',
-          type: 'Food Safety',
-          status: 'Active',
-          issueDate: '2023-04-05',
-          expiryDate: '2024-04-05',
-          authority: 'Food Safety Authority',
-          certNumber: 'FS-2023-089',
-          daysToExpiry: 90
-        }
-      ];
-
-      setLicenses(mockLicenses);
-      setCertifications(mockCertifications);
-    };
-
-    loadLicenseData();
-  }, []);
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Active': return '#059669';
-      case 'Pending': return '#d97706';
-      case 'Expired': return '#dc2626';
-      default: return '#6b7280';
+  const loadLicenses = async () => {
+    try {
+      setLoading(true);
+      const response = await userDocumentsService.getUserDocuments(user.id);
+      // Ensure we get an array
+      setLicenses(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
+      console.error("Failed to load licenses", err);
+      setError("Failed to load license information.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Active': return <CheckCircle />;
-      case 'Pending': return <Pending />;
-      case 'Expired': return <Cancel />;
-      default: return <Assignment />;
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${uuidv4()}-${file.name}`;
+        const filePath = `documents/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('user-documents')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('user-documents')
+          .getPublicUrl(filePath);
+
+        await userDocumentsService.addDocument({
+          user_id: user.id,
+          file_name: file.name,
+          file_url: publicUrl,
+          file_type: fileExt
+        });
+      }
+      await loadLicenses();
+    } catch (err) {
+      console.error('Error uploading license:', err);
+      setError('Failed to upload license document.');
+    } finally {
+      setUploading(false);
     }
   };
 
-  const getComplianceScore = () => {
-    const totalItems = licenses.length + certifications.length;
-    const activeItems = licenses.filter(l => l.status === 'Active').length +
-      certifications.filter(c => c.status === 'Active').length;
-    return totalItems > 0 ? Math.round((activeItems / totalItems) * 100) : 0;
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this document?')) {
+      try {
+        await userDocumentsService.deleteDocument(id);
+        setLicenses(prev => prev.filter(l => l.id !== id));
+      } catch (err) {
+        console.error('Error deleting license:', err);
+        setError('Failed to delete license.');
+      }
+    }
   };
 
-  const getExpiringLicenses = () => {
-    return licenses.filter(license => license.daysToExpiry <= 90);
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -161,72 +144,51 @@ const LicenseInfo = () => {
               fontSize: { xs: '1.75rem', md: '2.125rem' }
             }}
           >
-            License & Certification Info
+            License Info
           </Typography>
           <Typography
             variant="body1"
             color="text.secondary"
             sx={{ fontSize: '1rem' }}
           >
-            Manage your farming licenses and certifications to ensure compliance
+            Manage your farming licenses and documents
           </Typography>
         </Box>
       </Box>
 
       <Box sx={{ maxWidth: '1400px', mx: 'auto' }}>
+        {/* Error Alert */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        {/* Approval Status Alert */}
+        {isApproved ? (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Your account is approved! You can view your licenses but changes are now restricted.
+            </Typography>
+          </Alert>
+        ) : (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              Your account is pending approval. Please ensure all necessary licenses are uploaded.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Summary Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} lg={3}>
+          <Grid item xs={12} sm={6} lg={4}>
             <Paper
               elevation={0}
               sx={{
                 p: 2,
                 border: '1px solid #e2e8f0',
                 borderRadius: 2,
-                backgroundColor: 'white',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                }
-              }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <Avatar
-                  sx={{
-                    backgroundColor: '#f0f9ff',
-                    color: '#0369a1',
-                    width: 40,
-                    height: 40
-                  }}
-                >
-                  <VerifiedUser sx={{ fontSize: 20 }} />
-                </Avatar>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.5rem' }}>
-                    {getComplianceScore()}%
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                    Compliance Score
-                  </Typography>
-                </Box>
-              </Stack>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} sm={6} lg={3}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2,
-                border: '1px solid #e2e8f0',
-                borderRadius: 2,
-                backgroundColor: 'white',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                }
+                backgroundColor: 'white'
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -245,83 +207,40 @@ const LicenseInfo = () => {
                     {licenses.length}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                    Total Licenses
+                    Uploaded Documents
                   </Typography>
                 </Box>
               </Stack>
             </Paper>
           </Grid>
 
-          <Grid item xs={12} sm={6} lg={3}>
+          <Grid item xs={12} sm={6} lg={4}>
             <Paper
               elevation={0}
               sx={{
                 p: 2,
                 border: '1px solid #e2e8f0',
                 borderRadius: 2,
-                backgroundColor: 'white',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                }
+                backgroundColor: 'white'
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Avatar
                   sx={{
-                    backgroundColor: '#fef3c7',
-                    color: '#d97706',
+                    backgroundColor: isApproved ? '#dcfce7' : '#fef3c7',
+                    color: isApproved ? '#059669' : '#d97706',
                     width: 40,
                     height: 40
                   }}
                 >
-                  <Security sx={{ fontSize: 20 }} />
+                  {isApproved ? <CheckCircle sx={{ fontSize: 20 }} /> : <Pending sx={{ fontSize: 20 }} />}
                 </Avatar>
                 <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.5rem' }}>
-                    {certifications.length}
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    {isApproved ? 'Approved' : 'Pending'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                    Certifications
-                  </Typography>
-                </Box>
-              </Stack>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} sm={6} lg={3}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2,
-                border: '1px solid #e2e8f0',
-                borderRadius: 2,
-                backgroundColor: 'white',
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                }
-              }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <Avatar
-                  sx={{
-                    backgroundColor: '#dcfce7',
-                    color: '#059669',
-                    width: 40,
-                    height: 40
-                  }}
-                >
-                  <CheckCircle sx={{ fontSize: 20 }} />
-                </Avatar>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.5rem' }}>
-                    {licenses.filter(l => l.status === 'Active').length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                    Active Licenses
+                    Account Status
                   </Typography>
                 </Box>
               </Stack>
@@ -329,16 +248,7 @@ const LicenseInfo = () => {
           </Grid>
         </Grid>
 
-        {/* Expiring Licenses Alert */}
-        {getExpiringLicenses().length > 0 && (
-          <Alert severity="warning" sx={{ mb: 3 }}>
-            <Typography variant="body2">
-              You have {getExpiringLicenses().length} license(s) expiring within 90 days. Please renew them to maintain compliance.
-            </Typography>
-          </Alert>
-        )}
-
-        {/* Licenses Section */}
+        {/* Licenses List Section */}
         <Box sx={{ mb: 4 }}>
           <Box sx={{
             display: 'flex',
@@ -354,236 +264,124 @@ const LicenseInfo = () => {
                 fontSize: '1.25rem'
               }}
             >
-              Farming Licenses
+              Uploaded Licenses
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Upload />}
-              sx={{
-                backgroundColor: '#059669',
-                '&:hover': {
-                  backgroundColor: '#047857'
-                }
-              }}
-            >
-              Add License
-            </Button>
+
+            {!isApproved && (
+              <Button
+                variant="contained"
+                component="label"
+                startIcon={uploading ? <CircularProgress size={20} color="inherit" /> : <CloudUpload />}
+                disabled={uploading}
+                sx={{
+                  backgroundColor: '#059669',
+                  '&:hover': {
+                    backgroundColor: '#047857'
+                  }
+                }}
+              >
+                {uploading ? 'Uploading...' : 'Upload License'}
+                <input type="file" hidden multiple onChange={handleUpload} accept=".pdf,.jpg,.jpeg,.png" />
+              </Button>
+            )}
           </Box>
 
-          <Grid container spacing={3}>
-            {licenses.map((license) => (
-              <Grid item xs={12} md={6} lg={3} key={license.id}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                    }
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar
-                        sx={{
-                          backgroundColor: license.status === 'Active' ? '#dcfce7' :
-                            license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
-                          color: getStatusColor(license.status),
-                          width: 40,
-                          height: 40
-                        }}
-                      >
-                        {getStatusIcon(license.status)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 0.5 }}>
-                          {license.name}
-                        </Typography>
-                        <Chip
-                          label={license.status}
-                          size="small"
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : licenses.length === 0 ? (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                border: '2px dashed #d1d5db',
+                borderRadius: 2,
+                textAlign: 'center',
+                backgroundColor: '#f9fafb'
+              }}
+            >
+              <Nature sx={{ fontSize: 48, color: '#9ca3af', mb: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 1 }}>
+                No licenses found
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Upload your farming licenses to maintain compliance.
+              </Typography>
+            </Paper>
+          ) : (
+            <Grid container spacing={3}>
+              {licenses.map((license) => (
+                <Grid item xs={12} md={6} lg={4} key={license.id}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 2,
+                      backgroundColor: 'white',
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar
                           sx={{
-                            backgroundColor: license.status === 'Active' ? '#dcfce7' :
-                              license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
-                            color: getStatusColor(license.status),
-                            fontWeight: 500
+                            backgroundColor: '#f0f9ff',
+                            color: '#0369a1',
+                            width: 40,
+                            height: 40
                           }}
-                        />
+                        >
+                          <Description />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 0.5, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                            {license.file_name}
+                          </Typography>
+                          <Chip
+                            label={license.file_type || 'Document'}
+                            size="small"
+                            sx={{
+                              backgroundColor: '#f1f5f9',
+                              color: '#64748b',
+                              fontWeight: 500
+                            }}
+                          />
+                        </Box>
                       </Box>
+
+                      {!isApproved && (
+                        <IconButton size="small" onClick={() => handleDelete(license.id)} color="error">
+                          <Delete />
+                        </IconButton>
+                      )}
                     </Box>
-                    <IconButton size="small">
-                      <MoreVert />
-                    </IconButton>
-                  </Box>
 
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      License #: {license.licenseNumber}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Authority: {license.authority}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Expires: {license.expiryDate}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Days to Expiry: {license.daysToExpiry}
-                    </Typography>
-                  </Box>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-
-        {/* Certifications Section */}
-        <Box sx={{ mb: 4 }}>
-          <Box sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 3
-          }}>
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 600,
-                color: '#1e293b',
-                fontSize: '1.25rem'
-              }}
-            >
-              Certifications
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Upload />}
-              sx={{
-                backgroundColor: '#059669',
-                '&:hover': {
-                  backgroundColor: '#047857'
-                }
-              }}
-            >
-              Add Certification
-            </Button>
-          </Box>
-
-          <Grid container spacing={3}>
-            {certifications.map((cert) => (
-              <Grid item xs={12} md={6} lg={3} key={cert.id}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 2,
-                    backgroundColor: 'white',
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
-                    }
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar
-                        sx={{
-                          backgroundColor: cert.status === 'Active' ? '#dcfce7' :
-                            cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
-                          color: getStatusColor(cert.status),
-                          width: 40,
-                          height: 40
-                        }}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Uploaded: {formatDate(license.uploaded_at)}
+                      </Typography>
+                      <Button
+                        variant="text"
+                        size="small"
+                        href={license.file_url}
+                        target="_blank"
+                        sx={{ fontWeight: 600 }}
                       >
-                        {getStatusIcon(cert.status)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 0.5 }}>
-                          {cert.name}
-                        </Typography>
-                        <Chip
-                          label={cert.status}
-                          size="small"
-                          sx={{
-                            backgroundColor: cert.status === 'Active' ? '#dcfce7' :
-                              cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
-                            color: getStatusColor(cert.status),
-                            fontWeight: 500
-                          }}
-                        />
-                      </Box>
+                        View
+                      </Button>
                     </Box>
-                    <IconButton size="small">
-                      <MoreVert />
-                    </IconButton>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Cert #: {cert.certNumber}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Authority: {cert.authority}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Expires: {cert.expiryDate}
-                    </Typography>
-                  </Box>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          )}
         </Box>
-
-        {/* Upload Section */}
-        {(licenses.length === 0 && certifications.length === 0) && (
-          <Paper
-            elevation={0}
-            sx={{
-              p: 4,
-              border: '2px dashed #d1d5db',
-              borderRadius: 2,
-              textAlign: 'center',
-              backgroundColor: '#f9fafb'
-            }}
-          >
-            <Nature sx={{ fontSize: 48, color: '#9ca3af', mb: 2 }} />
-            <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', mb: 1 }}>
-              No licenses or certifications found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Upload your farming licenses and certifications to maintain compliance.
-            </Typography>
-            <Button
-              variant="contained"
-              sx={{
-                mt: 2,
-                backgroundColor: '#059669',
-                '&:hover': {
-                  backgroundColor: '#047857'
-                }
-              }}
-            >
-              Upload Documents
-            </Button>
-          </Paper>
-        )}
       </Box>
     </Box>
   );

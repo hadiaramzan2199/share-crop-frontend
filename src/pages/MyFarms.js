@@ -50,6 +50,9 @@ import fieldsService from '../services/fields';
 import farmsService from '../services/farms';
 import { useAuth } from '../contexts/AuthContext';
 import AddFarmForm from '../components/Forms/AddFarmForm';
+import supabase from '../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
+import { userDocumentsService } from '../services/userDocuments';
 
 const MyFarms = () => {
   const [myFarms, setMyFarms] = useState([]);
@@ -63,7 +66,7 @@ const MyFarms = () => {
   const [showAllFarms, setShowAllFarms] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user } = useAuth();
-  
+
   // Currency symbols mapping
   const currencySymbols = {
     'USD': '$',
@@ -91,7 +94,44 @@ const MyFarms = () => {
   const handleAddFarmClose = () => setAddFarmOpen(false);
   const handleAddFarmSubmit = async (farmData) => {
     try {
-      await farmsService.create(farmData);
+      const newFarm = {
+        ...farmData,
+        name: farmData.farmName, // key mapping for backend
+        owner_id: user.id
+      };
+      await farmsService.create(newFarm);
+
+      // Handle License Upload
+      if (farmData.licenseFile) {
+        try {
+          const file = farmData.licenseFile;
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${uuidv4()}-${file.name}`;
+          const filePath = `documents/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('user-documents')
+            .upload(filePath, file);
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('user-documents')
+            .getPublicUrl(filePath);
+
+          await userDocumentsService.addDocument({
+            user_id: user.id,
+            file_name: file.name,
+            file_url: publicUrl,
+            file_type: fileExt
+          });
+
+          console.log('License uploaded successfully');
+        } catch (uploadErr) {
+          console.error('Error uploading license:', uploadErr);
+        }
+      }
+
       await fetchFarms();
     } catch (error) {
       setMyFarms(prev => [{
@@ -133,7 +173,7 @@ const MyFarms = () => {
 
       const farmsResponse = await farmsService.getAll(user.id);
       const rawFarms = farmsResponse.data || [];
-      
+
       // Transform database farms to match the card display format
       const transformedFarms = rawFarms.map(farm => ({
         id: farm.id,
@@ -152,7 +192,7 @@ const MyFarms = () => {
         description: farm.description || '',
         fields: farm.fields || []
       }));
-      
+
       setMyFarms(transformedFarms);
       console.log('Loaded farms from database:', transformedFarms);
 
@@ -161,10 +201,10 @@ const MyFarms = () => {
         try {
           const fieldsResponse = await fieldsService.getAll();
           // Filter fields created by the current farmer
-          const farmerFields = fieldsResponse.data?.filter(field => 
+          const farmerFields = fieldsResponse.data?.filter(field =>
             field.farmer_name === user.name || field.created_by === user.id || field.owner_id === user.id
           ) || [];
-          
+
           // Transform fields data to match the expected format for display
           const transformedFields = farmerFields.map(field => ({
             id: field.id,
@@ -172,8 +212,8 @@ const MyFarms = () => {
             location: field.location || 'Not specified',
             cropType: field.category || field.product_type || 'Unknown',
             plantingDate: field.planting_date || new Date().toISOString(),
-            harvestDate: field.harvest_dates ? 
-              (Array.isArray(field.harvest_dates) ? field.harvest_dates[0] : field.harvest_dates) : 
+            harvestDate: field.harvest_dates ?
+              (Array.isArray(field.harvest_dates) ? field.harvest_dates[0] : field.harvest_dates) :
               new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
             progress: field.progress || Math.floor(Math.random() * 100),
             area: field.area_m2 ? `${field.area_m2} m²` : field.field_size || 'Not specified',
@@ -185,7 +225,7 @@ const MyFarms = () => {
             farm_id: field.farm_id, // Include farm_id for proper association
             isFarmerCreated: true
           }));
-          
+
           setMyFields(transformedFields);
           console.log('Loaded farmer fields:', transformedFields);
         } catch (fieldsError) {
@@ -262,7 +302,7 @@ const MyFarms = () => {
         f.soilType,
         f.irrigationType
       ]);
-      
+
       const csvContent = [
         headers.join(','),
         ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
@@ -362,7 +402,7 @@ const MyFarms = () => {
           </body>
         </html>
       `;
-      
+
       printWindow.document.write(reportHTML);
       printWindow.document.close();
     }
@@ -371,11 +411,11 @@ const MyFarms = () => {
   // Calculate stats for overview (only farms, not fields)
   // Use only API data, no mock data fallback
   const displayFarms = myFarms;
-  
+
   const totalFarms = displayFarms.length;
   const activeFarms = displayFarms.filter(f => f.status === 'Active').length;
   const totalMonthlyRevenue = displayFarms.reduce((sum, farm) => sum + (farm.monthlyRevenue || 0), 0);
-  const avgProgress = displayFarms.length > 0 ? 
+  const avgProgress = displayFarms.length > 0 ?
     Math.round(displayFarms.reduce((sum, farm) => sum + (farm.progress || 0), 0) / displayFarms.length) : 0;
 
   // Pagination logic (after displayFarms is defined)
@@ -395,22 +435,22 @@ const MyFarms = () => {
   };
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 3
     }}>
       {/* Header Section */}
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
           <Box>
-            <Typography 
-              variant="h5" 
-              sx={{ 
+            <Typography
+              variant="h5"
+              sx={{
                 fontWeight: 700,
                 color: '#1e293b',
                 mb: 0.5,
@@ -611,7 +651,7 @@ const MyFarms = () => {
         </Grid>
 
         {/* Farms List */}
-        <Box sx={{ 
+        <Box sx={{
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
@@ -623,176 +663,176 @@ const MyFarms = () => {
           width: '100%'
         }}>
           {displayedFarms.map((farm) => (
-                <Card
-                  key={farm.id}
-                  elevation={0}
-                  sx={{
-                    height: 450,
-                    minHeight: 450,
-                    maxHeight: 450,
-                    minWidth: 0,
-                    maxWidth: '100%',
-                    width: '100%',
-                    borderRadius: 2,
-                    border: '1px solid #e5e7eb',
-                    backgroundColor: '#ffffff',
-                    transition: 'all 0.2s ease-in-out',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    '&:hover': {
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      transform: 'translateY(-2px)'
-                    }
-                  }}
-                  onClick={() => handleFarmClick(farm)}
-                >
-                  <CardContent sx={{ 
-                    p: 2.5, 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    height: '100%',
-                    justifyContent: 'space-between',
-                    minWidth: 0,
-                    width: '100%',
-                    boxSizing: 'border-box'
-                  }}>
-                    {/* Top Section */}
-                    <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-                      {/* Header with location and menu */}
-                      <Stack direction="row" alignItems="center" spacing={0.5} mb={1}>
-                        <LocationOn sx={{ fontSize: 16, color: '#6b7280' }} />
-                        <Typography variant="body2" color="#6b7280" sx={{ fontSize: '0.875rem' }}>
-                          {farm.location}
-                        </Typography>
-                      </Stack>
+            <Card
+              key={farm.id}
+              elevation={0}
+              sx={{
+                height: 450,
+                minHeight: 450,
+                maxHeight: 450,
+                minWidth: 0,
+                maxWidth: '100%',
+                width: '100%',
+                borderRadius: 2,
+                border: '1px solid #e5e7eb',
+                backgroundColor: '#ffffff',
+                transition: 'all 0.2s ease-in-out',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                '&:hover': {
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  transform: 'translateY(-2px)'
+                }
+              }}
+              onClick={() => handleFarmClick(farm)}
+            >
+              <CardContent sx={{
+                p: 2.5,
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                justifyContent: 'space-between',
+                minWidth: 0,
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                {/* Top Section */}
+                <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+                  {/* Header with location and menu */}
+                  <Stack direction="row" alignItems="center" spacing={0.5} mb={1}>
+                    <LocationOn sx={{ fontSize: 16, color: '#6b7280' }} />
+                    <Typography variant="body2" color="#6b7280" sx={{ fontSize: '0.875rem' }}>
+                      {farm.location}
+                    </Typography>
+                  </Stack>
 
-                      {/* Status Badge */}
-                      <Box sx={{ mb: 2 }}>
-                        <Chip 
-                          label={farm.status} 
-                          size="small"
-                          sx={{ 
-                            backgroundColor: '#dcfce7',
-                            color: '#166534',
-                            fontSize: '0.75rem',
-                            height: 24,
-                            fontWeight: 600,
-                            borderRadius: 1
-                          }}
-                        />
-                      </Box>
+                  {/* Status Badge */}
+                  <Box sx={{ mb: 2 }}>
+                    <Chip
+                      label={farm.status}
+                      size="small"
+                      sx={{
+                        backgroundColor: '#dcfce7',
+                        color: '#166534',
+                        fontSize: '0.75rem',
+                        height: 24,
+                        fontWeight: 600,
+                        borderRadius: 1
+                      }}
+                    />
+                  </Box>
 
-                      {/* Farm Details in Rows */}
-                      <Stack spacing={1.5} mb={2.5}>
-                        {/* Crop Type Row */}
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Park sx={{ fontSize: 16, color: '#10b981' }} />
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
-                            Crop Type
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
-                            {farm.cropType}
-                          </Typography>
-                        </Stack>
-
-                        {/* Area Row */}
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Terrain sx={{ fontSize: 16, color: '#8b5cf6' }} />
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
-                            Area
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
-                            {farm.area}
-                          </Typography>
-                        </Stack>
-
-                        {/* Soil Type Row */}
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Nature sx={{ fontSize: 16, color: '#f59e0b' }} />
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
-                            Soil Type
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
-                            {farm.soilType}
-                          </Typography>
-                        </Stack>
-
-                        {/* Irrigation Row */}
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <WaterDrop sx={{ fontSize: 16, color: '#3b82f6' }} />
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
-                            Irrigation
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
-                            {farm.irrigationType}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-
-                      {/* Occupied Area Section */}
-                      <Box sx={{ mb: 2.5 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 1.5 }}>
-                          Occupied Area
-                        </Typography>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={farm.progress} 
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: '#e5e7eb',
-                            '& .MuiLinearProgress-bar': {
-                              backgroundColor: '#3b82f6',
-                              borderRadius: 4
-                            }
-                          }}
-                        />
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', mt: 0.5, textAlign: 'right' }}>
-                          {farm.progress}%
-                        </Typography>
-                      </Box>
-                    </Box>
-
-                    {/* Bottom Section */}
-                    <Box sx={{ minWidth: 0, width: '100%' }}>
-                      {/* Revenue */}
-                      <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 2.5 }}>
-                        {formatCurrency(farm.monthlyRevenue)}
-                        <Typography component="span" variant="body2" sx={{ color: '#6b7280', fontWeight: 400 }}>
-                          /month
-                        </Typography>
+                  {/* Farm Details in Rows */}
+                  <Stack spacing={1.5} mb={2.5}>
+                    {/* Crop Type Row */}
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Park sx={{ fontSize: 16, color: '#10b981' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
+                        Crop Type
                       </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
+                        {farm.cropType}
+                      </Typography>
+                    </Stack>
 
-                      {/* Action Button */}
-                      <Button
-                        variant="contained"
-                        fullWidth
-                        size="small"
-                        startIcon={<Visibility />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleFarmClick(farm);
-                        }}
-                        sx={{
-                          borderRadius: 1.5,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.75rem',
-                          bgcolor: '#4caf50',
-                          py: 1,
-                          '&:hover': {
-                            bgcolor: '#059669'
-                          }
-                        }}
-                      >
-                        View Details
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-            ))}
+                    {/* Area Row */}
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Terrain sx={{ fontSize: 16, color: '#8b5cf6' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
+                        Area
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
+                        {farm.area}
+                      </Typography>
+                    </Stack>
+
+                    {/* Soil Type Row */}
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Nature sx={{ fontSize: 16, color: '#f59e0b' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
+                        Soil Type
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
+                        {farm.soilType}
+                      </Typography>
+                    </Stack>
+
+                    {/* Irrigation Row */}
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <WaterDrop sx={{ fontSize: 16, color: '#3b82f6' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151' }}>
+                        Irrigation
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
+                        {farm.irrigationType}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+
+                  {/* Occupied Area Section */}
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#374151', mb: 1.5 }}>
+                      Occupied Area
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={farm.progress}
+                      sx={{
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: '#e5e7eb',
+                        '& .MuiLinearProgress-bar': {
+                          backgroundColor: '#3b82f6',
+                          borderRadius: 4
+                        }
+                      }}
+                    />
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', mt: 0.5, textAlign: 'right' }}>
+                      {farm.progress}%
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Bottom Section */}
+                <Box sx={{ minWidth: 0, width: '100%' }}>
+                  {/* Revenue */}
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#111827', mb: 2.5 }}>
+                    {formatCurrency(farm.monthlyRevenue)}
+                    <Typography component="span" variant="body2" sx={{ color: '#6b7280', fontWeight: 400 }}>
+                      /month
+                    </Typography>
+                  </Typography>
+
+                  {/* Action Button */}
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="small"
+                    startIcon={<Visibility />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFarmClick(farm);
+                    }}
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                      bgcolor: '#4caf50',
+                      py: 1,
+                      '&:hover': {
+                        bgcolor: '#059669'
+                      }
+                    }}
+                  >
+                    View Details
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
         </Box>
 
         {/* Pagination Controls */}
@@ -816,11 +856,11 @@ const MyFarms = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
                   Showing {startIndex + 1}-{Math.min(endIndex, displayFarms.length)} of {displayFarms.length} farms
                 </Typography>
-                <Button 
-                  variant="outlined" 
+                <Button
+                  variant="outlined"
                   size="medium"
                   onClick={handleViewAllClick}
-                  sx={{ 
+                  sx={{
                     borderRadius: 2,
                     textTransform: 'none',
                     fontWeight: 600,
@@ -839,11 +879,11 @@ const MyFarms = () => {
                 </Button>
               </>
             ) : (
-              <Button 
-                variant="outlined" 
+              <Button
+                variant="outlined"
                 size="medium"
                 onClick={handleViewAllClick}
-                sx={{ 
+                sx={{
                   borderRadius: 2,
                   textTransform: 'none',
                   fontWeight: 600,
@@ -896,7 +936,7 @@ const MyFarms = () => {
             {selectedFarm && (
               <Box>
                 {/* Farm Image */}
-                
+
 
                 {/* Farm Information */}
                 <Grid container spacing={3} mb={3}>
@@ -936,9 +976,9 @@ const MyFarms = () => {
                             <Typography variant="body2" color="text.secondary">Occupied Area</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{selectedFarm.progress}%</Typography>
                           </Stack>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={selectedFarm.progress} 
+                          <LinearProgress
+                            variant="determinate"
+                            value={selectedFarm.progress}
                             sx={{
                               height: 8,
                               borderRadius: 4,
@@ -958,8 +998,8 @@ const MyFarms = () => {
                         </Stack>
                         <Stack direction="row" justifyContent="space-between">
                           <Typography variant="body2" color="text.secondary">Status</Typography>
-                          <Chip 
-                            label={selectedFarm.status} 
+                          <Chip
+                            label={selectedFarm.status}
                             color={getStatusColor(selectedFarm.status)}
                             size="small"
                             sx={{ fontWeight: 600 }}
@@ -982,8 +1022,8 @@ const MyFarms = () => {
                         .filter(field => field.farmId === selectedFarm?.id || field.farm_id === selectedFarm?.id)
                         .map((field) => (
                           <Grid item xs={12} sm={6} md={4} key={field.id}>
-                            <Card 
-                              sx={{ 
+                            <Card
+                              sx={{
                                 height: 220,
                                 minHeight: 220,
                                 maxHeight: 220,
@@ -998,8 +1038,8 @@ const MyFarms = () => {
                                 }
                               }}
                             >
-                              <CardContent sx={{ 
-                                p: 2, 
+                              <CardContent sx={{
+                                p: 2,
                                 height: '100%',
                                 display: 'flex',
                                 flexDirection: 'column',
@@ -1011,10 +1051,10 @@ const MyFarms = () => {
                                     <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#111827', fontSize: '0.9rem' }}>
                                       {field.name}
                                     </Typography>
-                                    <Chip 
-                                      label={field.status} 
+                                    <Chip
+                                      label={field.status}
                                       size="small"
-                                      sx={{ 
+                                      sx={{
                                         backgroundColor: '#dcfce7',
                                         color: '#166534',
                                         fontSize: '0.7rem',
@@ -1048,9 +1088,9 @@ const MyFarms = () => {
 
                                   {/* Field Occupied Area */}
                                   <Box sx={{ mb: 1 }}>
-                                    <LinearProgress 
-                                      variant="determinate" 
-                                      value={field.progress} 
+                                    <LinearProgress
+                                      variant="determinate"
+                                      value={field.progress}
                                       sx={{
                                         height: 6,
                                         borderRadius: 3,
@@ -1079,8 +1119,8 @@ const MyFarms = () => {
                       // Show mock fields if no real fields are associated
                       selectedFarm?.fields?.map((field) => (
                         <Grid item xs={12} sm={6} md={4} key={field.id}>
-                          <Card 
-                            sx={{ 
+                          <Card
+                            sx={{
                               height: 280,
                               minHeight: 280,
                               maxHeight: 280,
@@ -1095,8 +1135,8 @@ const MyFarms = () => {
                               }
                             }}
                           >
-                            <CardContent sx={{ 
-                              p: 2, 
+                            <CardContent sx={{
+                              p: 2,
                               height: '100%',
                               display: 'flex',
                               flexDirection: 'column',
@@ -1108,10 +1148,10 @@ const MyFarms = () => {
                                   <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#111827', fontSize: '0.9rem' }}>
                                     {field.name}
                                   </Typography>
-                                  <Chip 
-                                    label={field.status} 
+                                  <Chip
+                                    label={field.status}
                                     size="small"
-                                    sx={{ 
+                                    sx={{
                                       backgroundColor: '#dcfce7',
                                       color: '#166534',
                                       fontSize: '0.7rem',
@@ -1139,9 +1179,9 @@ const MyFarms = () => {
 
                                 {/* Field Occupied Area */}
                                 <Box sx={{ mb: 1 }}>
-                                  <LinearProgress 
-                                    variant="determinate" 
-                                    value={75} 
+                                  <LinearProgress
+                                    variant="determinate"
+                                    value={75}
                                     sx={{
                                       height: 6,
                                       borderRadius: 3,
@@ -1193,10 +1233,10 @@ const MyFarms = () => {
             )}
           </DialogContent>
           <DialogActions sx={{ p: 2.5, pt: 2, borderTop: '1px solid #e2e8f0' }}>
-            <Button 
-              onClick={handleCloseFarmDetail} 
-              variant="outlined" 
-              sx={{ 
+            <Button
+              onClick={handleCloseFarmDetail}
+              variant="outlined"
+              sx={{
                 borderRadius: 2,
                 textTransform: 'none',
                 fontWeight: 600,
@@ -1317,8 +1357,8 @@ const MyFarms = () => {
                           <TableCell>{formatCurrency(farm.monthlyRevenue)}</TableCell>
                           <TableCell>{farm.progress}%</TableCell>
                           <TableCell>
-                            <Chip 
-                              label={farm.status} 
+                            <Chip
+                              label={farm.status}
                               color={getStatusColor(farm.status)}
                               size="small"
                               sx={{ fontWeight: 600 }}
@@ -1337,17 +1377,17 @@ const MyFarms = () => {
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
-            <Button 
-              onClick={() => handleDownloadReport('csv')} 
-              variant="outlined" 
+            <Button
+              onClick={() => handleDownloadReport('csv')}
+              variant="outlined"
               startIcon={<Download />}
               sx={{ borderRadius: 1.5 }}
             >
               Download CSV
             </Button>
-            <Button 
-              onClick={() => handleDownloadReport('pdf')} 
-              variant="outlined" 
+            <Button
+              onClick={() => handleDownloadReport('pdf')}
+              variant="outlined"
               startIcon={<Description />}
               sx={{ borderRadius: 1.5 }}
             >

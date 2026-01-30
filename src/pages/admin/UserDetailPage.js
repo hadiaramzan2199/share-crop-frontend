@@ -404,7 +404,7 @@ const UserDetailPage = () => {
 
                         {tabValue === 4 && (
                             <div className="documents-tab">
-                                <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>Verification Materials</h3>
+                                <h3 className="section-title" style={{ marginTop: 0, marginBottom: '24px', fontWeight: 700 }}>License</h3>
                                 {userDocs.length > 0 ? (
                                     <div className="custom-table-container">
                                         <table className="custom-table">
@@ -445,7 +445,7 @@ const UserDetailPage = () => {
                                 ) : (
                                     <div className="empty-state">
                                         <DescriptionIcon className="empty-icon" />
-                                        <p>No verification documents found for this account.</p>
+                                        <p>No license documents found for this account.</p>
                                     </div>
                                 )}
                             </div>

@@ -45,7 +45,7 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [profileImagePreview, setProfileImagePreview] = useState(null);
-  const [verificationDocs, setVerificationDocs] = useState([]);
+  const [license, setLicense] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
@@ -68,15 +68,15 @@ const Signup = () => {
     }
   };
 
-  const handleDocsChange = (e) => {
+  const handleLicenseChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      setVerificationDocs(prev => [...prev, ...files]);
+      setLicense(prev => [...prev, ...files]);
     }
   };
 
   const removeDoc = (index) => {
-    setVerificationDocs(prev => prev.filter((_, i) => i !== index));
+    setLicense(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -125,10 +125,10 @@ const Signup = () => {
         profile_image_url = publicUrl;
       }
 
-      // 2. Upload Verification Documents if selected
-      if (verificationDocs.length > 0) {
+      // 2. Upload License if selected
+      if (license.length > 0) {
         setUploadingFiles(true);
-        for (const file of verificationDocs) {
+        for (const file of license) {
           const fileExt = file.name.split('.').pop();
           const fileName = `${uuidv4()}-${file.name}`;
           const filePath = `documents/${fileName}`;
@@ -465,10 +465,10 @@ const Signup = () => {
               <Box sx={{ mb: 3 }}>
                 <Divider sx={{ mb: 3 }} />
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, color: '#2E7D32' }}>
-                  Verification Documents (Recommended)
+                  License (Recommended)
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  For account approval, you must upload documents (ID, certifications, etc.). You can also upload these later from your profile.
+                  For account approval, you must upload your farming license. You can also upload these later from your profile.
                 </Typography>
 
                 <Button
@@ -478,13 +478,13 @@ const Signup = () => {
                   startIcon={<CloudUpload />}
                   sx={{ borderStyle: 'dashed', borderRadius: 2, py: 1.5, textTransform: 'none' }}
                 >
-                  Upload Documents
-                  <input type="file" hidden multiple onChange={handleDocsChange} />
+                  Upload License
+                  <input type="file" hidden multiple onChange={handleLicenseChange} />
                 </Button>
 
-                {verificationDocs.length > 0 && (
+                {license.length > 0 && (
                   <List sx={{ mt: 1 }}>
-                    {verificationDocs.map((file, index) => (
+                    {license.map((file, index) => (
                       <Paper key={index} variant="outlined" sx={{ mb: 1, borderRadius: 2 }}>
                         <ListItem
                           secondaryAction={
