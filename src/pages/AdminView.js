@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Outlet } from 'react-router-dom';
 
 const AdminView = () => {
-  const { user, logout, switchToRole } = useAuth();
+  const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const headerRef = useRef(null);
 

@@ -191,7 +191,7 @@ const EnhancedFarmMap = forwardRef(({
 
       return prev;
     });
-  }, [productLocations, userType]);
+  }, [userType]);
 
   // Function to fetch weather for a product
   const fetchWeatherForProduct = useCallback(async (product) => {
@@ -1705,7 +1705,7 @@ const EnhancedFarmMap = forwardRef(({
     return <OrbitIcon mode={mode} size={size} strokeW={strokeW} iconSize={iconSize} />;
   }, [isMobile]);
 
-  const getShippingModes = (prod) => {
+  const getShippingModes = useCallback((prod) => {
     const entry = purchasedProducts.find(p => (p.id ?? p.field_id) === (prod.id ?? prod.field_id));
     const fromEntry = Array.isArray(entry?.shipping_modes) ? entry.shipping_modes : [];
     const single = entry?.mode_of_shipping || entry?.shipping_method || prod.mode_of_shipping || prod.shipping_method || prod.shipping_option || '';
@@ -1721,7 +1721,7 @@ const EnhancedFarmMap = forwardRef(({
     const set = new Set();
     const uniq = combined.filter(m => { const k = (m || '').toLowerCase(); if (set.has(k)) return false; set.add(k); return true; });
     return uniq;
-  };
+  }, [purchasedProducts]);
 
   const getSelectedHarvestList = (prod) => {
     const entry = purchasedProducts.find(p => (p.id ?? p.field_id) === (prod.id ?? prod.field_id));

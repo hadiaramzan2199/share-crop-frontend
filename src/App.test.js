@@ -1,3 +1,6 @@
+import { render, screen } from '@testing-library/react';
+import App from './App';
+
 jest.mock('axios', () => {
   const mockAxiosInstance = {
     create: jest.fn(() => mockAxiosInstance),
@@ -24,9 +27,6 @@ jest.mock('react-map-gl', () => {
 
   return { __esModule: true, default: Map, Marker, NavigationControl };
 });
-
-import { render, screen } from '@testing-library/react';
-import App from './App';
 
 test('renders home page heading', () => {
   render(<App />);

@@ -22,7 +22,7 @@ import coinService from '../services/coinService';
 
 const BuyerView = () => {
   const location = useLocation();
-  const { user: currentUser, logout, switchToRole } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [farms, setFarms] = useState([]);
   const [fields, setFields] = useState([]);
@@ -49,8 +49,13 @@ const BuyerView = () => {
   // Initialize user coins when user is available
   useEffect(() => {
     if (currentUser && currentUser.id) {
-      coinService.initializeUserCoins(currentUser.id);
       loadAllFieldsFromStorage();
+    }
+  }, [currentUser, loadAllFieldsFromStorage]);
+
+  useEffect(() => {
+    if (currentUser && currentUser.id) {
+      coinService.initializeUserCoins(currentUser.id);
     }
   }, [currentUser]);
 

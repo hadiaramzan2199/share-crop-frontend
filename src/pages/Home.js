@@ -4,11 +4,10 @@ import {
   Typography,
   Button,
   Box,
-  Grid,
-  Card,
-  Stack,
   AppBar,
   Toolbar,
+  Card,
+  Stack,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,10 +42,10 @@ const Home = () => {
   return (
     <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: '#FAFAFA' }}>
       {/* Navbar */}
-      <AppBar 
-        position="static" 
+      <AppBar
+        position="static"
         elevation={0}
-        sx={{ 
+        sx={{
           backgroundColor: 'white',
           borderBottom: '1px solid #E0E0E0',
         }}
@@ -177,8 +176,8 @@ const Home = () => {
                     fontWeight: 400,
                   }}
                 >
-                  A modern marketplace connecting farmers directly with buyers. 
-                  Grow your farm business, find fresh produce, and build lasting 
+                  A modern marketplace connecting farmers directly with buyers.
+                  Grow your farm business, find fresh produce, and build lasting
                   relationships in the agricultural community.
                 </Typography>
                 {!isAuthenticated && (
@@ -367,20 +366,20 @@ const Home = () => {
                 >
                   {feature.icon}
                 </Box>
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    fontWeight: 600, 
-                    mb: 1, 
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    mb: 1,
                     color: '#1A1A1A',
                     fontSize: '1.1rem',
                   }}
                 >
                   {feature.title}
                 </Typography>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
+                <Typography
+                  variant="body2"
+                  sx={{
                     color: '#666',
                     lineHeight: 1.6,
                     fontSize: '0.875rem',

@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Grid, Avatar, Stack, IconButton, Button, Box, Typography as MuiTypography, CircularProgress } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
@@ -8,8 +8,6 @@ import EmailIcon from '@mui/icons-material/Email';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CancelIcon from '@mui/icons-material/Cancel';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import StarIcon from '@mui/icons-material/Star';
@@ -18,7 +16,6 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import DescriptionIcon from '@mui/icons-material/Description';
-import Tooltip from '@mui/material/Tooltip';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { adminService } from '../../services/admin';
 import { complaintService } from '../../services/complaints';
@@ -30,16 +27,17 @@ import './UserDetailPage.css';
 const UserDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const [tabValue, setTabValue] = useState(0);
 
     // Read tab index from URL on mount
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams(location.search);
         const tab = params.get('tab');
         if (tab !== null) {
             setTabValue(parseInt(tab));
         }
-    }, [window.location.search]);
+    }, [location.search]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
     const [orders, setOrders] = useState([]);

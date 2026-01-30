@@ -31,12 +31,12 @@ import coinService from '../services/coinService';
 
 const FarmerView = () => {
   const location = useLocation();
-  const { user, logout, switchToRole } = useAuth();
-  const { 
-    addNotification, 
-    notifications, 
-    backendNotifications, 
-    removeNotification, 
+  const { user, logout } = useAuth();
+  const {
+    addNotification,
+    notifications,
+    backendNotifications,
+    removeNotification,
     markNotificationAsRead,
     fetchBackendNotifications
   } = useNotifications();
@@ -66,7 +66,7 @@ const FarmerView = () => {
 
   // Combine farms and fields for the map
   const combinedMapData = fields; // Use stable reference to avoid unnecessary re-renders
-  
+
   // Debug logging for field data
   console.log('🔍 FarmerView Debug - Fields loaded:', fields.length);
   console.log('🔍 FarmerView Debug - Fields data:', fields);
@@ -79,7 +79,7 @@ const FarmerView = () => {
           console.log('Loading farms for user:', user.id);
           const farmsResponse = await api.get(`/api/farms`); // Filter by owner to show only farmer's farms
           console.log('Farms response:', farmsResponse.data);
-          
+
           // Map database field names to frontend expected names
           const mappedFarms = farmsResponse.data
             .filter(farm => farm && farm.id) // Only include farms with valid id
@@ -92,12 +92,12 @@ const FarmerView = () => {
           console.log('🔍 FarmerView Debug - Mapped farms for dropdown:', mappedFarms);
 
           const fieldsResponse = await api.get(`/api/fields?owner_id=${user.id}`);
-          
+
           console.log('🔍 FarmerView Debug - Fields loaded:', fieldsResponse.data.length);
           console.log('🔍 FarmerView Debug - Fields data:', fieldsResponse.data);
           console.log('🔍 FarmerView Debug - Sample field structure:', fieldsResponse.data[0]);
           console.log('🔍 FarmerView Debug - Combined map data:', combinedMapData);
-          
+
           // Map database field names to frontend expected names
           const mappedFields = fieldsResponse.data
             .filter(field => field && field.id) // Only include fields with valid id
@@ -112,7 +112,7 @@ const FarmerView = () => {
             }));
           setFields(mappedFields);
           setFilteredFields(mappedFields);
-          
+
           console.log('Data loaded successfully');
         } catch (error) {
           console.error('Error loading data:', error);
@@ -193,7 +193,7 @@ const FarmerView = () => {
       console.log('Frontend - Form data received:', formData);
       console.log('Frontend - farmIcon value:', formData.farmIcon);
       console.log('Frontend - farmIcon type:', typeof formData.farmIcon);
-      
+
       const newFarm = {
         name: formData.farmName,
         location: formData.location,
@@ -224,13 +224,13 @@ const FarmerView = () => {
 
       console.log('Frontend - farmForList object:', farmForList);
       console.log('Frontend - current farmsList before update:', farmsList);
-      
+
       setFarmsList(prevFarms => {
         const updatedFarms = [...prevFarms, farmForList];
         console.log('Frontend - updated farmsList:', updatedFarms);
         return updatedFarms;
       });
-      
+
       addNotification('New Farm Created', 'success');
       setCreateFarmOpen(false);
     } catch (error) {
@@ -246,7 +246,7 @@ const FarmerView = () => {
         // Update existing field
         const updatedField = { ...editingField, ...formData, shipping_scope: formData.shippingScope };
         const response = await api.put(`/api/fields/${editingField.id}`, updatedField);
-        
+
         // Map the response data to frontend format
         const mappedField = {
           ...response.data,
@@ -257,12 +257,12 @@ const FarmerView = () => {
           location: response.data.location,
           shippingScope: response.data.shipping_scope,
         };
-        
+
         const mappedFieldWithSubcategory = {
           ...mappedField,
           subcategory: formData.subcategory ?? editingField.subcategory ?? null,
         };
-        
+
         setFields(prevFields => prevFields.map(field => field.id === editingField.id ? mappedFieldWithSubcategory : field));
         addNotification(`Your field "${formData.productName}" has been updated successfully.`, 'success');
         fieldToZoom = mappedFieldWithSubcategory;
@@ -319,7 +319,7 @@ const FarmerView = () => {
         };
 
         const response = await api.post('/api/fields', newField);
-        
+
         // Map the response data to frontend format
         const mappedField = {
           ...response.data,
@@ -336,14 +336,14 @@ const FarmerView = () => {
               : undefined
           ),
         };
-        
+
         const createdFieldWithSubcategory = {
           ...mappedField,
           // Preserve category and subcategory from form data for proper icon display
           category: formData.subcategory || formData.category,
           subcategory: formData.subcategory || null,
         };
-        
+
         setFields(prevFields => [...prevFields, createdFieldWithSubcategory]);
         addNotification(`New product "${formData.productName}" has been created and is now visible on the map!`, 'success');
         setFieldToZoom(createdFieldWithSubcategory);
@@ -364,7 +364,7 @@ const FarmerView = () => {
   return (
     <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      <EnhancedHeader 
+      <EnhancedHeader
         ref={headerRef}
         onSearchChange={handleSearchChange}
         onFilterApply={handleHeaderFilterApply}
@@ -376,7 +376,7 @@ const FarmerView = () => {
         onCreateField={handleCreateField}
         onCreateFarm={handleCreateFarm}
       />
-      
+
       <Box sx={{
         flexGrow: 1,
         mt: 'var(--app-header-height)',
@@ -406,7 +406,7 @@ const FarmerView = () => {
           } />
           <Route path="/add-field" element={
             <Box sx={{ p: 3 }}>
-              <AddFieldForm 
+              <AddFieldForm
                 onClose={() => window.history.back()}
                 farms={farmsList}
               />
@@ -418,7 +418,7 @@ const FarmerView = () => {
               {fields.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                   <p>You haven't added any fields yet.</p>
-                  <button 
+                  <button
                     onClick={() => window.location.href = '/farmer/add-field'}
                     style={{
                       background: '#10b981',
@@ -493,10 +493,10 @@ const FarmerView = () => {
           <Route path="/complaints" element={<Complaints />} />
         </Routes>
       </Box>
-      
+
       {/* Notification System */}
-      <NotificationSystem 
-        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]} 
+      <NotificationSystem
+        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]}
         onRemove={(id) => {
           // Check if it's a backend notification
           const backendNotif = backendNotifications.find(n => n.id === id);
@@ -505,7 +505,7 @@ const FarmerView = () => {
           } else {
             removeNotification(id);
           }
-        }} 
+        }}
       />
 
       {/* Create Field Form Dialog */}

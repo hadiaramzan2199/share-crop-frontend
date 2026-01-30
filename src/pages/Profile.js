@@ -18,10 +18,6 @@ import {
   Divider,
   Stack,
   Paper,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
 } from '@mui/material';
 import {
   Edit,
@@ -29,11 +25,6 @@ import {
   Cancel,
   PhotoCamera,
   Email,
-  Phone,
-  LocationOn,
-  Person,
-  Security,
-  Notifications,
   AccountBalance,
   CalendarToday
 } from '@mui/icons-material';
@@ -41,7 +32,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { profileService } from '../services/profile';
 import { orderService } from '../services/orders';
 import { Alert, Snackbar, InputAdornment, LinearProgress, CircularProgress } from '@mui/material';
-import { Visibility, VisibilityOff, Lock, CloudUpload, Description, Delete as DeleteIcon, OpenInNew } from '@mui/icons-material';
+import { Lock, CloudUpload, Description, Delete as DeleteIcon, OpenInNew } from '@mui/icons-material';
 import supabase from '../services/supabase';
 import { userDocumentsService } from '../services/userDocuments';
 

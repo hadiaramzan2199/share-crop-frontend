@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -27,7 +27,6 @@ import {
   InputLabel,
   useMediaQuery,
   useTheme,
-  Grid,
 } from '@mui/material';
 import { ReportProblem, Add, Visibility, Refresh, Close } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
@@ -50,9 +49,9 @@ const Complaints = () => {
     if (user?.id) {
       loadComplaints();
     }
-  }, [user, statusFilter]);
+  }, [user, statusFilter, loadComplaints]);
 
-  const loadComplaints = async () => {
+  const loadComplaints = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -65,7 +64,7 @@ const Complaints = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, user?.id]);
 
   const handleComplaintSuccess = () => {
     loadComplaints();
@@ -113,19 +112,19 @@ const Complaints = () => {
   }
 
   return (
-    <Box sx={{ 
-      p: isMobile ? 2 : 3, 
-      maxWidth: '1200px', 
+    <Box sx={{
+      p: isMobile ? 2 : 3,
+      maxWidth: '1200px',
       mx: 'auto',
       minHeight: '100vh',
       bgcolor: '#F0F2F5'
     }}>
       {/* Header Section */}
-      <Box sx={{ 
+      <Box sx={{
         mb: 3,
-        display: 'flex', 
+        display: 'flex',
         flexDirection: isMobile ? 'column' : 'row',
-        justifyContent: 'space-between', 
+        justifyContent: 'space-between',
         alignItems: isMobile ? 'flex-start' : 'center',
         gap: 2
       }}>
@@ -140,9 +139,9 @@ const Complaints = () => {
           }}>
             <ReportProblem sx={{ fontSize: isMobile ? 32 : 40, color: '#4CAF50' }} />
           </Box>
-          <Typography 
-            variant={isMobile ? "h5" : "h4"} 
-            sx={{ 
+          <Typography
+            variant={isMobile ? "h5" : "h4"}
+            sx={{
               fontWeight: 700,
               color: 'text.primary',
               background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
@@ -154,14 +153,14 @@ const Complaints = () => {
             My Complaints
           </Typography>
         </Box>
-        <Stack 
-          direction={isMobile ? 'column' : 'row'} 
+        <Stack
+          direction={isMobile ? 'column' : 'row'}
           spacing={isMobile ? 1.5 : 2}
           sx={{ width: isMobile ? '100%' : 'auto' }}
         >
-          <FormControl 
-            size="small" 
-            sx={{ 
+          <FormControl
+            size="small"
+            sx={{
               minWidth: isMobile ? '100%' : 150,
               '& .MuiOutlinedInput-root': {
                 borderRadius: 2,
@@ -218,7 +217,7 @@ const Complaints = () => {
         </Alert>
       )}
 
-      <Card sx={{ 
+      <Card sx={{
         borderRadius: 3,
         boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         border: '1px solid',
@@ -273,9 +272,9 @@ const Complaints = () => {
             // Mobile Card View
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {complaints.map((complaint) => (
-                <Card 
+                <Card
                   key={complaint.id}
-                  sx={{ 
+                  sx={{
                     borderRadius: 2,
                     border: '1px solid',
                     borderColor: 'divider',
@@ -303,10 +302,10 @@ const Complaints = () => {
                         size="small"
                       />
                     </Box>
-                    <Typography 
-                      variant="body2" 
+                    <Typography
+                      variant="body2"
                       color="text.secondary"
-                      sx={{ 
+                      sx={{
                         mb: 2,
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
@@ -335,10 +334,10 @@ const Complaints = () => {
             </Box>
           ) : (
             // Desktop Table View
-            <TableContainer 
-              component={Paper} 
+            <TableContainer
+              component={Paper}
               variant="outlined"
-              sx={{ 
+              sx={{
                 borderRadius: 2,
                 overflow: 'hidden'
               }}
@@ -356,8 +355,8 @@ const Complaints = () => {
                 </TableHead>
                 <TableBody>
                   {complaints.map((complaint) => (
-                    <TableRow 
-                      key={complaint.id} 
+                    <TableRow
+                      key={complaint.id}
                       hover
                       sx={{
                         '&:hover': {
@@ -408,7 +407,7 @@ const Complaints = () => {
                         <IconButton
                           size="small"
                           onClick={() => handleViewComplaint(complaint)}
-                          sx={{ 
+                          sx={{
                             color: '#4CAF50',
                             '&:hover': {
                               bgcolor: 'rgba(76, 175, 80, 0.1)',

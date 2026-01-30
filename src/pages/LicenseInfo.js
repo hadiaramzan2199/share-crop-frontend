@@ -3,40 +3,22 @@ import {
   Box,
   Typography,
   Grid,
-  Card,
-  CardContent,
   Chip,
   Avatar,
-  Divider,
   Button,
   IconButton,
   Stack,
   Paper,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Alert,
-  LinearProgress,
 } from '@mui/material';
 import {
-  LocationOn,
-  CalendarToday,
-  Agriculture,
-  TrendingUp,
   MoreVert,
-  Assessment,
   VerifiedUser,
-  Warning,
   CheckCircle,
   Cancel,
   Pending,
-  Description,
-  Business,
-  Security,
-  Gavel,
   Assignment,
-  Download,
+  Security,
   Upload,
   Nature,
 } from '@mui/icons-material';
@@ -44,7 +26,7 @@ import {
 const LicenseInfo = () => {
   const [licenses, setLicenses] = useState([]);
   const [certifications, setCertifications] = useState([]);
-  
+
   // Load license and certification data
   useEffect(() => {
     const loadLicenseData = () => {
@@ -147,8 +129,8 @@ const LicenseInfo = () => {
 
   const getComplianceScore = () => {
     const totalItems = licenses.length + certifications.length;
-    const activeItems = licenses.filter(l => l.status === 'Active').length + 
-                       certifications.filter(c => c.status === 'Active').length;
+    const activeItems = licenses.filter(l => l.status === 'Active').length +
+      certifications.filter(c => c.status === 'Active').length;
     return totalItems > 0 ? Math.round((activeItems / totalItems) * 100) : 0;
   };
 
@@ -157,23 +139,23 @@ const LicenseInfo = () => {
   };
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 3
     }}>
       {/* Header Section */}
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
         <Box>
-          <Typography 
-            variant="h4" 
-            component="h1" 
-            sx={{ 
-              fontWeight: 700, 
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{
+              fontWeight: 700,
               color: '#1e293b',
               mb: 1,
               fontSize: { xs: '1.75rem', md: '2.125rem' }
@@ -181,8 +163,8 @@ const LicenseInfo = () => {
           >
             License & Certification Info
           </Typography>
-          <Typography 
-            variant="body1" 
+          <Typography
+            variant="body1"
             color="text.secondary"
             sx={{ fontSize: '1rem' }}
           >
@@ -231,7 +213,7 @@ const LicenseInfo = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -269,7 +251,7 @@ const LicenseInfo = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -307,7 +289,7 @@ const LicenseInfo = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -358,16 +340,16 @@ const LicenseInfo = () => {
 
         {/* Licenses Section */}
         <Box sx={{ mb: 4 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            mb: 3 
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 3
           }}>
-            <Typography 
-              variant="h5" 
-              sx={{ 
-                fontWeight: 600, 
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 600,
                 color: '#1e293b',
                 fontSize: '1.25rem'
               }}
@@ -409,8 +391,8 @@ const LicenseInfo = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar
                         sx={{
-                          backgroundColor: license.status === 'Active' ? '#dcfce7' : 
-                                          license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
+                          backgroundColor: license.status === 'Active' ? '#dcfce7' :
+                            license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
                           color: getStatusColor(license.status),
                           width: 40,
                           height: 40
@@ -426,8 +408,8 @@ const LicenseInfo = () => {
                           label={license.status}
                           size="small"
                           sx={{
-                            backgroundColor: license.status === 'Active' ? '#dcfce7' : 
-                                            license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
+                            backgroundColor: license.status === 'Active' ? '#dcfce7' :
+                              license.status === 'Pending' ? '#fef3c7' : '#fee2e2',
                             color: getStatusColor(license.status),
                             fontWeight: 500
                           }}
@@ -467,16 +449,16 @@ const LicenseInfo = () => {
 
         {/* Certifications Section */}
         <Box sx={{ mb: 4 }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            mb: 3 
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 3
           }}>
-            <Typography 
-              variant="h5" 
-              sx={{ 
-                fontWeight: 600, 
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 600,
                 color: '#1e293b',
                 fontSize: '1.25rem'
               }}
@@ -518,8 +500,8 @@ const LicenseInfo = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar
                         sx={{
-                          backgroundColor: cert.status === 'Active' ? '#dcfce7' : 
-                                          cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
+                          backgroundColor: cert.status === 'Active' ? '#dcfce7' :
+                            cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
                           color: getStatusColor(cert.status),
                           width: 40,
                           height: 40
@@ -535,8 +517,8 @@ const LicenseInfo = () => {
                           label={cert.status}
                           size="small"
                           sx={{
-                            backgroundColor: cert.status === 'Active' ? '#dcfce7' : 
-                                            cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
+                            backgroundColor: cert.status === 'Active' ? '#dcfce7' :
+                              cert.status === 'Pending' ? '#fef3c7' : '#fee2e2',
                             color: getStatusColor(cert.status),
                             fontWeight: 500
                           }}
@@ -590,7 +572,7 @@ const LicenseInfo = () => {
             </Typography>
             <Button
               variant="contained"
-              sx={{ 
+              sx={{
                 mt: 2,
                 backgroundColor: '#059669',
                 '&:hover': {

@@ -61,6 +61,47 @@ const Messages = () => {
 
   const messagesEndRef = useRef(null);
 
+  const fetchConversations = useCallback(async (showSpinner = false) => {
+    try {
+      if (showSpinner) setLoading(true);
+      const data = await messagingService.getConversations();
+      setConversations(data);
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
+  }, []);
+
+  const fetchMessages = useCallback(async (convId) => {
+    try {
+      setMsgLoading(true);
+      const data = await messagingService.getMessages(convId);
+      setMessages(data);
+      // Clear unread count locally for this conversation
+      setConversations(prev => prev.map(c =>
+        c.id === convId ? { ...c, unread_count: 0 } : c
+      ));
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    } finally {
+      setMsgLoading(false);
+    }
+  }, []);
+
+  const searchUsers = useCallback(async () => {
+    try {
+      setSearching(true);
+      const data = await messagingService.searchUsers(searchUserTerm);
+      // Filter out current user from search results
+      setFoundUsers(data.filter(u => u.id !== user?.id));
+    } catch (err) {
+      console.error('Error searching users:', err);
+    } finally {
+      setSearching(false);
+    }
+  }, [user?.id, searchUserTerm]);
+
   // 1. Initial Data Fetching
   useEffect(() => {
     if (user) {
@@ -164,34 +205,6 @@ const Messages = () => {
     }
   }, [user, fetchConversations]);
 
-  const fetchConversations = useCallback(async (showSpinner = false) => {
-    try {
-      if (showSpinner) setLoading(true);
-      const data = await messagingService.getConversations();
-      setConversations(data);
-    } catch (err) {
-      console.error('Error fetching conversations:', err);
-    } finally {
-      if (showSpinner) setLoading(false);
-    }
-  }, []);
-
-  const fetchMessages = useCallback(async (convId) => {
-    try {
-      setMsgLoading(true);
-      const data = await messagingService.getMessages(convId);
-      setMessages(data);
-      // Clear unread count locally for this conversation
-      setConversations(prev => prev.map(c =>
-        c.id === convId ? { ...c, unread_count: 0 } : c
-      ));
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-    } finally {
-      setMsgLoading(false);
-    }
-  }, []);
-
   // User Search Logic
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -204,19 +217,6 @@ const Messages = () => {
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchUserTerm, searchUsers]);
-
-  const searchUsers = useCallback(async () => {
-    try {
-      setSearching(true);
-      const data = await messagingService.searchUsers(searchUserTerm);
-      // Filter out current user from search results
-      setFoundUsers(data.filter(u => u.id !== user?.id));
-    } catch (err) {
-      console.error('Error searching users:', err);
-    } finally {
-      setSearching(false);
-    }
-  }, [user?.id, searchUserTerm]);
 
   const handleStartNewChat = async (participantId) => {
     try {

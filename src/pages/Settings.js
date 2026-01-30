@@ -3,10 +3,7 @@ import {
   Box,
   Typography,
   Grid,
-  Card,
-  CardContent,
   Switch,
-  FormControlLabel,
   Button,
   List,
   ListItem,
@@ -17,45 +14,31 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
   Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip,
   Avatar,
-  IconButton,
   Stack,
   Paper,
-  Divider,
   Tooltip,
 } from '@mui/material';
 import {
-  Settings as SettingsIcon,
   Notifications,
-  Security,
-  Language,
   Palette,
   LocationOn,
-  Payment,
-  Help,
-  Info,
   Delete,
-  Backup,
   CloudSync,
   VpnKey,
   Email,
   Sms,
   DarkMode,
   LightMode,
-  Edit,
   Save,
-  Cancel,
   Person,
   Shield,
   Tune,
-  AccountCircle,
   ShoppingCart,
   TrendingUp,
 } from '@mui/icons-material';
@@ -92,7 +75,7 @@ const Settings = () => {
       sessionTimeout: 30,
     }
   });
-  
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [exportDataOpen, setExportDataOpen] = useState(false);
@@ -122,7 +105,7 @@ const Settings = () => {
         [setting]: value
       }
     }));
-    
+
     setSuccess(`${setting} updated successfully`);
     setTimeout(() => setSuccess(''), 3000);
   };
@@ -162,36 +145,36 @@ const Settings = () => {
       settings: settings,
       exportDate: new Date().toISOString()
     };
-    
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${user?.name || 'user'}_data_export.json`;
     a.click();
-    
+
     setExportDataOpen(false);
     setSuccess('Data exported successfully!');
     setTimeout(() => setSuccess(''), 3000);
   };
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 2
     }}>
       {/* Header Section */}
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
           <Box>
-            <Typography 
-              variant="h5" 
-              sx={{ 
+            <Typography
+              variant="h5"
+              sx={{
                 fontWeight: 700,
                 color: '#1e293b',
                 mb: 0.5,
@@ -224,9 +207,9 @@ const Settings = () => {
 
         {/* Success Alert */}
         {success && (
-          <Alert 
-            severity="success" 
-            sx={{ 
+          <Alert
+            severity="success"
+            sx={{
               mb: 3,
               borderRadius: 2,
               border: '1px solid #e2e8f0',
@@ -285,8 +268,8 @@ const Settings = () => {
                   <ListItemIcon>
                     <Email color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Email Notifications" 
+                  <ListItemText
+                    primary="Email Notifications"
                     secondary="Receive updates via email"
                   />
                   <ListItemSecondaryAction>
@@ -297,13 +280,13 @@ const Settings = () => {
                     />
                   </ListItemSecondaryAction>
                 </ListItem>
-                
+
                 <ListItem sx={{ px: 0, py: 1.5, pr: 8 }}>
                   <ListItemIcon>
                     <Sms color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="SMS Notifications" 
+                  <ListItemText
+                    primary="SMS Notifications"
                     secondary="Receive updates via SMS"
                   />
                   <ListItemSecondaryAction>
@@ -319,8 +302,8 @@ const Settings = () => {
                   <ListItemIcon>
                     <ShoppingCart color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Order Updates" 
+                  <ListItemText
+                    primary="Order Updates"
                     secondary="Get notified about order status changes"
                   />
                   <ListItemSecondaryAction>
@@ -336,8 +319,8 @@ const Settings = () => {
                   <ListItemIcon>
                     <TrendingUp color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Price Alerts" 
+                  <ListItemText
+                    primary="Price Alerts"
                     secondary="Notify when prices change significantly"
                   />
                   <ListItemSecondaryAction>
@@ -397,19 +380,19 @@ const Settings = () => {
                   <ListItemIcon>
                     <Person color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Profile Visibility" 
+                  <ListItemText
+                    primary="Profile Visibility"
                     secondary="Control who can see your profile"
                   />
-                 
+
                 </ListItem>
-                
+
                 <ListItem sx={{ px: 0, py: 1.5, pr: 8 }}>
                   <ListItemIcon>
                     <LocationOn color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Show Location" 
+                  <ListItemText
+                    primary="Show Location"
                     secondary="Display your location to others"
                   />
                   <ListItemSecondaryAction>
@@ -425,8 +408,8 @@ const Settings = () => {
                   <ListItemIcon>
                     <VpnKey color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Two-Factor Authentication" 
+                  <ListItemText
+                    primary="Two-Factor Authentication"
                     secondary="Add extra security to your account"
                   />
                   <ListItemSecondaryAction>
@@ -442,8 +425,8 @@ const Settings = () => {
                   <ListItemIcon>
                     <CloudSync color="primary" />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Data Sharing" 
+                  <ListItemText
+                    primary="Data Sharing"
                     secondary="Allow data sharing for analytics"
                   />
                   <ListItemSecondaryAction>
@@ -579,7 +562,7 @@ const Settings = () => {
             </Paper>
           </Grid>
 
-          
+
         </Grid>
       </Box>
 
