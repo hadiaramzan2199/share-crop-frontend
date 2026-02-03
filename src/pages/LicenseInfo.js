@@ -52,10 +52,11 @@ const LicenseInfo = () => {
   // Logic: If user is approved, they CANNOT delete/upload.
   const isApproved = user?.approval_status === 'approved';
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (user?.id) {
       loadLicenses();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadLicenses = async () => {

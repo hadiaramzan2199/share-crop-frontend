@@ -29,8 +29,9 @@ const AddFieldForm = ({ onFieldAdded, onClose, farms }) => {
   const [uploadingLicense, setUploadingLicense] = useState(false);
   const [licenseFile, setLicenseFile] = useState(null);
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     checkLicenseStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user changes
   }, [user]);
 
   const checkLicenseStatus = async () => {

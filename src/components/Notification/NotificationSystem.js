@@ -19,7 +19,7 @@ const NotificationSystem = ({ notifications, onRemove }) => {
   };
 
   // Set up auto-close timeouts
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     notifications.forEach((notification) => {
       if (notification.duration && notification.duration > 0 && !timeoutRefs.current[notification.id]) {
         timeoutRefs.current[notification.id] = setTimeout(() => {
@@ -30,12 +30,12 @@ const NotificationSystem = ({ notifications, onRemove }) => {
 
     // Cleanup function
     return () => {
-      // Copy ref to local variable to avoid stale closure warning
-      const currentTimeouts = timeoutRefs.current; // eslint-disable-line react-hooks/exhaustive-deps
+      const currentTimeouts = timeoutRefs.current;
       Object.values(currentTimeouts).forEach(timeout => {
         if (timeout) clearTimeout(timeout);
       });
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- handleClose stable via ref; only re-run when notifications change
   }, [notifications]);
 
   return (

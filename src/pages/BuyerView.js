@@ -47,10 +47,11 @@ const BuyerView = () => {
   // No need to force role - use actual logged-in user
 
   // Initialize user coins when user is available
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (currentUser && currentUser.id) {
       loadAllFieldsFromStorage();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when currentUser is set
   }, [currentUser]);
 
   useEffect(() => {

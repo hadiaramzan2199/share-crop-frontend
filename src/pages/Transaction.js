@@ -69,12 +69,13 @@ const Transaction = () => {
   };
 
   // Load transaction data
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (user) {
       loadTransactions();
     } else {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadTransactions = async () => {

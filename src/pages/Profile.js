@@ -77,10 +77,11 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (user?.id) {
       loadUserDocuments();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadUserDocuments = async () => {
@@ -96,10 +97,11 @@ const Profile = () => {
   };
 
   // Load user profile data
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (user) {
       loadProfile();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadProfile = async () => {

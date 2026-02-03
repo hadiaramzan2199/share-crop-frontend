@@ -60,12 +60,13 @@ const Orders = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (user) {
       loadOrders();
     } else {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadOrders = async () => {
