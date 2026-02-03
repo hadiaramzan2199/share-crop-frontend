@@ -167,62 +167,51 @@ If you encounter any issues or have questions:
 
 ## 🚀 Deployment
 
-### Building for Production
+### Automatic Deployment (Recommended)
+
+This project uses **GitHub Actions** for automatic deployment to Netlify.
+
+🔥 **Every push to `main` automatically deploys to production!**
+
+#### Setup Instructions
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete setup instructions.
+
+**Quick Setup:**
+1. Create a Netlify account and site
+2. Get your Netlify auth token and site ID
+3. Add them as GitHub secrets (`NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID`)
+4. Push to `main` - deployment happens automatically!
+
+#### Features
+- ✅ **Automatic deployments** on push to main
+- ✅ **Preview deployments** for pull requests
+- ✅ **Build status** indicators in GitHub
+- ✅ **Fast deployment** (1-2 minutes)
+- ✅ Free hosting with Netlify
+
+### Manual Deployment
+
+#### Building for Production
 ```bash
 npm run build
 ```
 
 This creates a `build` folder with optimized production files.
 
-### Free Hosting Options
-
-#### 🌐 Netlify (Recommended)
-1. **Sign up** at [Netlify](https://www.netlify.com/)
-2. **Connect GitHub**: Click "New site from Git" → "GitHub"
-3. **Select Repository**: Choose `Share-Crop-MERN-App`
-4. **Configure Build**:
-   - Build command: `npm run build`
-   - Publish directory: `build`
-5. **Add Environment Variables** (if needed):
-   - Go to Site settings → Environment variables
-   - Add `REACT_APP_MAPBOX_ACCESS_TOKEN`
-6. **Deploy**: Click "Deploy site"
-
-**Features**: 
-- ✅ Free SSL certificate
-- ✅ Custom domain support
-- ✅ Automatic deployments from GitHub
-- ✅ Form handling
-- ✅ Serverless functions
-
-#### ⚡ Vercel
-1. **Sign up** at [Vercel](https://vercel.com/)
-2. **Import Project**: Connect your GitHub account
-3. **Select Repository**: Choose `Share-Crop-MERN-App`
-4. **Configure**: Vercel auto-detects React settings
-5. **Add Environment Variables** if needed
-6. **Deploy**: Click "Deploy"
-
-#### 📄 GitHub Pages
+#### Manual Netlify Deployment
 ```bash
-npm install --save-dev gh-pages
+npm install -g netlify-cli
+npm run build
+netlify deploy --prod --dir=build
 ```
-Add to package.json:
-```json
-{
-  "homepage": "https://hadiaramzan2199.github.io/Share-Crop-MERN-App",
-  "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
-  }
-}
-```
-Then run: `npm run deploy`
 
 ### 🔧 Deployment Configuration
 The project includes:
-- `netlify.toml` - Netlify configuration
-- `_redirects` - SPA routing support
+- `.github/workflows/deploy.yml` - GitHub Actions workflow
+- `_redirects` - SPA routing support for Netlify
+
+For troubleshooting and advanced configuration, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 

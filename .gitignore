@@ -24,3 +24,8 @@ yarn-error.log*
 
 .env
 .env.production
+
+# Build artifacts in root (should be in build/ folder)
+/build_error.txt
+/build_log.txt
+/index.html
