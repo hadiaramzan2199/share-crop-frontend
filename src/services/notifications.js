@@ -57,8 +57,8 @@ const notificationsService = {
 
   markAsRead: async (id) => {
     try {
-      // Use POST instead of PATCH to avoid CORS issues
-      const response = await api.post(`/api/notifications/${id}/read`);
+      // Use PATCH to match backend route definition
+      const response = await api.patch(`/api/notifications/${id}/read`);
       return response.data;
     } catch (error) {
       // Silently fail if backend doesn't support this endpoint

@@ -36,6 +36,11 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import LocationPicker from './LocationPicker';
+import { useAuth } from '../../contexts/AuthContext';
+import supabase from '../../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
+import { userDocumentsService } from '../../services/userDocuments';
+import { useNavigate } from 'react-router-dom';
 
 // Custom hook for mobile detection
 const useIsMobile = () => {
@@ -280,10 +285,108 @@ const farmIcons = [
 const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialData = null, farmsList = [] }) => {
   // Debug logging
   console.log('🔍 CreateFieldForm Debug - Received farmsList:', farmsList);
-  
+
   // Mobile detection hook
   const isMobile = useIsMobile();
-  
+
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // State for license check and upload
+  const [checkingLicense, setCheckingLicense] = useState(true);
+  const [hasLicense, setHasLicense] = useState(false);
+  const [uploadingLicense, setUploadingLicense] = useState(false);
+  const [licenseFile, setLicenseFile] = useState(null);
+
+  useEffect(() => {
+    // Only verify if open
+    if (open) {
+      checkLicenseStatus();
+    }
+  }, [user, open]);
+
+  const checkLicenseStatus = async () => {
+    if (!user || !user.id || !open) return;
+
+    // Determine status - aligned with AdminUsers logic
+    // We check locally first, then API response data
+    const status = user.approval_status || (user.is_active ? 'approved' : 'pending');
+
+    // Only check documents if pending
+    if (status === 'pending') {
+      try {
+        setCheckingLicense(true);
+        // We can just rely on user.uploaded_documents if available from the new API
+        // But for safety, let's fetch or check existing prop if passed
+        if (user.uploaded_documents && user.uploaded_documents.length > 0) {
+          setHasLicense(true);
+          setCheckingLicense(false);
+          return;
+        }
+
+        const response = await userDocumentsService.getUserDocuments(user.id);
+        const docs = response.data || [];
+        setHasLicense(docs.length > 0);
+      } catch (error) {
+        console.error('Error checking documents:', error);
+        setHasLicense(false);
+      } finally {
+        setCheckingLicense(false);
+      }
+    } else {
+      setCheckingLicense(false);
+    }
+  };
+
+  const handleLicenseFileChange = (e) => {
+    if (e.target.files[0]) {
+      setLicenseFile(e.target.files[0]);
+    }
+  };
+
+  const handleLicenseUpload = async () => {
+    if (!licenseFile || !user) return;
+
+    try {
+      setUploadingLicense(true);
+      const file = licenseFile;
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${uuidv4()}-${file.name}`;
+      const filePath = `documents/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('user-documents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-documents')
+        .getPublicUrl(filePath);
+
+      await userDocumentsService.addDocument({
+        user_id: user.id,
+        file_name: file.name,
+        file_url: publicUrl,
+        file_type: fileExt
+      });
+
+      setHasLicense(true);
+      setLicenseFile(null);
+      // alert('License uploaded successfully! Please wait for admin approval.');
+    } catch (error) {
+      console.error('Error uploading license:', error);
+      alert('Failed to upload license. Please try again.');
+    } finally {
+      setUploadingLicense(false);
+    }
+  };
+
+  const handleErrorDirectToFarms = () => {
+    onClose();
+    navigate('/farmer/my-farms?action=add-farm');
+  };
+
   // Helper function to get farm icon component
   const getFarmIcon = (farmIconValue) => {
     const iconData = farmIcons.find(icon => icon.value === farmIconValue);
@@ -399,36 +502,36 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   }, [initialData, editMode]);
 
   const handleInputChange = (field, value) => {
-  setFormData(prev => ({
-    ...prev,
-    [field]: value
-  }));
-  
-  // When category changes, reset subcategory safely
-  if (field === 'category') {
     setFormData(prev => ({
       ...prev,
-      subcategory: ''  // Reset to empty string, not undefined
+      [field]: value
     }));
-  }
-  
-  if (errors[field]) {
-    setErrors(prev => ({
-      ...prev,
-      [field]: ''
-    }));
-  }
-};
+
+    // When category changes, reset subcategory safely
+    if (field === 'category') {
+      setFormData(prev => ({
+        ...prev,
+        subcategory: ''  // Reset to empty string, not undefined
+      }));
+    }
+
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
 
   // Handle harvest date changes
   const handleHarvestDateChange = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
-      harvestDates: (prev.harvestDates || []).map((date, i) => 
+      harvestDates: (prev.harvestDates || []).map((date, i) =>
         i === index ? { ...date, [field]: value } : date
       )
     }));
-    
+
     if (errors.harvestDates) {
       setErrors(prev => ({
         ...prev,
@@ -490,7 +593,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
     // Get the icon for the selected subcategory
     const iconName = subcategoryToIconMap[formData.subcategory];
-    
+
     // If icon exists for this subcategory, return it as an array
     if (iconName) {
       return [iconName];
@@ -504,8 +607,8 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     if (!iconName) return '';
     // Determine category folder based on selected category
     // Fruits and Vegetables both use the 'fruits' folder for now
-    const category = formData.category?.toLowerCase() === 'fruits' || formData.category?.toLowerCase() === 'vegetables' 
-      ? 'fruits' 
+    const category = formData.category?.toLowerCase() === 'fruits' || formData.category?.toLowerCase() === 'vegetables'
+      ? 'fruits'
       : 'fruits'; // Default to fruits folder
     return `/icons/products/${category}/${iconName}`;
   };
@@ -527,7 +630,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   const updateDeliveryCharge = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
-      deliveryCharges: (prev.deliveryCharges || []).map((charge, i) => 
+      deliveryCharges: (prev.deliveryCharges || []).map((charge, i) =>
         i === index ? { ...charge, [field]: value } : charge
       )
     }));
@@ -549,7 +652,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.productName.trim()) newErrors.productName = 'Product name is required';
     if (!formData.category || formData.category === 'Select Category') newErrors.category = 'Category is required';
     if (!formData.subcategory || formData.subcategory === 'Select Sub Category') newErrors.subcategory = 'Sub category is required';
@@ -559,12 +662,12 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     if (!formData.sellingAmount) newErrors.sellingAmount = 'Selling amount is required';
     if (!formData.sellingPrice) newErrors.sellingPrice = 'Selling price is required';
     if (!formData.retailPrice) newErrors.retailPrice = 'Retail price is required';
-    
+
     // Validate harvest dates
     const harvestDatesArray = formData.harvestDates || [];
     const hasValidHarvestDate = harvestDatesArray.some(date => date.date && date.date.trim() !== '');
     if (!hasValidHarvestDate) newErrors.harvestDates = 'At least one harvest date is required';
-    
+
     if (!formData.latitude) newErrors.latitude = 'Latitude is required';
     if (!formData.longitude) newErrors.longitude = 'Longitude is required';
     if (!formData.farmId) newErrors.farmId = 'Please select a farm for this field';
@@ -574,35 +677,35 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   };
 
   const handleSubmit = async () => {
-  if (!validateForm()) return;
-  
-  setIsSubmitting(true);
-  
-  // Get actual location using reverse geocoding
-  let actualLocation = 'Unknown Location';
-  try {
-    const { cachedReverseGeocode } = await import('../../utils/geocoding');
-    actualLocation = await cachedReverseGeocode(
-      parseFloat(formData.latitude), 
-      parseFloat(formData.longitude)
-    );
-  } catch (error) {
-    console.error('Failed to get location:', error);
-    // Fallback to coordinates if reverse geocoding fails
-    actualLocation = `${parseFloat(formData.latitude).toFixed(4)}, ${parseFloat(formData.longitude).toFixed(4)}`;
-  }
-  
-  // Convert deliveryCharges array to a single numeric value for database storage
-  const getDeliveryChargeValue = (deliveryCharges) => {
-    if (!deliveryCharges || !Array.isArray(deliveryCharges) || deliveryCharges.length === 0) {
-      return 0;
-    }
-    // Use the first delivery charge amount, or 0 if not valid
-    const firstCharge = deliveryCharges[0];
-    return firstCharge && firstCharge.amount ? parseFloat(firstCharge.amount) || 0 : 0;
-  };
+    if (!validateForm()) return;
 
-  const submitData = {
+    setIsSubmitting(true);
+
+    // Get actual location using reverse geocoding
+    let actualLocation = 'Unknown Location';
+    try {
+      const { cachedReverseGeocode } = await import('../../utils/geocoding');
+      actualLocation = await cachedReverseGeocode(
+        parseFloat(formData.latitude),
+        parseFloat(formData.longitude)
+      );
+    } catch (error) {
+      console.error('Failed to get location:', error);
+      // Fallback to coordinates if reverse geocoding fails
+      actualLocation = `${parseFloat(formData.latitude).toFixed(4)}, ${parseFloat(formData.longitude).toFixed(4)}`;
+    }
+
+    // Convert deliveryCharges array to a single numeric value for database storage
+    const getDeliveryChargeValue = (deliveryCharges) => {
+      if (!deliveryCharges || !Array.isArray(deliveryCharges) || deliveryCharges.length === 0) {
+        return 0;
+      }
+      // Use the first delivery charge amount, or 0 if not valid
+      const firstCharge = deliveryCharges[0];
+      return firstCharge && firstCharge.amount ? parseFloat(firstCharge.amount) || 0 : 0;
+    };
+
+    const submitData = {
       productName: formData.productName,
       category: formData.category,
       subcategory: formData.subcategory,
@@ -642,12 +745,12 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       isOwnField: true // Mark as your own field for edit button
     };
 
-  setTimeout(() => {
-    onSubmit(submitData);
-    setIsSubmitting(false);
-    handleClose();
-  }, 1000);
-};
+    setTimeout(() => {
+      onSubmit(submitData);
+      setIsSubmitting(false);
+      handleClose();
+    }, 1000);
+  };
 
 
   const handleClose = () => {
@@ -685,18 +788,18 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   };
 
   return (
-    <StyledDialog 
-      open={open} 
-      onClose={handleClose} 
-      maxWidth={isMobile ? false : "md"} 
+    <StyledDialog
+      open={open}
+      onClose={handleClose}
+      maxWidth={isMobile ? false : "md"}
       fullWidth={!isMobile}
       isMobile={isMobile}
     >
       <StyledDialogTitle isMobile={isMobile}>
         {editMode ? 'Edit Field' : 'Create New Field'}
-        <IconButton 
-          onClick={handleClose} 
-          sx={{ 
+        <IconButton
+          onClick={handleClose}
+          sx={{
             position: 'absolute',
             right: isMobile ? 8 : 16,
             top: isMobile ? 8 : 16,
@@ -711,1071 +814,1162 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       </StyledDialogTitle>
 
       <StyledDialogContent isMobile={isMobile}>
-        <Box sx={{ width: '100%' }}>
-          {/* Basic Information Section */}
-          <FormSection>
-            <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Basic Information</SectionTitle>
-            <Grid container spacing={3}>
-              {/* Farm Selection Dropdown */}
-              <Grid item xs={12}>
-                <StyledFormControl fullWidth error={!!errors.farmId} sx={{ maxWidth: isMobile ? '240px !important' : '270px' }} isMobile={isMobile}>
-                  <InputLabel sx={{ fontWeight: 500 }}>Select Farm</InputLabel>
-                  <Select
-                    value={formData.farmId ?? ''}
-                    onChange={(e) => handleInputChange('farmId', e.target.value)}
-                    label="Select Farm"
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          borderRadius: '8px',
-                          border: '1px solid #e8f5e8',
-                          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
-                          marginTop: '2px',
-                          maxHeight: '200px',
-                          overflowY: 'auto',
-                          width: '240px',
-                          minWidth: '240px',
-                          maxWidth: '240px',
-                        },
-                        sx: {
-                          '&::-webkit-scrollbar': {
-                            width: '6px',
-                          },
-                          '&::-webkit-scrollbar-track': {
-                            backgroundColor: '#f1f1f1',
-                            borderRadius: '3px',
-                          },
-                          '&::-webkit-scrollbar-thumb': {
-                            backgroundColor: '#c1c1c1',
-                            borderRadius: '3px',
-                            '&:hover': {
-                              backgroundColor: '#a8a8a8',
-                            },
-                          },
-                          '&::-webkit-scrollbar-thumb:active': {
-                            backgroundColor: '#888',
-                          },
-                        },
-                      },
-                      anchorOrigin: {
-                        vertical: 'bottom',
-                        horizontal: 'left',
-                      },
-                      transformOrigin: {
-                        vertical: 'top',
-                        horizontal: 'left',
-                      },
-                    }}
-                    renderValue={(selected) => {
-                      if (!selected) return '';
-                      const selectedFarm = farmsList.find(farm => farm.id === selected);
-                      if (!selectedFarm) return '';
-                      return (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {getFarmIcon(selectedFarm.farmIcon)}
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {selectedFarm.farmName}
-                          </Typography>
-                        </Box>
-                      );
-                    }}
+        {/* Conditional Rendering Logic */}
+        {(() => {
+          const status = user?.approval_status || (user?.is_active ? 'approved' : 'pending');
+
+          if (checkingLicense) {
+            return (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography color="textSecondary">Checking eligibility...</Typography>
+              </Box>
+            );
+          }
+
+          if (status === 'pending' && !hasLicense) {
+            return (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h4" sx={{ mb: 2, fontSize: '3rem' }}>⚠️</Typography>
+                <Typography variant="h6" gutterBottom>Action Required</Typography>
+                <Typography variant="body1" color="textSecondary" paragraph>
+                  Please upload your farming license to be eligible for adding fields.
+                </Typography>
+                <Box sx={{ my: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    sx={{ mb: 2 }}
                   >
-                    <MenuItem 
-                      value="" 
-                      disabled
-                      sx={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        margin: '2px 4px',
-                        color: '#9ca3af',
-                        fontStyle: 'italic',
-                        fontSize: '0.875rem',
-                        minHeight: 'auto',
-                      }}
-                    >
-                      Choose a farm for this field
-                    </MenuItem>
-                    {farmsList.map((farm) => (
-                      <MenuItem 
-                        key={farm.id} 
-                        value={farm.id}
-                        sx={{
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          margin: '2px 4px',
-                          transition: 'all 0.2s ease',
-                          minHeight: 'auto',
-                          '&:hover': {
-                            backgroundColor: '#f1f8e9',
-                            borderRadius: '6px',
-                          },
-                          '&.Mui-selected': {
-                            backgroundColor: '#e8f5e8',
-                            '&:hover': {
-                              backgroundColor: '#e1f5e1',
-                            },
-                          },
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
-                          <Box sx={{ fontSize: '1rem' }}>
-                            {getFarmIcon(farm.farmIcon || 'agriculture')}
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#2d3748', fontSize: '0.875rem', lineHeight: 1.2 }}>
-                              {farm.farmName || 'Unnamed Farm'}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#718096', fontSize: '0.75rem', lineHeight: 1.1 }}>
-                              {formatLocationDisplay(farm.location || 'Location not set')}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.farmId && (
-                    <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-                      {errors.farmId}
+                    Choose License File
+                    <input
+                      type="file"
+                      hidden
+                      onChange={handleLicenseFileChange}
+                      accept=".pdf,.jpg,.jpeg,.png"
+                    />
+                  </Button>
+                  {licenseFile && (
+                    <Typography variant="body2" color="primary" sx={{ mb: 2 }}>
+                      Selected: {licenseFile.name}
                     </Typography>
                   )}
-                </StyledFormControl>
-              </Grid>
-
-              {/* Category Dropdown */}
-              <Grid item xs={12}>
-                <StyledFormControl fullWidth error={!!errors.category} isMobile={isMobile}>
-                  <InputLabel sx={{ fontWeight: 500 }}>Select Category</InputLabel>
-                  <Select
-                    value={formData.category ?? ''}
-                    onChange={(e) => {
-                      const selectedCategory = e.target.value;
-                      handleInputChange('category', selectedCategory);
-                      // Reset subcategory when category changes
-                      if (selectedCategory === 'Select Category' || selectedCategory === '') {
-                        handleInputChange('subcategory', '');
-                      } else {
-                        // Use empty string placeholder so the Select value is valid
-                        handleInputChange('subcategory', '');
-                      }
-                    }}
-                    label="Select Category"
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          borderRadius: '8px',
-                          border: '1px solid #e0e0e0',
-                          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
-                          marginTop: '2px',
-                          maxHeight: '200px',
-                          width: '240px',
-                          minWidth: '240px',
-                          maxWidth: '240px',
-                        },
-                        sx: {
-                          '& .MuiList-root': {
-                            padding: '4px',
-                          },
-                          '&::-webkit-scrollbar': {
-                            width: '6px',
-                          },
-                          '&::-webkit-scrollbar-track': {
-                            backgroundColor: '#f5f5f5',
-                            borderRadius: '3px',
-                          },
-                          '&::-webkit-scrollbar-thumb': {
-                            backgroundColor: '#c1c1c1',
-                            borderRadius: '3px',
-                            '&:hover': {
-                              backgroundColor: '#a8a8a8',
-                            },
-                            '&:active': {
-                              backgroundColor: '#8e8e8e',
-                            },
-                          },
-                        },
-                      },
-                      anchorOrigin: {
-                        vertical: 'bottom',
-                        horizontal: 'left',
-                      },
-                      transformOrigin: {
-                        vertical: 'top',
-                        horizontal: 'left',
-                      },
-                    }}
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    disabled={!licenseFile || uploadingLicense}
+                    onClick={handleLicenseUpload}
                   >
-                    {categories && Array.isArray(categories) && categories
-                      .filter(category => category != null) // Filter out null/undefined categories
-                      .map((category) => (
-                      <MenuItem 
-                        key={category} 
-                        value={category} 
-                        disabled={category === 'Select Category'}
-                        sx={{
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          margin: '2px 4px',
-                          fontSize: '0.875rem',
-                          minHeight: 'auto',
-                          '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                          },
-                          '&.Mui-selected': {
-                            backgroundColor: '#e8f5e8',
-                            '&:hover': {
-                              backgroundColor: '#d4edda',
+                    {uploadingLicense ? 'Uploading...' : 'Upload License'}
+                  </Button>
+                </Box>
+              </Box>
+            );
+          }
+
+          if (status === 'pending' && hasLicense) {
+            return (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h4" sx={{ mb: 2, fontSize: '3rem' }}>ℹ️</Typography>
+                <Typography variant="h6" gutterBottom>Verification Pending</Typography>
+                <Typography variant="body1" color="textSecondary" paragraph>
+                  Please wait for the approval from admin.
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  Your license has been uploaded and is under review.
+                </Typography>
+              </Box>
+            );
+          }
+
+          if (status === 'approved' && (!farmsList || farmsList.length === 0)) {
+            return (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h4" sx={{ mb: 2, fontSize: '3rem' }}>🏠</Typography>
+                <Typography variant="h6" gutterBottom>No Farms Found</Typography>
+                <Typography variant="body1" color="textSecondary" paragraph>
+                  You need to create a farm before you can add any fields.
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleErrorDirectToFarms}
+                  sx={{ mt: 2 }}
+                >
+                  Create My First Farm
+                </Button>
+              </Box>
+            );
+          }
+
+          // Render normal form if approved and has farms
+          return (
+            <Box sx={{ width: '100%' }}>
+              {/* Basic Information Section */}
+              <FormSection>
+                <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Basic Information</SectionTitle>
+                <Grid container spacing={3}>
+                  {/* Farm Selection Dropdown */}
+                  <Grid item xs={12}>
+                    <StyledFormControl fullWidth error={!!errors.farmId} sx={{ maxWidth: isMobile ? '240px !important' : '270px' }} isMobile={isMobile}>
+                      <InputLabel sx={{ fontWeight: 500 }}>Select Farm</InputLabel>
+                      <Select
+                        value={formData.farmId ?? ''}
+                        onChange={(e) => handleInputChange('farmId', e.target.value)}
+                        label="Select Farm"
+                        MenuProps={{
+                          PaperProps: {
+                            style: {
+                              borderRadius: '8px',
+                              border: '1px solid #e8f5e8',
+                              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+                              marginTop: '2px',
+                              maxHeight: '200px',
+                              overflowY: 'auto',
+                              width: '240px',
+                              minWidth: '240px',
+                              maxWidth: '240px',
                             },
+                            sx: {
+                              '&::-webkit-scrollbar': {
+                                width: '6px',
+                              },
+                              '&::-webkit-scrollbar-track': {
+                                backgroundColor: '#f1f1f1',
+                                borderRadius: '3px',
+                              },
+                              '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: '#c1c1c1',
+                                borderRadius: '3px',
+                                '&:hover': {
+                                  backgroundColor: '#a8a8a8',
+                                },
+                              },
+                              '&::-webkit-scrollbar-thumb:active': {
+                                backgroundColor: '#888',
+                              },
+                            },
+                          },
+                          anchorOrigin: {
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                          },
+                          transformOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
                           },
                         }}
+                        renderValue={(selected) => {
+                          if (!selected) return '';
+                          const selectedFarm = farmsList.find(farm => farm.id === selected);
+                          if (!selectedFarm) return '';
+                          return (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {getFarmIcon(selectedFarm.farmIcon)}
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {selectedFarm.farmName}
+                              </Typography>
+                            </Box>
+                          );
+                        }}
                       >
-                        {category || 'Unknown Category'}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </StyledFormControl>
-              </Grid>
-
-              {/* Sub Category Dropdown */}
-              <Grid item xs={12} md={6}>
-                <StyledFormControl
-                  fullWidth
-                  error={!!errors.subcategory}
-                  disabled={!formData.category || formData.category === 'Select Category'}
-                  isMobile={isMobile}
-                >
-                  <InputLabel sx={{ fontWeight: 500 }}>Select Sub Category</InputLabel>
-                  <Select
-                    value={formData.subcategory || ''}  // Ensure value is never undefined
-                    onChange={(e) => {
-                      const newSubcategory = e.target.value;
-                      handleInputChange('subcategory', newSubcategory);
-                      // Auto-select the icon for the selected subcategory
-                      const iconForSubcategory = subcategoryToIconMap[newSubcategory];
-                      if (iconForSubcategory) {
-                        handleInputChange('selectedIcon', iconForSubcategory);
-                      } else {
-                        handleInputChange('selectedIcon', '');
-                      }
-                    }}
-                    label="Select Sub Category"
-                    disabled={!formData.category || formData.category === 'Select Category'}
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          borderRadius: '8px',
-                          border: '1px solid #e0e0e0',
-                          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
-                          marginTop: '2px',
-                          maxHeight: '200px',
-                          width: '240px',
-                          minWidth: '240px',
-                          maxWidth: '240px',
-                        },
-                      },
-                    }}
-                  >
-                    <MenuItem value="" disabled>
-                      <Typography sx={{ color: '#9e9e9e', fontSize: '0.875rem' }}>
-                        Select Sub Category
-                      </Typography>
-                    </MenuItem>
-                    {formData.category && 
-                    formData.category !== 'Select Category' && 
-                    categoryData[formData.category] && 
-                    Array.isArray(categoryData[formData.category]) && 
-                    categoryData[formData.category]
-                      .filter(subcategory => subcategory != null && subcategory.trim() !== '')
-                      .map((subcategory, index) => (
-                        <MenuItem 
-                          key={subcategory || `subcat-${index}`}
-                          value={subcategory}
+                        <MenuItem
+                          value=""
+                          disabled
                           sx={{
                             padding: '8px 12px',
                             borderRadius: '6px',
                             margin: '2px 4px',
+                            color: '#9ca3af',
+                            fontStyle: 'italic',
                             fontSize: '0.875rem',
                             minHeight: 'auto',
-                            '&:hover': {
-                              backgroundColor: '#f5f5f5',
-                            },
-                            '&.Mui-selected': {
-                              backgroundColor: '#e8f5e8',
-                              '&:hover': {
-                                backgroundColor: '#d4edda',
-                              },
-                            },
                           }}
                         >
-                          {subcategory || 'Unknown Subcategory'}
+                          Choose a farm for this field
                         </MenuItem>
-                      ))
-                    }
-                  </Select>
-                </StyledFormControl>
-              </Grid>
-
-              {/* Product Icon Selector - Compact inline display below subcategory */}
-              {formData.subcategory && getAvailableIcons().length > 0 && (
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 1.5,
-                    height: '100%',
-                    pt: { xs: 0, md: 0 }
-                  }}>
-                    <Typography variant="body2" sx={{ 
-                      fontWeight: 500, 
-                      color: 'text.primary',
-                      whiteSpace: 'nowrap',
-                      fontSize: '0.875rem',
-                      minWidth: 'fit-content'
-                    }}>
-                      Icon:
-                    </Typography>
-                    <Box sx={{ 
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      flex: 1
-                    }}>
-                      {getAvailableIcons().map((iconName) => {
-                        const iconPath = getIconPath(iconName);
-                        const isSelected = formData.selectedIcon === iconName;
-                        return (
-                          <Box
-                            key={iconName}
-                            onClick={() => handleInputChange('selectedIcon', iconName)}
+                        {farmsList.map((farm) => (
+                          <MenuItem
+                            key={farm.id}
+                            value={farm.id}
                             sx={{
-                              position: 'relative',
-                              width: { xs: 44, sm: 48, md: 52 },
-                              height: { xs: 44, sm: 48, md: 52 },
-                              border: isSelected ? '2px solid' : '1.5px solid',
-                              borderColor: isSelected ? '#4CAF50' : '#e0e0e0',
-                              borderRadius: 1.25,
-                              p: 0.5,
-                              cursor: 'pointer',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              margin: '2px 4px',
                               transition: 'all 0.2s ease',
-                              bgcolor: isSelected ? 'rgba(76,175,80,0.08)' : '#fafafa',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
+                              minHeight: 'auto',
                               '&:hover': {
-                                borderColor: '#4CAF50',
-                                bgcolor: 'rgba(76,175,80,0.12)',
-                                transform: 'scale(1.08)',
-                              }
+                                backgroundColor: '#f1f8e9',
+                                borderRadius: '6px',
+                              },
+                              '&.Mui-selected': {
+                                backgroundColor: '#e8f5e8',
+                                '&:hover': {
+                                  backgroundColor: '#e1f5e1',
+                                },
+                              },
                             }}
                           >
-                            <Box
-                              component="img"
-                              src={iconPath}
-                              alt={iconName.replace('.png', '').replace('_', ' ')}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
+                              <Box sx={{ fontSize: '1rem' }}>
+                                {getFarmIcon(farm.farmIcon || 'agriculture')}
+                              </Box>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 500, color: '#2d3748', fontSize: '0.875rem', lineHeight: 1.2 }}>
+                                  {farm.farmName || 'Unnamed Farm'}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#718096', fontSize: '0.75rem', lineHeight: 1.1 }}>
+                                  {formatLocationDisplay(farm.location || 'Location not set')}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.farmId && (
+                        <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                          {errors.farmId}
+                        </Typography>
+                      )}
+                    </StyledFormControl>
+                  </Grid>
+
+                  {/* Category Dropdown */}
+                  <Grid item xs={12}>
+                    <StyledFormControl fullWidth error={!!errors.category} isMobile={isMobile}>
+                      <InputLabel sx={{ fontWeight: 500 }}>Select Category</InputLabel>
+                      <Select
+                        value={formData.category ?? ''}
+                        onChange={(e) => {
+                          const selectedCategory = e.target.value;
+                          handleInputChange('category', selectedCategory);
+                          // Reset subcategory when category changes
+                          if (selectedCategory === 'Select Category' || selectedCategory === '') {
+                            handleInputChange('subcategory', '');
+                          } else {
+                            // Use empty string placeholder so the Select value is valid
+                            handleInputChange('subcategory', '');
+                          }
+                        }}
+                        label="Select Category"
+                        MenuProps={{
+                          PaperProps: {
+                            style: {
+                              borderRadius: '8px',
+                              border: '1px solid #e0e0e0',
+                              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+                              marginTop: '2px',
+                              maxHeight: '200px',
+                              width: '240px',
+                              minWidth: '240px',
+                              maxWidth: '240px',
+                            },
+                            sx: {
+                              '& .MuiList-root': {
+                                padding: '4px',
+                              },
+                              '&::-webkit-scrollbar': {
+                                width: '6px',
+                              },
+                              '&::-webkit-scrollbar-track': {
+                                backgroundColor: '#f5f5f5',
+                                borderRadius: '3px',
+                              },
+                              '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: '#c1c1c1',
+                                borderRadius: '3px',
+                                '&:hover': {
+                                  backgroundColor: '#a8a8a8',
+                                },
+                                '&:active': {
+                                  backgroundColor: '#8e8e8e',
+                                },
+                              },
+                            },
+                          },
+                          anchorOrigin: {
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                          },
+                          transformOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
+                          },
+                        }}
+                      >
+                        {categories && Array.isArray(categories) && categories
+                          .filter(category => category != null) // Filter out null/undefined categories
+                          .map((category) => (
+                            <MenuItem
+                              key={category}
+                              value={category}
+                              disabled={category === 'Select Category'}
                               sx={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'contain',
-                                maxWidth: { xs: 32, sm: 36, md: 40 },
-                                maxHeight: { xs: 32, sm: 36, md: 40 },
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                margin: '2px 4px',
+                                fontSize: '0.875rem',
+                                minHeight: 'auto',
+                                '&:hover': {
+                                  backgroundColor: '#f5f5f5',
+                                },
+                                '&.Mui-selected': {
+                                  backgroundColor: '#e8f5e8',
+                                  '&:hover': {
+                                    backgroundColor: '#d4edda',
+                                  },
+                                },
                               }}
-                            />
-                            {isSelected && (
-                              <Box
+                            >
+                              {category || 'Unknown Category'}
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    </StyledFormControl>
+                  </Grid>
+
+                  {/* Sub Category Dropdown */}
+                  <Grid item xs={12} md={6}>
+                    <StyledFormControl
+                      fullWidth
+                      error={!!errors.subcategory}
+                      disabled={!formData.category || formData.category === 'Select Category'}
+                      isMobile={isMobile}
+                    >
+                      <InputLabel sx={{ fontWeight: 500 }}>Select Sub Category</InputLabel>
+                      <Select
+                        value={formData.subcategory || ''}  // Ensure value is never undefined
+                        onChange={(e) => {
+                          const newSubcategory = e.target.value;
+                          handleInputChange('subcategory', newSubcategory);
+                          // Auto-select the icon for the selected subcategory
+                          const iconForSubcategory = subcategoryToIconMap[newSubcategory];
+                          if (iconForSubcategory) {
+                            handleInputChange('selectedIcon', iconForSubcategory);
+                          } else {
+                            handleInputChange('selectedIcon', '');
+                          }
+                        }}
+                        label="Select Sub Category"
+                        disabled={!formData.category || formData.category === 'Select Category'}
+                        MenuProps={{
+                          PaperProps: {
+                            style: {
+                              borderRadius: '8px',
+                              border: '1px solid #e0e0e0',
+                              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+                              marginTop: '2px',
+                              maxHeight: '200px',
+                              width: '240px',
+                              minWidth: '240px',
+                              maxWidth: '240px',
+                            },
+                          },
+                        }}
+                      >
+                        <MenuItem value="" disabled>
+                          <Typography sx={{ color: '#9e9e9e', fontSize: '0.875rem' }}>
+                            Select Sub Category
+                          </Typography>
+                        </MenuItem>
+                        {formData.category &&
+                          formData.category !== 'Select Category' &&
+                          categoryData[formData.category] &&
+                          Array.isArray(categoryData[formData.category]) &&
+                          categoryData[formData.category]
+                            .filter(subcategory => subcategory != null && subcategory.trim() !== '')
+                            .map((subcategory, index) => (
+                              <MenuItem
+                                key={subcategory || `subcat-${index}`}
+                                value={subcategory}
                                 sx={{
-                                  position: 'absolute',
-                                  top: -4,
-                                  right: -4,
-                                  width: 16,
-                                  height: 16,
-                                  borderRadius: '50%',
-                                  bgcolor: '#4CAF50',
+                                  padding: '8px 12px',
+                                  borderRadius: '6px',
+                                  margin: '2px 4px',
+                                  fontSize: '0.875rem',
+                                  minHeight: 'auto',
+                                  '&:hover': {
+                                    backgroundColor: '#f5f5f5',
+                                  },
+                                  '&.Mui-selected': {
+                                    backgroundColor: '#e8f5e8',
+                                    '&:hover': {
+                                      backgroundColor: '#d4edda',
+                                    },
+                                  },
+                                }}
+                              >
+                                {subcategory || 'Unknown Subcategory'}
+                              </MenuItem>
+                            ))
+                        }
+                      </Select>
+                    </StyledFormControl>
+                  </Grid>
+
+                  {/* Product Icon Selector - Compact inline display below subcategory */}
+                  {formData.subcategory && getAvailableIcons().length > 0 && (
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        height: '100%',
+                        pt: { xs: 0, md: 0 }
+                      }}>
+                        <Typography variant="body2" sx={{
+                          fontWeight: 500,
+                          color: 'text.primary',
+                          whiteSpace: 'nowrap',
+                          fontSize: '0.875rem',
+                          minWidth: 'fit-content'
+                        }}>
+                          Icon:
+                        </Typography>
+                        <Box sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          flex: 1
+                        }}>
+                          {getAvailableIcons().map((iconName) => {
+                            const iconPath = getIconPath(iconName);
+                            const isSelected = formData.selectedIcon === iconName;
+                            return (
+                              <Box
+                                key={iconName}
+                                onClick={() => handleInputChange('selectedIcon', iconName)}
+                                sx={{
+                                  position: 'relative',
+                                  width: { xs: 44, sm: 48, md: 52 },
+                                  height: { xs: 44, sm: 48, md: 52 },
+                                  border: isSelected ? '2px solid' : '1.5px solid',
+                                  borderColor: isSelected ? '#4CAF50' : '#e0e0e0',
+                                  borderRadius: 1.25,
+                                  p: 0.5,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease',
+                                  bgcolor: isSelected ? 'rgba(76,175,80,0.08)' : '#fafafa',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  color: 'white',
-                                  fontSize: 9,
-                                  fontWeight: 'bold',
-                                  border: '2px solid white',
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                  flexShrink: 0,
+                                  '&:hover': {
+                                    borderColor: '#4CAF50',
+                                    bgcolor: 'rgba(76,175,80,0.12)',
+                                    transform: 'scale(1.08)',
+                                  }
                                 }}
                               >
-                                ✓
+                                <Box
+                                  component="img"
+                                  src={iconPath}
+                                  alt={iconName.replace('.png', '').replace('_', ' ')}
+                                  sx={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain',
+                                    maxWidth: { xs: 32, sm: 36, md: 40 },
+                                    maxHeight: { xs: 32, sm: 36, md: 40 },
+                                  }}
+                                />
+                                {isSelected && (
+                                  <Box
+                                    sx={{
+                                      position: 'absolute',
+                                      top: -4,
+                                      right: -4,
+                                      width: 16,
+                                      height: 16,
+                                      borderRadius: '50%',
+                                      bgcolor: '#4CAF50',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: 'white',
+                                      fontSize: 9,
+                                      fontWeight: 'bold',
+                                      border: '2px solid white',
+                                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                    }}
+                                  >
+                                    ✓
+                                  </Box>
+                                )}
                               </Box>
-                            )}
-                          </Box>
-                        );
-                      })}
-                    </Box>
-                    {errors.selectedIcon && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-                        {errors.selectedIcon}
-                      </Typography>
-                    )}
-                  </Box>
+                            );
+                          })}
+                        </Box>
+                        {errors.selectedIcon && (
+                          <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                            {errors.selectedIcon}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Grid>
+                  )}
+
+                  {/* Product Name - Full width below subcategory and icon */}
+                  <Grid item xs={12} sx={{ mt: { xs: 1, md: 1 } }}>
+                    <StyledTextField
+                      fullWidth
+                      label="Product Name"
+                      placeholder="The Name of The Product"
+                      value={formData.productName}
+                      onChange={(e) => handleInputChange('productName', e.target.value)}
+                      error={!!errors.productName}
+                      helperText={errors.productName}
+                      isMobile={isMobile}
+                    />
+                  </Grid>
+
+                  {/* Product Description - Full width, under Product Name */}
+                  <Grid item xs={12} sx={{ mt: { xs: 0, md: 0 } }}>
+                    <StyledTextField
+                      fullWidth
+                      label="Description"
+                      placeholder="The Description of The Product"
+                      value={formData.description}
+                      onChange={(e) => handleInputChange('description', e.target.value)}
+                      error={!!errors.description}
+                      helperText={errors.description}
+                      isMobile={isMobile}
+                    />
+                  </Grid>
                 </Grid>
-              )}
+              </FormSection>
 
-              {/* Product Name - Full width below subcategory and icon */}
-              <Grid item xs={12} sx={{ mt: { xs: 1, md: 1 } }}>
-                <StyledTextField
-                  fullWidth
-                  label="Product Name"
-                  placeholder="The Name of The Product"
-                  value={formData.productName}
-                  onChange={(e) => handleInputChange('productName', e.target.value)}
-                  error={!!errors.productName}
-                  helperText={errors.productName}
-                  isMobile={isMobile}
-                />
-              </Grid>
-
-              {/* Product Description - Full width, under Product Name */}
-              <Grid item xs={12} sx={{ mt: { xs: 0, md: 0 } }}>
-                <StyledTextField
-                  fullWidth
-                  label="Description"
-                  placeholder="The Description of The Product"
-                  value={formData.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  error={!!errors.description}
-                  helperText={errors.description}
-                  isMobile={isMobile}
-                />
-              </Grid>
-            </Grid>
-          </FormSection>
-
-          {/* Field Details Section */}
-          <FormSection>
-            <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Field Details</SectionTitle>
-            <Grid container spacing={isMobile ? 2 : 3}>
-              {/* Field Size with Unit */}
-              <Grid item xs={12} md={6}>
-                {isMobile ? (
-                  <StyledTextField
-                    fullWidth
-                    label="Field Size"
-                    placeholder={`How big is your field (${formData.fieldSizeUnit})`}
-                    value={formData.fieldSize}
-                    onChange={(e) => handleInputChange('fieldSize', e.target.value)}
-                    error={!!errors.fieldSize}
-                    helperText={errors.fieldSize}
-                    isMobile={isMobile}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
+              {/* Field Details Section */}
+              <FormSection>
+                <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Field Details</SectionTitle>
+                <Grid container spacing={isMobile ? 2 : 3}>
+                  {/* Field Size with Unit */}
+                  <Grid item xs={12} md={6}>
+                    {isMobile ? (
+                      <StyledTextField
+                        fullWidth
+                        label="Field Size"
+                        placeholder={`How big is your field (${formData.fieldSizeUnit})`}
+                        value={formData.fieldSize}
+                        onChange={(e) => handleInputChange('fieldSize', e.target.value)}
+                        error={!!errors.fieldSize}
+                        helperText={errors.fieldSize}
+                        isMobile={isMobile}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <Select
+                                value={formData.fieldSizeUnit}
+                                onChange={(e) => handleInputChange('fieldSizeUnit', e.target.value)}
+                                variant="standard"
+                                disableUnderline
+                                sx={{
+                                  fontSize: '12px',
+                                  '& .MuiSelect-select': {
+                                    paddingRight: '20px !important',
+                                  }
+                                }}
+                              >
+                                <MenuItem value="m²">m²</MenuItem>
+                                <MenuItem value="acres">acres</MenuItem>
+                                <MenuItem value="hectares">hectares</MenuItem>
+                              </Select>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    ) : (
+                      <CombinedInputContainer isMobile={isMobile}>
+                        <StyledTextField
+                          label="Field Size"
+                          placeholder="How big is your field"
+                          value={formData.fieldSize}
+                          onChange={(e) => handleInputChange('fieldSize', e.target.value)}
+                          error={!!errors.fieldSize}
+                          helperText={errors.fieldSize}
+                          isMobile={isMobile}
+                        />
+                        <StyledFormControl isMobile={isMobile}>
+                          <InputLabel>Unit</InputLabel>
                           <Select
                             value={formData.fieldSizeUnit}
                             onChange={(e) => handleInputChange('fieldSizeUnit', e.target.value)}
-                            variant="standard"
-                            disableUnderline
-                            sx={{ 
-                              fontSize: '12px',
-                              '& .MuiSelect-select': {
-                                paddingRight: '20px !important',
-                              }
-                            }}
+                            label="Unit"
                           >
                             <MenuItem value="m²">m²</MenuItem>
                             <MenuItem value="acres">acres</MenuItem>
                             <MenuItem value="hectares">hectares</MenuItem>
                           </Select>
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                ) : (
-                  <CombinedInputContainer isMobile={isMobile}>
-                    <StyledTextField
-                      label="Field Size"
-                      placeholder="How big is your field"
-                      value={formData.fieldSize}
-                      onChange={(e) => handleInputChange('fieldSize', e.target.value)}
-                      error={!!errors.fieldSize}
-                      helperText={errors.fieldSize}
-                      isMobile={isMobile}
-                    />
-                    <StyledFormControl isMobile={isMobile}>
-                      <InputLabel>Unit</InputLabel>
-                      <Select
-                        value={formData.fieldSizeUnit}
-                        onChange={(e) => handleInputChange('fieldSizeUnit', e.target.value)}
-                        label="Unit"
-                      >
-                        <MenuItem value="m²">m²</MenuItem>
-                        <MenuItem value="acres">acres</MenuItem>
-                        <MenuItem value="hectares">hectares</MenuItem>
-                      </Select>
-                    </StyledFormControl>
-                  </CombinedInputContainer>
-                )}
-              </Grid>
+                        </StyledFormControl>
+                      </CombinedInputContainer>
+                    )}
+                  </Grid>
 
-              {/* Production Rate with Unit */}
-              <Grid item xs={12} md={6}>
-                {isMobile ? (
-                  <StyledTextField
-                    fullWidth
-                    label="Production Rate"
-                    placeholder={`Usual production per harvest (${formData.productionRateUnit})`}
-                    value={formData.productionRate}
-                    onChange={(e) => handleInputChange('productionRate', e.target.value)}
-                    error={!!errors.productionRate}
-                    helperText={errors.productionRate}
-                    isMobile={isMobile}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
+                  {/* Production Rate with Unit */}
+                  <Grid item xs={12} md={6}>
+                    {isMobile ? (
+                      <StyledTextField
+                        fullWidth
+                        label="Production Rate"
+                        placeholder={`Usual production per harvest (${formData.productionRateUnit})`}
+                        value={formData.productionRate}
+                        onChange={(e) => handleInputChange('productionRate', e.target.value)}
+                        error={!!errors.productionRate}
+                        helperText={errors.productionRate}
+                        isMobile={isMobile}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <Select
+                                value={formData.productionRateUnit}
+                                onChange={(e) => handleInputChange('productionRateUnit', e.target.value)}
+                                variant="standard"
+                                disableUnderline
+                                sx={{
+                                  fontSize: '10px',
+                                  '& .MuiSelect-select': {
+                                    paddingRight: '20px !important',
+                                  }
+                                }}
+                              >
+                                <MenuItem value="Kg">Kg</MenuItem>
+                                <MenuItem value="tons">tons</MenuItem>
+                                <MenuItem value="lbs">lbs</MenuItem>
+                              </Select>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    ) : (
+                      <CombinedInputContainer isMobile={isMobile}>
+                        <StyledTextField
+                          label="Production Rate"
+                          placeholder="Usual production per harvest"
+                          value={formData.productionRate}
+                          onChange={(e) => handleInputChange('productionRate', e.target.value)}
+                          error={!!errors.productionRate}
+                          helperText={errors.productionRate}
+                          isMobile={isMobile}
+                        />
+                        <StyledFormControl isMobile={isMobile}>
+                          <InputLabel>Unit</InputLabel>
                           <Select
                             value={formData.productionRateUnit}
                             onChange={(e) => handleInputChange('productionRateUnit', e.target.value)}
-                            variant="standard"
-                            disableUnderline
-                            sx={{ 
-                              fontSize: '10px',
-                              '& .MuiSelect-select': {
-                                paddingRight: '20px !important',
-                              }
-                            }}
+                            label="Unit"
                           >
                             <MenuItem value="Kg">Kg</MenuItem>
                             <MenuItem value="tons">tons</MenuItem>
                             <MenuItem value="lbs">lbs</MenuItem>
                           </Select>
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                ) : (
-                  <CombinedInputContainer isMobile={isMobile}>
+                        </StyledFormControl>
+                      </CombinedInputContainer>
+                    )}
+                  </Grid>
+
+                  {/* Location Selection - Single field */}
+                  <Grid item xs={12}>
                     <StyledTextField
-                      label="Production Rate"
-                      placeholder="Usual production per harvest"
-                      value={formData.productionRate}
-                      onChange={(e) => handleInputChange('productionRate', e.target.value)}
-                      error={!!errors.productionRate}
-                      helperText={errors.productionRate}
+                      fullWidth
+                      label="Select Location"
+                      placeholder="Click the pin icon to select your field location"
+                      value={locationAddress}
+                      InputProps={{
+                        readOnly: true,
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={() => setLocationPickerOpen(true)}
+                              sx={{
+                                color: '#4CAF50',
+                                padding: isMobile ? '6px' : '8px',
+                                '& .MuiSvgIcon-root': {
+                                  fontSize: isMobile ? '20px' : '20px'
+                                },
+                                '&:hover': {
+                                  backgroundColor: 'rgba(76, 175, 80, 0.1)'
+                                }
+                              }}
+                            >
+                              <LocationOn />
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                      error={!!errors.latitude || !!errors.longitude}
+                      helperText={errors.latitude || errors.longitude || "Select your field location using the map"}
+                      sx={{
+                        '& .MuiInputBase-input': {
+                          cursor: 'pointer'
+                        }
+                      }}
+                      onClick={() => setLocationPickerOpen(true)}
                       isMobile={isMobile}
                     />
-                    <StyledFormControl isMobile={isMobile}>
-                      <InputLabel>Unit</InputLabel>
-                      <Select
-                        value={formData.productionRateUnit}
-                        onChange={(e) => handleInputChange('productionRateUnit', e.target.value)}
-                        label="Unit"
-                      >
-                        <MenuItem value="Kg">Kg</MenuItem>
-                        <MenuItem value="tons">tons</MenuItem>
-                        <MenuItem value="lbs">lbs</MenuItem>
-                      </Select>
-                    </StyledFormControl>
-                  </CombinedInputContainer>
-                )}
-              </Grid>
+                  </Grid>
 
-              {/* Location Selection - Single field */}
-              <Grid item xs={12}>
-                <StyledTextField
-                  fullWidth
-                  label="Select Location"
-                  placeholder="Click the pin icon to select your field location"
-                  value={locationAddress}
-                  InputProps={{
-                    readOnly: true,
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={() => setLocationPickerOpen(true)}
-                          sx={{ 
-                            color: '#4CAF50',
-                            padding: isMobile ? '6px' : '8px',
-                            '& .MuiSvgIcon-root': {
-                              fontSize: isMobile ? '20px' : '20px'
-                            },
-                            '&:hover': {
-                              backgroundColor: 'rgba(76, 175, 80, 0.1)'
-                            }
-                          }}
-                        >
-                          <LocationOn />
-                        </IconButton>
-                      </InputAdornment>
-                    )
-                  }}
-                  error={!!errors.latitude || !!errors.longitude}
-                  helperText={errors.latitude || errors.longitude || "Select your field location using the map"}
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      cursor: 'pointer'
-                    }
-                  }}
-                  onClick={() => setLocationPickerOpen(true)}
-                  isMobile={isMobile}
-                />
-              </Grid>
+                  {/* Harvest Dates */}
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }} >
+                      Estimated Harvest Dates
+                    </Typography>
+                    {(formData.harvestDates || []).map((harvestDate, index) => (
+                      <Box key={index} sx={{
+                        mb: 2,
+                        p: isMobile ? 0 : 2,
+                        border: isMobile ? 'none' : '1px solid #e2e8f0',
+                        borderRadius: isMobile ? 0 : '8px'
+                      }}>
+                        {isMobile ? (
+                          // Mobile Layout - Clean vertical stack without outer box
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            {/* Date field - full width */}
+                            <StyledTextField
+                              fullWidth
+                              type="date"
+                              label="Date"
+                              value={harvestDate?.date ?? ''}
+                              onChange={(e) => handleHarvestDateChange(index, 'date', e.target.value)}
+                              InputLabelProps={{ shrink: true }}
+                              isMobile={isMobile}
+                            />
 
-              {/* Harvest Dates */}
-              <Grid item xs={12}>
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }} >
-                  Estimated Harvest Dates
-                </Typography>
-                {(formData.harvestDates || []).map((harvestDate, index) => (
-                  <Box key={index} sx={{ 
-                    mb: 2, 
-                    p: isMobile ? 0 : 2, 
-                    border: isMobile ? 'none' : '1px solid #e2e8f0', 
-                    borderRadius: isMobile ? 0 : '8px'
-                  }}>
-                    {isMobile ? (
-                      // Mobile Layout - Clean vertical stack without outer box
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        {/* Date field - full width */}
-                        <StyledTextField
-                          fullWidth
-                          type="date"
-                          label="Date"
-                          value={harvestDate?.date ?? ''}
-                          onChange={(e) => handleHarvestDateChange(index, 'date', e.target.value)}
-                          InputLabelProps={{ shrink: true }}
-                          isMobile={isMobile}
-                        />
-                        
-                        {/* Label field with icons positioned at bottom right */}
-                        <Box sx={{ position: 'relative' }}>
-                          <StyledTextField
-                            fullWidth
-                            label="Label (optional)"
-                            placeholder="e.g., First harvest, Main crop"
-                            value={harvestDate?.label ?? ''}
-                            onChange={(e) => handleHarvestDateChange(index, 'label', e.target.value)}
-                            isMobile={isMobile}
-                          />
-                          
-                          {/* Icons positioned at bottom right of label field */}
-                          <Box sx={{ 
-                            position: 'absolute',
-                            top: 40,
-                            right: 8,
-                            display: 'flex',
-                            gap: 0.5,
-                            zIndex: 1
-                          }}>
-                            {index === (formData.harvestDates || []).length - 1 && (
-                              <IconButton
-                                onClick={addHarvestDate}
-                                size="small"
-                                sx={{ 
-                                  color: '#4caf50',
-                                  backgroundColor: '#e8f5e8',
-                                  '&:hover': { backgroundColor: '#c8e6c9' },
-                                  width: 28,
-                                  height: 28,
-                                  minWidth: 28
-                                }}
-                              >
-                                <Add sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            )}
-                            {(formData.harvestDates || []).length > 1 && (
-                              <IconButton
-                                onClick={() => removeHarvestDate(index)}
-                                size="small"
-                                sx={{ 
-                                  color: '#f44336',
-                                  backgroundColor: '#ffebee',
-                                  '&:hover': { backgroundColor: '#ffcdd2' },
-                                  width: 28,
-                                  height: 28,
-                                  minWidth: 28
-                                }}
-                              >
-                                <Remove sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            )}
+                            {/* Label field with icons positioned at bottom right */}
+                            <Box sx={{ position: 'relative' }}>
+                              <StyledTextField
+                                fullWidth
+                                label="Label (optional)"
+                                placeholder="e.g., First harvest, Main crop"
+                                value={harvestDate?.label ?? ''}
+                                onChange={(e) => handleHarvestDateChange(index, 'label', e.target.value)}
+                                isMobile={isMobile}
+                              />
+
+                              {/* Icons positioned at bottom right of label field */}
+                              <Box sx={{
+                                position: 'absolute',
+                                top: 40,
+                                right: 8,
+                                display: 'flex',
+                                gap: 0.5,
+                                zIndex: 1
+                              }}>
+                                {index === (formData.harvestDates || []).length - 1 && (
+                                  <IconButton
+                                    onClick={addHarvestDate}
+                                    size="small"
+                                    sx={{
+                                      color: '#4caf50',
+                                      backgroundColor: '#e8f5e8',
+                                      '&:hover': { backgroundColor: '#c8e6c9' },
+                                      width: 28,
+                                      height: 28,
+                                      minWidth: 28
+                                    }}
+                                  >
+                                    <Add sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                )}
+                                {(formData.harvestDates || []).length > 1 && (
+                                  <IconButton
+                                    onClick={() => removeHarvestDate(index)}
+                                    size="small"
+                                    sx={{
+                                      color: '#f44336',
+                                      backgroundColor: '#ffebee',
+                                      '&:hover': { backgroundColor: '#ffcdd2' },
+                                      width: 28,
+                                      height: 28,
+                                      minWidth: 28
+                                    }}
+                                  >
+                                    <Remove sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            </Box>
                           </Box>
-                        </Box>
+                        ) : (
+                          // Desktop Layout - Horizontal
+                          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>
+                            <Box sx={{ flex: '1 1 40%' }}>
+                              <StyledTextField
+                                fullWidth
+                                type="date"
+                                label="Date"
+                                value={harvestDate?.date ?? ''}
+                                onChange={(e) => handleHarvestDateChange(index, 'date', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                                isMobile={isMobile}
+                              />
+                            </Box>
+                            <Box sx={{ flex: '1 1 40%' }}>
+                              <StyledTextField
+                                fullWidth
+                                label="Label (optional)"
+                                placeholder="e.g., First harvest, Main crop"
+                                value={harvestDate?.label ?? ''}
+                                onChange={(e) => handleHarvestDateChange(index, 'label', e.target.value)}
+                                isMobile={isMobile}
+                              />
+                            </Box>
+                            <Box sx={{ flex: '0 0 auto', display: 'flex', gap: 1 }}>
+                              {index === (formData.harvestDates || []).length - 1 && (
+                                <IconButton
+                                  onClick={addHarvestDate}
+                                  sx={{
+                                    color: '#4caf50',
+                                    backgroundColor: '#e8f5e8',
+                                    '&:hover': { backgroundColor: '#c8e6c9' }
+                                  }}
+                                >
+                                  <Add />
+                                </IconButton>
+                              )}
+                              {(formData.harvestDates || []).length > 1 && (
+                                <IconButton
+                                  onClick={() => removeHarvestDate(index)}
+                                  sx={{
+                                    color: '#f44336',
+                                    backgroundColor: '#ffebee',
+                                    '&:hover': { backgroundColor: '#ffcdd2' }
+                                  }}
+                                >
+                                  <Remove />
+                                </IconButton>
+                              )}
+                            </Box>
+                          </Box>
+                        )}
                       </Box>
-                    ) : (
-                      // Desktop Layout - Horizontal
-                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>
-                        <Box sx={{ flex: '1 1 40%' }}>
-                          <StyledTextField
-                            fullWidth
-                            type="date"
-                            label="Date"
-                            value={harvestDate?.date ?? ''}
-                            onChange={(e) => handleHarvestDateChange(index, 'date', e.target.value)}
-                            InputLabelProps={{ shrink: true }}
-                            isMobile={isMobile}
-                          />
-                        </Box>
-                        <Box sx={{ flex: '1 1 40%' }}>
-                          <StyledTextField
-                            fullWidth
-                            label="Label (optional)"
-                            placeholder="e.g., First harvest, Main crop"
-                            value={harvestDate?.label ?? ''}
-                            onChange={(e) => handleHarvestDateChange(index, 'label', e.target.value)}
-                            isMobile={isMobile}
-                          />
-                        </Box>
-                        <Box sx={{ flex: '0 0 auto', display: 'flex', gap: 1 }}>
-                          {index === (formData.harvestDates || []).length - 1 && (
-                            <IconButton
-                              onClick={addHarvestDate}
-                              sx={{ 
-                                color: '#4caf50',
-                                backgroundColor: '#e8f5e8',
-                                '&:hover': { backgroundColor: '#c8e6c9' }
-                              }}
-                            >
-                              <Add />
-                            </IconButton>
-                          )}
-                          {(formData.harvestDates || []).length > 1 && (
-                            <IconButton
-                              onClick={() => removeHarvestDate(index)}
-                              sx={{ 
-                                color: '#f44336',
-                                backgroundColor: '#ffebee',
-                                '&:hover': { backgroundColor: '#ffcdd2' }
-                              }}
-                            >
-                              <Remove />
-                            </IconButton>
-                          )}
-                        </Box>
-                      </Box>
+                    ))}
+                    {errors.harvestDates && (
+                      <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                        {errors.harvestDates}
+                      </Typography>
                     )}
-                  </Box>
-                ))}
-                {errors.harvestDates && (
-                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
-                    {errors.harvestDates}
-                  </Typography>
-                )}
-              </Grid>
+                  </Grid>
 
-              {/* Webcam Option */}
-              <Grid item xs={12}>
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }}>
-                  Do you have a Webcam on the field?
-                </Typography>
-                <RadioGroup
-                  row
-                  value={formData.hasWebcam ? 'Yes' : 'No'}
-                  onChange={(e) => handleInputChange('hasWebcam', e.target.value === 'Yes')}
-                  sx={{ 
-                    gap: isMobile ? 1.5 : 3,
-                    justifyContent: 'center',
-                    '& .MuiFormControlLabel-root': {
-                      margin: 0,
-                      padding: isMobile ? '8px 16px' : '12px 24px',
-                      paddingLeft: '8px',
-                      borderRadius: '12px',
-                      border: '2px solid #e2e8f0',
-                      backgroundColor: '#f8fafc',
-                      transition: 'all 0.2s ease',
-                      minWidth: isMobile ? 'auto' : 'unset',
-                      flex: isMobile ? '0 0 auto' : 'unset',
-                      '&:hover': {
-                        backgroundColor: '#e8f5e8',
-                        borderColor: '#4caf50'
-                      },
-                      '& .MuiTypography-root': {
-                        fontSize: isMobile ? '14px' : '1rem'
-                      }
-                    }
-                  }}
-                >
-                  <FormControlLabel value="Yes" control={<Radio sx={{ color: '#4caf50' }} />} label="Yes" />
-                  <FormControlLabel value="No" control={<Radio sx={{ color: '#4caf50' }} />} label="No" />
-                </RadioGroup>
-              </Grid>
-            </Grid>
-          </FormSection>
+                  {/* Webcam Option */}
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }}>
+                      Do you have a Webcam on the field?
+                    </Typography>
+                    <RadioGroup
+                      row
+                      value={formData.hasWebcam ? 'Yes' : 'No'}
+                      onChange={(e) => handleInputChange('hasWebcam', e.target.value === 'Yes')}
+                      sx={{
+                        gap: isMobile ? 1.5 : 3,
+                        justifyContent: 'center',
+                        '& .MuiFormControlLabel-root': {
+                          margin: 0,
+                          padding: isMobile ? '8px 16px' : '12px 24px',
+                          paddingLeft: '8px',
+                          borderRadius: '12px',
+                          border: '2px solid #e2e8f0',
+                          backgroundColor: '#f8fafc',
+                          transition: 'all 0.2s ease',
+                          minWidth: isMobile ? 'auto' : 'unset',
+                          flex: isMobile ? '0 0 auto' : 'unset',
+                          '&:hover': {
+                            backgroundColor: '#e8f5e8',
+                            borderColor: '#4caf50'
+                          },
+                          '& .MuiTypography-root': {
+                            fontSize: isMobile ? '14px' : '1rem'
+                          }
+                        }
+                      }}
+                    >
+                      <FormControlLabel value="Yes" control={<Radio sx={{ color: '#4caf50' }} />} label="Yes" />
+                      <FormControlLabel value="No" control={<Radio sx={{ color: '#4caf50' }} />} label="No" />
+                    </RadioGroup>
+                  </Grid>
+                </Grid>
+              </FormSection>
 
-          {/* Pricing Information Section */}
-          <FormSection>
-            <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Pricing Information</SectionTitle>
-            <Grid container spacing={3}>
-              {/* Selling Amount */}
-              <Grid item xs={12}>
-                <StyledTextField
-                  fullWidth
-                  label="Selling Amount"
-                  placeholder="How much product to sell by app?"
-                  value={formData.sellingAmount}
-                  onChange={(e) => handleInputChange('sellingAmount', e.target.value)}
-                  error={!!errors.sellingAmount}
-                  helperText={errors.sellingAmount}
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">Kg</InputAdornment>
-                  }}
-                  isMobile={isMobile}
-                />
-              </Grid>
-
-              {/* Selling Price */}
-              <Grid item xs={12}>
-                <StyledTextField
-                  fullWidth
-                  label="Selling Price"
-                  placeholder="How much do you sell your product to the app?"
-                  value={formData.sellingPrice}
-                  onChange={(e) => handleInputChange('sellingPrice', e.target.value)}
-                  error={!!errors.sellingPrice}
-                  helperText={errors.sellingPrice || "Suggested product price on the app $/Kg"}
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
-                  }}
-                  isMobile={isMobile}
-                />
-              </Grid>
-
-              {/* Retail Price */}
-              <Grid item xs={12}>
-                <StyledTextField
-                  fullWidth
-                  label="Retail Price"
-                  placeholder="What is the retail price in the supermarket?"
-                  value={formData.retailPrice}
-                  onChange={(e) => handleInputChange('retailPrice', e.target.value)}
-                  error={!!errors.retailPrice}
-                  helperText={errors.retailPrice}
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
-                  }}
-                  isMobile={isMobile}
-                />
-              </Grid>
-
-              {/* Virtual Production Rate */}
-              <Grid item xs={12}>
-                <StyledTextField
-                  fullWidth
-                  label="Virtual Production Rate"
-                  placeholder="How much do you want to sell your product to users?"
-                  value={formData.virtualProductionRate}
-                  onChange={(e) => handleInputChange('virtualProductionRate', e.target.value)}
-                  isMobile={isMobile}
-                  helperText="This is your virtual production rate per area (Kg/m²)"
-                  InputProps={{
-                    endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
-                  }}
-                />
-              </Grid>
-
-              {/* Virtual Cost Per Unit */}
-              <Grid item xs={12}>
-                <Typography variant="body2" sx={{ 
-                  color: '#666', 
-                  fontStyle: 'italic',
-                  mb: 1,
-                  pl: 1,
-                  display: isMobile ? 'none' : 'block'
-                }}>
-                  This is your virtual cost of your land (per unit): $/m²
-                </Typography>
-              </Grid>
-
-              {/* App Fees */}
-              <Grid item xs={12}>
-                <Typography variant="body2" sx={{ 
-                  color: '#666', 
-                  fontStyle: 'italic',
-                  mb: 1,
-                  pl: 1,
-                  display: isMobile ? 'none' : 'block'
-                }}>
-                  These are the app fees: $
-                </Typography>
-              </Grid>
-
-              {/* User Area Virtual Rent Price */}
-              <Grid item xs={12}>
-                <Typography variant="body2" sx={{ 
-                  color: '#666', 
-                  fontStyle: 'italic',
-                  mb: 1,
-                  pl: 1,
-                  display: isMobile ? 'none' : 'block'
-                }}>
-                  This is the user area virtual "rent" price per unit: $/m²
-                </Typography>
-              </Grid>
-            </Grid>
-          </FormSection>
-
-          {/* Shipping & Delivery Section */}
-          <FormSection>
-            <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Shipping & Delivery</SectionTitle>
-            <Grid container spacing={3}>
-              {/* Shipping Options */}
-              <Grid item xs={12}>
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, fontSize: isMobile ? '14px' : '0.875rem' }}>
-                  Shipping Options
-                </Typography>
-                <RadioGroup
-                  row
-                  value={formData.shippingOption}
-                  onChange={(e) => handleInputChange('shippingOption', e.target.value)}
-                  sx={{ 
-                    display: 'flex', 
-                    gap: 2,
-                    '& .MuiFormControlLabel-root': {
-                      flex: 1,
-                      margin: 0,
-                      padding: 2,
-                      border: '1px solid #e0e0e0',
-                      borderRadius: 2,
-                      '&:hover': {
-                        backgroundColor: '#f5f5f5'
-                      }
-                    }
-                  }}
-                >
-                  <FormControlLabel 
-                    value="Shipping" 
-                    control={<Radio />} 
-                    label="Shipping"
-                    sx={{ textAlign: 'center' }}
-                  />
-                  <FormControlLabel 
-                    value="Pickup" 
-                    control={<Radio />} 
-                    label="Pickup"
-                    sx={{ textAlign: 'center' }}
-                  />
-                  <FormControlLabel 
-                    value="Both" 
-                    control={<Radio />} 
-                    label="Both"
-                    sx={{ textAlign: 'center' }}
-                  />
-                </RadioGroup>
-              </Grid>
-
-              {/* Delivery Date */}
-              <Grid item xs={12} >
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }} >
-                  Estimated Delivery Time
-                </Typography>
-                <StyledTextField
-                  fullWidth
-                  type="date"
-                  label="Delivery Time"
-                  value={formData.deliveryTime}
-                  onChange={(e) => handleInputChange('deliveryTime', e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  helperText="Choose the expected delivery date after harvest"
-                  isMobile={isMobile}
-                />
-              </Grid>
-
-              {/* Delivery Charges */}
-              <Grid item xs={12}>
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748' }}>
-                  Enter your delivery charges
-                </Typography>
-                {(formData.deliveryCharges || []).map((charge, index) => (
-                  <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+              {/* Pricing Information Section */}
+              <FormSection>
+                <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Pricing Information</SectionTitle>
+                <Grid container spacing={3}>
+                  {/* Selling Amount */}
+                  <Grid item xs={12}>
                     <StyledTextField
-                      label="Upto"
-                      placeholder="Upto"
-                      value={charge?.upto ?? ''}
-                      onChange={(e) => updateDeliveryCharge(index, 'upto', e.target.value)}
+                      fullWidth
+                      label="Selling Amount"
+                      placeholder="How much product to sell by app?"
+                      value={formData.sellingAmount}
+                      onChange={(e) => handleInputChange('sellingAmount', e.target.value)}
+                      error={!!errors.sellingAmount}
+                      helperText={errors.sellingAmount}
                       InputProps={{
                         endAdornment: <InputAdornment position="end">Kg</InputAdornment>
                       }}
-                      sx={{ flex: 1 }}
                       isMobile={isMobile}
                     />
-                    <StyledTextField
-                      label="Amount"
-                      placeholder="Amount"
-                      value={charge?.amount ?? ''}
-                      onChange={(e) => updateDeliveryCharge(index, 'amount', e.target.value)}
-                      InputProps={{
-                        endAdornment: <InputAdornment position="end">$</InputAdornment>
-                      }}
-                      sx={{ flex: 1 }}
-                      isMobile={isMobile}
-                    />
-                    {(formData.deliveryCharges || []).length > 1 && (
-                      <IconButton 
-                        onClick={() => removeDeliveryCharge(index)}
-                        sx={{ 
-                          color: '#f56565',
-                          backgroundColor: '#fed7d7',
-                          '&:hover': {
-                            backgroundColor: '#feb2b2'
-                          }
-                        }}
-                      >
-                        <Remove />
-                      </IconButton>
-                    )}
-                  </Box>
-                ))}
-                <StyledButton
-                  startIcon={<Add />}
-                  onClick={addDeliveryCharge}
-                  variant="outlined"
-                  sx={{ mt: 1, fontSize: isMobile ? '12px' : '0.875rem' }}
-                >
-                  Add More
-                </StyledButton>
-              </Grid>
+                  </Grid>
 
-              {/* Shipping Scope */}
-              <Grid item xs={12}>
-                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748' }}>
-                  Shipping Scope
-                </Typography>
-                <RadioGroup
-                  value={formData.shippingScope}
-                  onChange={(e) => handleInputChange('shippingScope', e.target.value)}
-                  sx={{ 
-                    gap: 2,
-                    '& .MuiFormControlLabel-root': {
-                      margin: 0,
-                      padding: '12px 20px',
-                      borderRadius: '12px',
-                      border: '2px solid #e2e8f0',
-                      backgroundColor: '#f8fafc',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        backgroundColor: '#e8f5e8',
-                        borderColor: '#4caf50'
-                      }
-                    }
-                  }}
-                >
-                  <FormControlLabel 
-                    value="Global" 
-                    control={<Radio sx={{ color: '#4caf50' }} />} 
-                    label="Global"
-                  />
-                  <FormControlLabel 
-                    value="Country" 
-                    control={<Radio sx={{ color: '#4caf50' }} />} 
-                    label="Country"
-                  />
-                  <FormControlLabel 
-                    value="City" 
-                    control={<Radio sx={{ color: '#4caf50' }} />} 
-                    label="City"
-                  />
-                </RadioGroup>
-                <Typography variant="body2" sx={{ mt: 2, color: '#718096', fontStyle: 'italic' }}>
-                  After clicking the city radio button, the process begins by selecting the country, followed by the state, and finally the city
-                </Typography>
-              </Grid>
-            </Grid>
-          </FormSection>
-        </Box>
+                  {/* Selling Price */}
+                  <Grid item xs={12}>
+                    <StyledTextField
+                      fullWidth
+                      label="Selling Price"
+                      placeholder="How much do you sell your product to the app?"
+                      value={formData.sellingPrice}
+                      onChange={(e) => handleInputChange('sellingPrice', e.target.value)}
+                      error={!!errors.sellingPrice}
+                      helperText={errors.sellingPrice || "Suggested product price on the app $/Kg"}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
+                      }}
+                      isMobile={isMobile}
+                    />
+                  </Grid>
+
+                  {/* Retail Price */}
+                  <Grid item xs={12}>
+                    <StyledTextField
+                      fullWidth
+                      label="Retail Price"
+                      placeholder="What is the retail price in the supermarket?"
+                      value={formData.retailPrice}
+                      onChange={(e) => handleInputChange('retailPrice', e.target.value)}
+                      error={!!errors.retailPrice}
+                      helperText={errors.retailPrice}
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
+                      }}
+                      isMobile={isMobile}
+                    />
+                  </Grid>
+
+                  {/* Virtual Production Rate */}
+                  <Grid item xs={12}>
+                    <StyledTextField
+                      fullWidth
+                      label="Virtual Production Rate"
+                      placeholder="How much do you want to sell your product to users?"
+                      value={formData.virtualProductionRate}
+                      onChange={(e) => handleInputChange('virtualProductionRate', e.target.value)}
+                      isMobile={isMobile}
+                      helperText="This is your virtual production rate per area (Kg/m²)"
+                      InputProps={{
+                        endAdornment: <InputAdornment position="end">$/Kg</InputAdornment>
+                      }}
+                    />
+                  </Grid>
+
+                  {/* Virtual Cost Per Unit */}
+                  <Grid item xs={12}>
+                    <Typography variant="body2" sx={{
+                      color: '#666',
+                      fontStyle: 'italic',
+                      mb: 1,
+                      pl: 1,
+                      display: isMobile ? 'none' : 'block'
+                    }}>
+                      This is your virtual cost of your land (per unit): $/m²
+                    </Typography>
+                  </Grid>
+
+                  {/* App Fees */}
+                  <Grid item xs={12}>
+                    <Typography variant="body2" sx={{
+                      color: '#666',
+                      fontStyle: 'italic',
+                      mb: 1,
+                      pl: 1,
+                      display: isMobile ? 'none' : 'block'
+                    }}>
+                      These are the app fees: $
+                    </Typography>
+                  </Grid>
+
+                  {/* User Area Virtual Rent Price */}
+                  <Grid item xs={12}>
+                    <Typography variant="body2" sx={{
+                      color: '#666',
+                      fontStyle: 'italic',
+                      mb: 1,
+                      pl: 1,
+                      display: isMobile ? 'none' : 'block'
+                    }}>
+                      This is the user area virtual "rent" price per unit: $/m²
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </FormSection>
+
+              {/* Shipping & Delivery Section */}
+              <FormSection>
+                <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Shipping & Delivery</SectionTitle>
+                <Grid container spacing={3}>
+                  {/* Shipping Options */}
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, fontSize: isMobile ? '14px' : '0.875rem' }}>
+                      Shipping Options
+                    </Typography>
+                    <RadioGroup
+                      row
+                      value={formData.shippingOption}
+                      onChange={(e) => handleInputChange('shippingOption', e.target.value)}
+                      sx={{
+                        display: 'flex',
+                        gap: 2,
+                        '& .MuiFormControlLabel-root': {
+                          flex: 1,
+                          margin: 0,
+                          padding: 2,
+                          border: '1px solid #e0e0e0',
+                          borderRadius: 2,
+                          '&:hover': {
+                            backgroundColor: '#f5f5f5'
+                          }
+                        }
+                      }}
+                    >
+                      <FormControlLabel
+                        value="Shipping"
+                        control={<Radio />}
+                        label="Shipping"
+                        sx={{ textAlign: 'center' }}
+                      />
+                      <FormControlLabel
+                        value="Pickup"
+                        control={<Radio />}
+                        label="Pickup"
+                        sx={{ textAlign: 'center' }}
+                      />
+                      <FormControlLabel
+                        value="Both"
+                        control={<Radio />}
+                        label="Both"
+                        sx={{ textAlign: 'center' }}
+                      />
+                    </RadioGroup>
+                  </Grid>
+
+                  {/* Delivery Date */}
+                  <Grid item xs={12} >
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748', fontSize: isMobile ? '14px' : '0.875rem' }} >
+                      Estimated Delivery Time
+                    </Typography>
+                    <StyledTextField
+                      fullWidth
+                      type="date"
+                      label="Delivery Time"
+                      value={formData.deliveryTime}
+                      onChange={(e) => handleInputChange('deliveryTime', e.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      helperText="Choose the expected delivery date after harvest"
+                      isMobile={isMobile}
+                    />
+                  </Grid>
+
+                  {/* Delivery Charges */}
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748' }}>
+                      Enter your delivery charges
+                    </Typography>
+                    {(formData.deliveryCharges || []).map((charge, index) => (
+                      <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+                        <StyledTextField
+                          label="Upto"
+                          placeholder="Upto"
+                          value={charge?.upto ?? ''}
+                          onChange={(e) => updateDeliveryCharge(index, 'upto', e.target.value)}
+                          InputProps={{
+                            endAdornment: <InputAdornment position="end">Kg</InputAdornment>
+                          }}
+                          sx={{ flex: 1 }}
+                          isMobile={isMobile}
+                        />
+                        <StyledTextField
+                          label="Amount"
+                          placeholder="Amount"
+                          value={charge?.amount ?? ''}
+                          onChange={(e) => updateDeliveryCharge(index, 'amount', e.target.value)}
+                          InputProps={{
+                            endAdornment: <InputAdornment position="end">$</InputAdornment>
+                          }}
+                          sx={{ flex: 1 }}
+                          isMobile={isMobile}
+                        />
+                        {(formData.deliveryCharges || []).length > 1 && (
+                          <IconButton
+                            onClick={() => removeDeliveryCharge(index)}
+                            sx={{
+                              color: '#f56565',
+                              backgroundColor: '#fed7d7',
+                              '&:hover': {
+                                backgroundColor: '#feb2b2'
+                              }
+                            }}
+                          >
+                            <Remove />
+                          </IconButton>
+                        )}
+                      </Box>
+                    ))}
+                    <StyledButton
+                      startIcon={<Add />}
+                      onClick={addDeliveryCharge}
+                      variant="outlined"
+                      sx={{ mt: 1, fontSize: isMobile ? '12px' : '0.875rem' }}
+                    >
+                      Add More
+                    </StyledButton>
+                  </Grid>
+
+                  {/* Shipping Scope */}
+                  <Grid item xs={12}>
+                    <Typography variant="body1" sx={{ mb: 2, fontWeight: 500, color: '#2d3748' }}>
+                      Shipping Scope
+                    </Typography>
+                    <RadioGroup
+                      value={formData.shippingScope}
+                      onChange={(e) => handleInputChange('shippingScope', e.target.value)}
+                      sx={{
+                        gap: 2,
+                        '& .MuiFormControlLabel-root': {
+                          margin: 0,
+                          padding: '12px 20px',
+                          borderRadius: '12px',
+                          border: '2px solid #e2e8f0',
+                          backgroundColor: '#f8fafc',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: '#e8f5e8',
+                            borderColor: '#4caf50'
+                          }
+                        }
+                      }}
+                    >
+                      <FormControlLabel
+                        value="Global"
+                        control={<Radio sx={{ color: '#4caf50' }} />}
+                        label="Global"
+                      />
+                      <FormControlLabel
+                        value="Country"
+                        control={<Radio sx={{ color: '#4caf50' }} />}
+                        label="Country"
+                      />
+                      <FormControlLabel
+                        value="City"
+                        control={<Radio sx={{ color: '#4caf50' }} />}
+                        label="City"
+                      />
+                    </RadioGroup>
+                    <Typography variant="body2" sx={{ mt: 2, color: '#718096', fontStyle: 'italic' }}>
+                      After clicking the city radio button, the process begins by selecting the country, followed by the state, and finally the city
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </FormSection>
+            </Box>
+          );
+        })()}
       </StyledDialogContent>
 
       {/* Location Picker Dialog */}
@@ -1791,29 +1985,34 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
         }
       />
 
-      <StyledDialogActions isMobile={isMobile}>
-        <StyledButton 
-          onClick={handleClose}
-          variant="outlined"
-          isMobile={isMobile}
-        >
-          Cancel
-        </StyledButton>
-        <StyledButton 
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={isSubmitting}
-          isMobile={isMobile}
-          sx={{ 
-            backgroundColor: '#4caf50',
-            '&:hover': {
-              backgroundColor: '#45a049'
-            }
-          }}
-        >
-          {isSubmitting ? 'Creating...' : (editMode ? 'Update Field' : 'Create Field')}
-        </StyledButton>
-      </StyledDialogActions>
+      {/* Only show standard actions if we are in the normal form state */}
+      {(!checkingLicense &&
+        (user?.approval_status || (user?.is_active ? 'approved' : 'pending')) === 'approved' &&
+        farmsList && farmsList.length > 0) && (
+          <StyledDialogActions isMobile={isMobile}>
+            <StyledButton
+              onClick={handleClose}
+              variant="outlined"
+              isMobile={isMobile}
+            >
+              Cancel
+            </StyledButton>
+            <StyledButton
+              onClick={handleSubmit}
+              variant="contained"
+              disabled={isSubmitting}
+              isMobile={isMobile}
+              sx={{
+                backgroundColor: '#4caf50',
+                '&:hover': {
+                  backgroundColor: '#45a049'
+                }
+              }}
+            >
+              {isSubmitting ? 'Creating...' : (editMode ? 'Update Field' : 'Create Field')}
+            </StyledButton>
+          </StyledDialogActions>
+        )}
     </StyledDialog>
   );
 };
@@ -1823,7 +2022,7 @@ export default CreateFieldForm;
 // Function to format location to show only city and country
 const formatLocationDisplay = (location) => {
   if (!location) return '';
-  
+
   const parts = location.split(', ');
   if (parts.length >= 2) {
     // If we have at least 2 parts, take the first (city) and last (country)
@@ -1831,7 +2030,7 @@ const formatLocationDisplay = (location) => {
     const country = parts[parts.length - 1];
     return `${city}, ${country}`;
   }
-  
+
   // If only one part or less, return as is
   return location;
 };

@@ -156,10 +156,15 @@ const MyFarms = () => {
   };
 
 
-  // Load user preferences
+  // Check for URL params to auto-open modal
   useEffect(() => {
-    // Removed localStorage.getItem('userPreferences') as localStorage is deprecated.
-    // User currency will default to 'USD' or be managed by a future backend.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') === 'add-farm') {
+      setAddFarmOpen(true);
+      // Clean up URL without refreshing
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
   }, []);
 
   const fetchFarms = async () => {
