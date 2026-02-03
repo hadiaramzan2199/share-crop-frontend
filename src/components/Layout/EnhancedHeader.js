@@ -124,6 +124,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentChats, setRecentChats] = useState([]);
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [desktopSearchExpanded, setDesktopSearchExpanded] = useState(false);
+  const desktopSearchRef = useRef(null);
+  const desktopSearchInputRef = useRef(null);
 
   // Get user-specific coins when user changes
   const loadUserCoins = useCallback(async () => {
@@ -591,16 +594,18 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           </Box>
         )}
         <Toolbar sx={{
-          justifyContent: 'space-between',
+          display: 'flex',
+          alignItems: 'center',
           px: { xs: 1, sm: 2 },
           minHeight: { xs: 56, sm: 64 },
-          gap: 1
+          gap: 1,
+          position: 'relative'
         }}>
           {/* Left Section - Menu Button */}
           <Box sx={{
             display: 'flex',
             alignItems: 'center',
-            minWidth: 'fit-content'
+            flexShrink: 0
           }}>
             <IconButton
               edge="start"
@@ -618,17 +623,16 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             </IconButton>
           </Box>
 
-          {/* Center Section - Company Logo/Name */}
+          {/* Center Section - Company Logo (dedicated space, no overlap) */}
           {!isMobile && (
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 cursor: 'pointer',
-                position: 'absolute',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                zIndex: 1
+                flexShrink: 0,
+                px: 0.5
               }}
               onClick={() => navigate('/')}
             >
@@ -643,7 +647,8 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   display: 'flex',
                   alignItems: 'center',
                   gap: 1,
-                  fontSize: { sm: '1.25rem', md: '1.5rem' }
+                  fontSize: { sm: '1.25rem', md: '1.5rem' },
+                  whiteSpace: 'nowrap'
                 }}
               >
                 🌱 ShareCrop
@@ -656,10 +661,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             display: 'flex',
             alignItems: 'center',
             gap: { xs: 0.5, sm: 1 },
-            position: 'relative',
             flex: 1,
             justifyContent: 'flex-end',
-            maxWidth: { xs: '70%', sm: 'auto' }
+            minWidth: 0,
+            maxWidth: { xs: '70%', sm: 'none' }
           }}>
             {!isAdmin && (
               <>
@@ -761,24 +766,55 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     </Box>
                   )}
 
-                  {/* Desktop Search Bar */}
+                  {/* Desktop Search Bar - icon only, expands on hover/focus */}
                   {!isMobile && (
                     <Box
+                      ref={desktopSearchRef}
+                      onMouseEnter={() => setDesktopSearchExpanded(true)}
+                      onMouseLeave={() => {
+                        if (!document.activeElement || !desktopSearchRef.current?.contains(document.activeElement)) {
+                          setDesktopSearchExpanded(false);
+                        }
+                      }}
+                      onClick={() => {
+                        if (!desktopSearchExpanded) {
+                          setDesktopSearchExpanded(true);
+                          setTimeout(() => desktopSearchInputRef.current?.focus(), 50);
+                        }
+                      }}
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
                         backgroundColor: 'rgba(0,0,0,0.04)',
                         borderRadius: 20,
-                        px: 2,
+                        overflow: 'hidden',
+                        transition: 'width 0.25s ease, min-width 0.25s ease',
+                        width: desktopSearchExpanded ? 220 : 40,
+                        minWidth: desktopSearchExpanded ? 220 : 40,
+                        px: desktopSearchExpanded ? 2 : 0,
                         py: 0.5,
-                        minWidth: '220px',
-                        position: 'relative'
+                        position: 'relative',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0,0,0,0.06)'
+                        }
                       }}
                     >
-                      {!isMobile && <Search sx={{ color: 'grey.500', mr: 1, fontSize: '20px' }} />}
+                      <Search sx={{ color: 'grey.500', flexShrink: 0, ml: 1, fontSize: '20px' }} />
                       <InputBase
+                        inputRef={desktopSearchInputRef}
                         placeholder="Search fields, crops..."
                         value={searchQuery}
+                        onBlur={() => {
+                          if (!desktopSearchRef.current?.contains(document.activeElement)) {
+                            setDesktopSearchExpanded(false);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          setDesktopSearchExpanded(true);
+                          if (searchQuery.trim() && filteredFields.length > 0) {
+                            setSearchAnchorEl(e.currentTarget.parentElement);
+                          }
+                        }}
                         onChange={(e) => {
                           const query = e.target.value;
                           setSearchQuery(query);
@@ -813,12 +849,14 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                             onSearchChange(query);
                           }
                         }}
-                        onFocus={(e) => {
-                          if (searchQuery.trim() && filteredFields.length > 0) {
-                            setSearchAnchorEl(e.currentTarget.parentElement);
-                          }
+                        sx={{
+                          flex: 1,
+                          fontSize: '14px',
+                          minWidth: 0,
+                          opacity: desktopSearchExpanded ? 1 : 0,
+                          transition: 'opacity 0.2s ease',
+                          pointerEvents: desktopSearchExpanded ? 'auto' : 'none'
                         }}
-                        sx={{ flex: 1, fontSize: '14px' }}
                       />
                     </Box>
                   )}
@@ -967,49 +1005,48 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               </IconButton>
             )}
 
-            {/* Profile - Clickable Avatar with Menu */}
-            {!isMobile && (
-              <>
-                <Box
-                  onClick={(e) => setUserMenuAnchorEl(e.currentTarget)}
+            {/* Profile - Clickable Avatar with Menu (visible on mobile and desktop) */}
+            <>
+              <Box
+                onClick={(e) => setUserMenuAnchorEl(e.currentTarget)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  cursor: 'pointer',
+                  borderRadius: 2,
+                  px: 0.5,
+                  py: 0.5,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                  },
+                }}
+              >
+                <Avatar
+                  src={user?.profile_image_url}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    cursor: 'pointer',
-                    borderRadius: 2,
-                    px: 1,
-                    py: 0.5,
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                    },
+                    width: isMobile ? 32 : 36,
+                    height: isMobile ? 32 : 36,
+                    bgcolor: 'primary.main',
+                    fontSize: isMobile ? '12px' : '14px',
+                    cursor: 'pointer'
                   }}
                 >
-                  <Avatar
-                    src={user?.profile_image_url}
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      bgcolor: 'primary.main',
-                      fontSize: '14px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {!user?.profile_image_url && (user?.name?.charAt(0)?.toUpperCase() || 'U')}
-                  </Avatar>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 500,
-                      color: 'text.primary',
-                      display: { xs: 'none', sm: 'block' }
-                    }}
-                  >
-                    {user?.name?.split(' ')[0] || user?.name || 'User'}
-                  </Typography>
-                </Box>
+                  {!user?.profile_image_url && (user?.name?.charAt(0)?.toUpperCase() || 'U')}
+                </Avatar>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 500,
+                    color: 'text.primary',
+                    display: { xs: 'none', sm: 'block' }
+                  }}
+                >
+                  {user?.name?.split(' ')[0] || user?.name || 'User'}
+                </Typography>
+              </Box>
 
-                <Menu
+              <Menu
                   anchorEl={userMenuAnchorEl}
                   open={Boolean(userMenuAnchorEl)}
                   onClose={() => setUserMenuAnchorEl(null)}
@@ -1065,8 +1102,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     Logout
                   </MenuItem>
                 </Menu>
-              </>
-            )}
+            </>
 
             {/* Notifications Dropdown */}
             <Menu
