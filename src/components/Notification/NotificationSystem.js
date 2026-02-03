@@ -18,19 +18,17 @@ const NotificationSystem = ({ notifications, onRemove }) => {
     onRemove(id);
   };
 
-  // Set up auto-close timeouts
+  // Set up auto-close timeouts (capture ref at start so cleanup uses same reference)
   useEffect(() => {
+    const currentTimeouts = timeoutRefs.current;
     notifications.forEach((notification) => {
-      if (notification.duration && notification.duration > 0 && !timeoutRefs.current[notification.id]) {
-        timeoutRefs.current[notification.id] = setTimeout(() => {
+      if (notification.duration && notification.duration > 0 && !currentTimeouts[notification.id]) {
+        currentTimeouts[notification.id] = setTimeout(() => {
           handleClose(notification.id, null);
         }, notification.duration);
       }
     });
-
-    // Cleanup function
     return () => {
-      const currentTimeouts = timeoutRefs.current;
       Object.values(currentTimeouts).forEach(timeout => {
         if (timeout) clearTimeout(timeout);
       });
