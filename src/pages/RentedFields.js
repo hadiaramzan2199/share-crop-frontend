@@ -69,7 +69,7 @@ const RentedFields = () => {
     'AUD': { 'USD': 0.74, 'EUR': 0.63, 'GBP': 0.54, 'PKR': 207, 'JPY': 81, 'CAD': 0.93, 'CHF': 0.68 },
     'CHF': { 'USD': 1.09, 'EUR': 0.93, 'GBP': 0.79, 'PKR': 305, 'JPY': 119, 'CAD': 1.35, 'AUD': 1.47 }
   };
-  
+
   // Currency symbols mapping
   const currencySymbols = {
     'USD': '$',
@@ -81,39 +81,39 @@ const RentedFields = () => {
     'AUD': 'A$',
     'CHF': 'CHF'
   };
-  
+
 
 
   // Currency conversion function
   const convertCurrency = (amount, fromCurrency, toCurrency) => {
     if (fromCurrency === toCurrency) return amount;
-    
+
     // Convert to USD first if not already
     let usdAmount = amount;
     if (fromCurrency !== 'USD') {
       usdAmount = amount * (exchangeRates[fromCurrency]?.['USD'] || 1);
     }
-    
+
     // Convert from USD to target currency
     if (toCurrency === 'USD') {
       return usdAmount;
     }
-    
+
     return usdAmount * (exchangeRates['USD']?.[toCurrency] || 1);
   };
 
   // Helper function to calculate rent period
   const calculateRentPeriod = (startDate, endDate = null) => {
     if (!startDate) return '6 months'; // Default fallback
-    
+
     const start = new Date(startDate);
     if (isNaN(start.getTime())) return '6 months'; // Invalid date fallback
-    
+
     // If no end date provided, calculate from start date to 6 months later
     const end = endDate ? new Date(endDate) : new Date(start.getTime() + (6 * 30 * 24 * 60 * 60 * 1000));
-    
+
     if (isNaN(end.getTime())) return '6 months'; // Invalid end date fallback
-    
+
     const diffTime = Math.abs(end - start);
     const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
     return `${diffMonths} months`;
@@ -122,10 +122,10 @@ const RentedFields = () => {
   // Calculate harvest date based on crop type and order date
   const calculateHarvestDate = (createdAt, cropType) => {
     if (!createdAt) return 'Not specified';
-    
+
     const orderDate = new Date(createdAt);
     let harvestMonths = 3; // Default 3 months
-    
+
     // Different crops have different growing periods
     const cropGrowthPeriods = {
       'apple': 6,
@@ -146,15 +146,15 @@ const RentedFields = () => {
       'strawberry': 3,
       'grape': 6
     };
-    
+
     // Get growth period for the crop type
     const cropKey = cropType?.toLowerCase().replace(/\s+/g, '-');
     harvestMonths = cropGrowthPeriods[cropKey] || 3;
-    
+
     // Calculate harvest date
     const harvestDate = new Date(orderDate);
     harvestDate.setMonth(harvestDate.getMonth() + harvestMonths);
-    
+
     // Format the date
     const options = { day: 'numeric', month: 'short', year: 'numeric' };
     return harvestDate.toLocaleDateString('en-US', options);
@@ -211,7 +211,7 @@ const RentedFields = () => {
                 const added = (item.date || item.label) ? [...listPrev, item] : listPrev;
                 const s = new Set();
                 return added.filter(it => {
-                  const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch {} return typeof it.date === 'string' ? it.date : ''; })();
+                  const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
                   const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
                   if (s.has(k)) return false; s.add(k); return true;
                 });
@@ -237,26 +237,26 @@ const RentedFields = () => {
             rentPeriod: calculateRentPeriod(f.created_at)
           }));
           setRentedFields(aggregated);
-          } catch (dbError) {
-            console.error('Error fetching from database, falling back to stored data:', dbError);
-            
-            // Fallback to stored fields if database fails
-            const storedFields = storageService.getItem('rentedFields') || [];
-            
-            if (storedFields.length > 0) {
-              const formattedFields = storedFields.map((field, index) => ({
-                ...field,
-                monthlyRent: convertCurrency(field.monthlyRent || field.price_per_m2 * field.area, 'USD', userCurrency),
-                progress: Math.floor(((field.id || index) * 43) % 100) + 1, // Deterministic progress
-                rentPeriod: calculateRentPeriod(field.created_at),
-                status: 'Active'
-              }));
-              setRentedFields(formattedFields);
-            } else {
-              // No fallback to mock data - just set empty array if no data
-              setRentedFields([]);
-            }
+        } catch (dbError) {
+          console.error('Error fetching from database, falling back to stored data:', dbError);
+
+          // Fallback to stored fields if database fails
+          const storedFields = storageService.getItem('rentedFields') || [];
+
+          if (storedFields.length > 0) {
+            const formattedFields = storedFields.map((field, index) => ({
+              ...field,
+              monthlyRent: convertCurrency(field.monthlyRent || field.price_per_m2 * field.area, 'USD', userCurrency),
+              progress: Math.floor(((field.id || index) * 43) % 100) + 1, // Deterministic progress
+              rentPeriod: calculateRentPeriod(field.created_at),
+              status: 'Active'
+            }));
+            setRentedFields(formattedFields);
+          } else {
+            // No fallback to mock data - just set empty array if no data
+            setRentedFields([]);
           }
+        }
       } catch (error) {
         console.error('Error loading rented fields:', error);
       } finally {
@@ -265,6 +265,7 @@ const RentedFields = () => {
     };
 
     loadRentedFields();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, userCurrency]);
 
 
@@ -345,7 +346,7 @@ const RentedFields = () => {
         `${f.progress}%`,
         f.status
       ]);
-      
+
       const csvContent = [
         headers.join(','),
         ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
@@ -505,7 +506,7 @@ const RentedFields = () => {
           </body>
         </html>
       `;
-      
+
       printWindow.document.write(reportHTML);
       printWindow.document.close();
     }
@@ -514,10 +515,10 @@ const RentedFields = () => {
   // Calculate stats for overview
   const totalFields = rentedFields.length;
   const activeFields = rentedFields.filter(f => f.status === 'Active').length;
-  
+
   // Calculate total monthly rent with proper dummy values
   let totalMonthlyRent = rentedFields.reduce((sum, field) => sum + (field.monthlyRent || 0), 0);
-  
+
   // Always use dummy revenue for demo purposes - generate realistic values
   if (totalFields > 0) {
     // Generate deterministic dummy monthly revenue: $800-$1500 per field
@@ -531,16 +532,16 @@ const RentedFields = () => {
   } else {
     totalMonthlyRent = 0;
   }
-  
+
   // Calculate average progress with proper validation
   const validFields = rentedFields.filter(field => field.progress && !isNaN(field.progress));
-  const avgProgress = validFields.length > 0 ? 
+  const avgProgress = validFields.length > 0 ?
     Math.round(validFields.reduce((sum, field) => sum + field.progress, 0) / validFields.length) : 0;
 
   // Show loading state while data is being fetched
   if (loading) {
     return (
-      <Box sx={{ 
+      <Box sx={{
         minHeight: '100vh',
         backgroundColor: '#f8fafc',
         p: 3,
@@ -554,22 +555,22 @@ const RentedFields = () => {
   }
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 3
     }}>
       {/* Header Section */}
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
           <Box>
-            <Typography 
-              variant="h5" 
-              sx={{ 
+            <Typography
+              variant="h5"
+              sx={{
                 fontWeight: 700,
                 color: '#1e293b',
                 mb: 0.5,
@@ -637,7 +638,7 @@ const RentedFields = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -754,7 +755,7 @@ const RentedFields = () => {
         </Grid>
 
         {/* Fields Grid */}
-        <Box sx={{ 
+        <Box sx={{
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
@@ -766,227 +767,227 @@ const RentedFields = () => {
           width: '100%'
         }}>
           {displayedFields.map((field) => (
-              <Card 
-                key={field.id}
-                elevation={0}
-                sx={{ 
-                  height: 420, // Fixed height for consistency
-                  minWidth: 0, // Prevent overflow
-                  maxWidth: '100%', // Ensure it doesn't exceed grid cell
-                  width: '100%', // Full width of grid cell
-                  borderRadius: 2,
-                  border: '1px solid #e2e8f0',
-                  bgcolor: 'white',
-                  transition: 'all 0.3s ease',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden', // Prevent content overflow
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 16px rgba(0,0,0,0.08)',
-                    borderColor: '#3b82f6'
-                  }
-                }}
-              >
-                <CardContent sx={{ 
-                  p: 0, 
-                  '&:last-child': { pb: 0 }, 
-                  flex: 1, 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  minWidth: 0, // Prevent overflow
-                  width: '100%'
-                }}>
-                  {/* Card Header */}
-                  <Box sx={{ p: 2, pb: 1.5, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography 
-                          variant="h6" 
-                          sx={{ 
-                            fontWeight: 600, 
-                            color: '#1a202c',
-                            fontSize: '1rem',
-                            mb: 0.25,
-                            lineHeight: 1.3,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {field.name || field.farmName}
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <LocationOn sx={{ fontSize: 14, color: '#64748b', mr: 0.5 }} />
-                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                            {field.location}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-
-                    <Chip 
-                      label={field.status} 
-                      color={getStatusColor(field.status)}
-                      size="small"
-                      sx={{ 
-                        fontWeight: 600,
-                        fontSize: '0.7rem',
-                        height: 24,
-                        borderRadius: 1.5
-                      }}
-                    />
-                  </Box>
-
-                  <Divider sx={{ mx: 2 }} />
-
-                  {/* Field Details */}
-                  <Box sx={{ p: 2, py: 1.5, flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
-                    <Stack spacing={1.5}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Agriculture sx={{ fontSize: 16, color: '#10b981', mr: 0.75 }} />
-                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                            Crop Type
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
-                          {field.cropType}
-                        </Typography>
-                      </Box>
-
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <CalendarToday sx={{ fontSize: 16, color: '#3b82f6', mr: 0.75 }} />
-                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                            Harvest Date
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
-                          {(() => {
-                            const items = Array.isArray(field.selected_harvests) ? field.selected_harvests : [];
-                            const format = (date) => {
-                              if (!date) return '';
-                              if (typeof date === 'string' && /\d{1,2}\s\w{3}\s\d{4}/.test(date)) return date;
-                              const d = new Date(date);
-                              if (isNaN(d.getTime())) return date;
-                              return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-                            };
-                            if (items.length) {
-                              const mapped = items.map(it => {
-                                const dt = format(it.date);
-                                if (it.label && dt) return `${dt} (${it.label})`;
-                                if (dt) return dt;
-                                if (it.label) return it.label;
-                                return '';
-                              }).filter(Boolean);
-                              const uniq = Array.from(new Set(mapped));
-                              return uniq.join(', ');
-                            }
-                            return field.selected_harvest_label || field.selected_harvest_date || 'Not specified';
-                          })()}
-                        </Typography>
-                      </Box>
-
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" style={{ marginRight: 6 }}><path d="M20 8h-3V4H7v4H4v12h16V8zm-9 0V6h2v2h-2zm9 10H4v-8h16v8z"/></svg>
-                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                            Mode of Shipping
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
-                          {(() => {
-                            const modes = Array.isArray(field.shipping_modes) ? field.shipping_modes : [];
-                            const uniq = (() => { const s = new Set(); return modes.filter(m => { const k = (m || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })();
-                            return uniq.length ? uniq.join(', ') : 'Not specified';
-                          })()}
-                        </Typography>
-                      </Box>
-
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                          Occupied: {field.area}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
-                          {field.available_area}m² available
-                        </Typography>
-                      </Box>
-
-                      {/* Progress Bar */}
-                      <Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                            Occupied Area
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
-                            {field.progress}%
-                          </Typography>
-                        </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={field.progress} 
-                          sx={{ 
-                            height: 6, 
-                            borderRadius: 3,
-                            bgcolor: '#f1f5f9',
-                            '& .MuiLinearProgress-bar': {
-                              borderRadius: 3,
-                              bgcolor: field.progress === 100 ? '#10b981' : field.progress > 50 ? '#3b82f6' : '#f59e0b'
-                            }
-                          }} 
-                        />
-                      </Box>
-                    </Stack>
-                  </Box>
-
-                  <Divider sx={{ mx: 2 }} />
-
-                  {/* Card Footer */}
-                  <Box sx={{ p: 2, pt: 1.5, mt: 'auto', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Typography 
-                        variant="h5" 
-                        sx={{ 
-                          fontWeight: 700, 
-                          color: '#059669',
-                          fontSize: '1.25rem'
+            <Card
+              key={field.id}
+              elevation={0}
+              sx={{
+                height: 420, // Fixed height for consistency
+                minWidth: 0, // Prevent overflow
+                maxWidth: '100%', // Ensure it doesn't exceed grid cell
+                width: '100%', // Full width of grid cell
+                borderRadius: 2,
+                border: '1px solid #e2e8f0',
+                bgcolor: 'white',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden', // Prevent content overflow
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 16px rgba(0,0,0,0.08)',
+                  borderColor: '#3b82f6'
+                }
+              }}
+            >
+              <CardContent sx={{
+                p: 0,
+                '&:last-child': { pb: 0 },
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: 0, // Prevent overflow
+                width: '100%'
+              }}>
+                {/* Card Header */}
+                <Box sx={{ p: 2, pb: 1.5, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: '#1a202c',
+                          fontSize: '1rem',
+                          mb: 0.25,
+                          lineHeight: 1.3,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        {currencySymbols[userCurrency]}{(() => {
-                          const amount = parseFloat(field.monthlyRent) || 0;
-                          return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        })()}
+                        {field.name || field.farmName}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
-                        /month
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <LocationOn sx={{ fontSize: 14, color: '#64748b', mr: 0.5 }} />
+                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                          {field.location}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+
+                  <Chip
+                    label={field.status}
+                    color={getStatusColor(field.status)}
+                    size="small"
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '0.7rem',
+                      height: 24,
+                      borderRadius: 1.5
+                    }}
+                  />
+                </Box>
+
+                <Divider sx={{ mx: 2 }} />
+
+                {/* Field Details */}
+                <Box sx={{ p: 2, py: 1.5, flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
+                  <Stack spacing={1.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Agriculture sx={{ fontSize: 16, color: '#10b981', mr: 0.75 }} />
+                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                          Crop Type
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
+                        {field.cropType}
                       </Typography>
                     </Box>
-                    
-                      <Button 
-                      variant="contained" 
-                      fullWidth
-                        size="small" 
-                        startIcon={<Visibility />}
-                      onClick={() => handleFieldClick(field)}
-                        sx={{ 
-                          borderRadius: 1.5,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.75rem',
-                        bgcolor: '#4caf50',
-                        py: 0.75,
-                        '&:hover': {
-                          bgcolor: '#059669'
-                        }
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <CalendarToday sx={{ fontSize: 16, color: '#3b82f6', mr: 0.75 }} />
+                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                          Harvest Date
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
+                        {(() => {
+                          const items = Array.isArray(field.selected_harvests) ? field.selected_harvests : [];
+                          const format = (date) => {
+                            if (!date) return '';
+                            if (typeof date === 'string' && /\d{1,2}\s\w{3}\s\d{4}/.test(date)) return date;
+                            const d = new Date(date);
+                            if (isNaN(d.getTime())) return date;
+                            return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                          };
+                          if (items.length) {
+                            const mapped = items.map(it => {
+                              const dt = format(it.date);
+                              if (it.label && dt) return `${dt} (${it.label})`;
+                              if (dt) return dt;
+                              if (it.label) return it.label;
+                              return '';
+                            }).filter(Boolean);
+                            const uniq = Array.from(new Set(mapped));
+                            return uniq.join(', ');
+                          }
+                          return field.selected_harvest_label || field.selected_harvest_date || 'Not specified';
+                        })()}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" style={{ marginRight: 6 }}><path d="M20 8h-3V4H7v4H4v12h16V8zm-9 0V6h2v2h-2zm9 10H4v-8h16v8z" /></svg>
+                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                          Mode of Shipping
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
+                        {(() => {
+                          const modes = Array.isArray(field.shipping_modes) ? field.shipping_modes : [];
+                          const uniq = (() => { const s = new Set(); return modes.filter(m => { const k = (m || '').toLowerCase(); if (s.has(k)) return false; s.add(k); return true; }); })();
+                          return uniq.length ? uniq.join(', ') : 'Not specified';
+                        })()}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                        Occupied: {field.area}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
+                        {field.available_area}m² available
+                      </Typography>
+                    </Box>
+
+                    {/* Progress Bar */}
+                    <Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                          Occupied Area
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a202c', fontSize: '0.8rem' }}>
+                          {field.progress}%
+                        </Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={field.progress}
+                        sx={{
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: '#f1f5f9',
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 3,
+                            bgcolor: field.progress === 100 ? '#10b981' : field.progress > 50 ? '#3b82f6' : '#f59e0b'
+                          }
+                        }}
+                      />
+                    </Box>
+                  </Stack>
+                </Box>
+
+                <Divider sx={{ mx: 2 }} />
+
+                {/* Card Footer */}
+                <Box sx={{ p: 2, pt: 1.5, mt: 'auto', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        fontWeight: 700,
+                        color: '#059669',
+                        fontSize: '1.25rem'
                       }}
                     >
-                      View Details
-                    </Button>
+                      {currencySymbols[userCurrency]}{(() => {
+                        const amount = parseFloat(field.monthlyRent) || 0;
+                        return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                      })()}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '0.8rem' }}>
+                      /month
+                    </Typography>
                   </Box>
-                </CardContent>
-              </Card>
+
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="small"
+                    startIcon={<Visibility />}
+                    onClick={() => handleFieldClick(field)}
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                      bgcolor: '#4caf50',
+                      py: 0.75,
+                      '&:hover': {
+                        bgcolor: '#059669'
+                      }
+                    }}
+                  >
+                    View Details
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
           ))}
         </Box>
 
@@ -1011,19 +1012,19 @@ const RentedFields = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
                   Showing {startIndex + 1}-{Math.min(endIndex, rentedFields.length)} of {rentedFields.length} fields
                 </Typography>
-                <Button 
-                  variant="outlined" 
+                <Button
+                  variant="outlined"
                   size="medium"
                   onClick={handleViewAllClick}
-                  sx={{ 
+                  sx={{
                     borderRadius: 2,
                     textTransform: 'none',
                     fontWeight: 600,
                     px: 3,
                     py: 1,
-                          borderColor: '#e2e8f0',
-                          color: '#64748b',
-                          '&:hover': {
+                    borderColor: '#e2e8f0',
+                    color: '#64748b',
+                    '&:hover': {
                       borderColor: '#3b82f6',
                       color: '#3b82f6',
                       bgcolor: '#f8fafc'
@@ -1031,30 +1032,30 @@ const RentedFields = () => {
                   }}
                 >
                   View All Fields ({rentedFields.length})
-                      </Button>
+                </Button>
               </>
             ) : (
-                      <Button 
-                variant="outlined" 
+              <Button
+                variant="outlined"
                 size="medium"
                 onClick={handleViewAllClick}
-                        sx={{ 
+                sx={{
                   borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
+                  textTransform: 'none',
+                  fontWeight: 600,
                   px: 3,
                   py: 1,
                   borderColor: '#e2e8f0',
                   color: '#64748b',
-                          '&:hover': {
+                  '&:hover': {
                     borderColor: '#3b82f6',
                     color: '#3b82f6',
                     bgcolor: '#f8fafc'
-                          }
-                        }}
-                      >
+                  }
+                }}
+              >
                 Show Paginated View
-                      </Button>
+              </Button>
             )}
           </Box>
         )}
@@ -1083,11 +1084,11 @@ const RentedFields = () => {
                 Rented Field Details
               </Typography>
               {selectedField?.status && (
-                <Chip 
-                  label={selectedField.status} 
+                <Chip
+                  label={selectedField.status}
                   color={getStatusColor(selectedField.status)}
                   size="small"
-                  sx={{ 
+                  sx={{
                     fontWeight: 600,
                     height: 24,
                     fontSize: '0.7rem'
@@ -1095,16 +1096,16 @@ const RentedFields = () => {
                 />
               )}
             </Box>
-            <IconButton 
-              onClick={handleCloseFieldDetail} 
-              sx={{ 
+            <IconButton
+              onClick={handleCloseFieldDetail}
+              sx={{
                 color: '#64748b',
                 '&:hover': { backgroundColor: '#f3f4f6' }
               }}
             >
               <Close />
             </IconButton>
-                    </Stack>
+          </Stack>
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
           {selectedField && (
@@ -1124,7 +1125,7 @@ const RentedFields = () => {
                       <Typography variant="body2" sx={{ color: '#1e293b', fontWeight: 500 }}>
                         {selectedField.location}
                       </Typography>
-                  </Box>
+                    </Box>
                   </Stack>
 
                   <Stack direction="row" alignItems="flex-start" spacing={1.5}>
@@ -1136,7 +1137,7 @@ const RentedFields = () => {
                       <Typography variant="body2" sx={{ color: '#1e293b', fontWeight: 500 }}>
                         {selectedField.cropType}
                       </Typography>
-            </Box>
+                    </Box>
                   </Stack>
 
                   <Stack direction="row" alignItems="flex-start" spacing={1.5}>
@@ -1208,9 +1209,9 @@ const RentedFields = () => {
                         {selectedField.progress}%
                       </Typography>
                     </Stack>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={selectedField.progress} 
+                    <LinearProgress
+                      variant="determinate"
+                      value={selectedField.progress}
                       sx={{
                         height: 10,
                         borderRadius: 5,
@@ -1279,17 +1280,17 @@ const RentedFields = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2.5, pt: 2, borderTop: '1px solid #e2e8f0' }}>
-            <Button 
-            onClick={handleCloseFieldDetail} 
-              variant="outlined" 
-              sx={{ 
+          <Button
+            onClick={handleCloseFieldDetail}
+            variant="outlined"
+            sx={{
               borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
+              textTransform: 'none',
+              fontWeight: 600,
               px: 3,
-                borderColor: '#e2e8f0',
-                color: '#64748b',
-                '&:hover': {
+              borderColor: '#e2e8f0',
+              color: '#64748b',
+              '&:hover': {
                 borderColor: '#059669',
                 color: '#059669',
                 bgcolor: '#f0fdf4'
@@ -1297,7 +1298,7 @@ const RentedFields = () => {
             }}
           >
             Close
-            </Button>
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1323,7 +1324,7 @@ const RentedFields = () => {
               <Typography variant="body2" color="text.secondary">
                 Comprehensive overview of your rented fields
               </Typography>
-          </Box>
+            </Box>
             <IconButton onClick={handleCloseReport} sx={{ color: '#64748b' }}>
               <Close />
             </IconButton>
@@ -1408,8 +1409,8 @@ const RentedFields = () => {
                         </TableCell>
                         <TableCell>{field.progress}%</TableCell>
                         <TableCell>
-                          <Chip 
-                            label={field.status} 
+                          <Chip
+                            label={field.status}
                             color={getStatusColor(field.status)}
                             size="small"
                             sx={{ fontWeight: 600 }}
@@ -1425,20 +1426,20 @@ const RentedFields = () => {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
               Report generated on {new Date().toLocaleString()}
             </Typography>
-      </Box>
+          </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
-          <Button 
-            onClick={() => handleDownloadReport('csv')} 
-            variant="outlined" 
+          <Button
+            onClick={() => handleDownloadReport('csv')}
+            variant="outlined"
             startIcon={<Download />}
             sx={{ borderRadius: 1.5 }}
           >
             Download CSV
           </Button>
-          <Button 
-            onClick={() => handleDownloadReport('pdf')} 
-            variant="outlined" 
+          <Button
+            onClick={() => handleDownloadReport('pdf')}
+            variant="outlined"
             startIcon={<Description />}
             sx={{ borderRadius: 1.5 }}
           >

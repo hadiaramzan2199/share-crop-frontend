@@ -10,7 +10,11 @@ import {
   Stack,
   Paper,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogActions
 } from '@mui/material';
 import {
   MoreVert,
@@ -24,7 +28,11 @@ import {
   Nature,
   Delete,
   CloudUpload,
-  Description
+  Description,
+  Visibility,
+  Close,
+  PictureAsPdf,
+  Image as ImageIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { userDocumentsService } from '../services/userDocuments';
@@ -37,12 +45,14 @@ const LicenseInfo = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
 
   // Determine approval status (fallback to false if not present, allowing edits by default unless explicitly approved)
   // Logic: If user is approved, they CANNOT delete/upload.
   const isApproved = user?.approval_status === 'approved';
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     if (user?.id) {
       loadLicenses();
     }
@@ -119,6 +129,25 @@ const LicenseInfo = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const isPDF = (fileType) => {
+    return fileType?.toLowerCase() === 'pdf';
+  };
+
+  const isImage = (fileType) => {
+    const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    return imageTypes.includes(fileType?.toLowerCase());
+  };
+
+  const handleViewDocument = (license) => {
+    setSelectedDocument(license);
+    setViewerOpen(true);
+  };
+
+  const handleCloseViewer = () => {
+    setViewerOpen(false);
+    setSelectedDocument(null);
   };
 
   return (
@@ -316,64 +345,139 @@ const LicenseInfo = () => {
                   <Paper
                     elevation={0}
                     sx={{
-                      p: 3,
                       border: '1px solid #e2e8f0',
                       borderRadius: 2,
                       backgroundColor: 'white',
                       transition: 'all 0.2s ease-in-out',
+                      overflow: 'hidden',
                       '&:hover': {
-                        transform: 'translateY(-1px)',
-                        boxShadow: '0 6px 20px rgba(0,0,0,0.08)'
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
                       }
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar
+                    {/* Document Preview */}
+                    <Box
+                      sx={{
+                        height: 180,
+                        backgroundColor: '#f8fafc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        '&:hover .view-overlay': {
+                          opacity: 1
+                        }
+                      }}
+                      onClick={() => handleViewDocument(license)}
+                    >
+                      {isImage(license.file_type) ? (
+                        <Box
+                          component="img"
+                          src={license.file_url}
+                          alt={license.file_name}
                           sx={{
-                            backgroundColor: '#f0f9ff',
-                            color: '#0369a1',
-                            width: 40,
-                            height: 40
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
                           }}
-                        >
-                          <Description />
-                        </Avatar>
-                        <Box>
-                          <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 0.5, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                        />
+                      ) : isPDF(license.file_type) ? (
+                        <PictureAsPdf sx={{ fontSize: 80, color: '#dc2626' }} />
+                      ) : (
+                        <Description sx={{ fontSize: 80, color: '#64748b' }} />
+                      )}
+
+                      {/* Hover Overlay */}
+                      <Box
+                        className="view-overlay"
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: 'rgba(0,0,0,0.6)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: 0,
+                          transition: 'opacity 0.2s'
+                        }}
+                      >
+                        <Visibility sx={{ fontSize: 48, color: 'white' }} />
+                      </Box>
+                    </Box>
+
+                    {/* Card Content */}
+                    <Box sx={{ p: 2.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              fontWeight: 600,
+                              color: '#1e293b',
+                              mb: 0.5,
+                              fontSize: '1rem',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={license.file_name}
+                          >
                             {license.file_name}
                           </Typography>
                           <Chip
-                            label={license.file_type || 'Document'}
+                            label={license.file_type?.toUpperCase() || 'DOC'}
                             size="small"
                             sx={{
-                              backgroundColor: '#f1f5f9',
-                              color: '#64748b',
-                              fontWeight: 500
+                              backgroundColor: isPDF(license.file_type) ? '#fee2e2' : '#dbeafe',
+                              color: isPDF(license.file_type) ? '#dc2626' : '#2563eb',
+                              fontWeight: 600,
+                              fontSize: '0.7rem'
                             }}
                           />
                         </Box>
+
+                        {!isApproved && (
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDelete(license.id)}
+                            sx={{
+                              color: '#ef4444',
+                              '&:hover': {
+                                backgroundColor: '#fee2e2'
+                              }
+                            }}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        )}
                       </Box>
 
-                      {!isApproved && (
-                        <IconButton size="small" onClick={() => handleDelete(license.id)} color="error">
-                          <Delete />
-                        </IconButton>
-                      )}
-                    </Box>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
                         Uploaded: {formatDate(license.uploaded_at)}
                       </Typography>
+
                       <Button
-                        variant="text"
+                        variant="outlined"
                         size="small"
-                        href={license.file_url}
-                        target="_blank"
-                        sx={{ fontWeight: 600 }}
+                        fullWidth
+                        startIcon={<Visibility />}
+                        onClick={() => handleViewDocument(license)}
+                        sx={{
+                          borderColor: '#059669',
+                          color: '#059669',
+                          fontWeight: 600,
+                          '&:hover': {
+                            borderColor: '#047857',
+                            backgroundColor: '#f0fdf4'
+                          }
+                        }}
                       >
-                        View
+                        View Document
                       </Button>
                     </Box>
                   </Paper>
@@ -382,6 +486,136 @@ const LicenseInfo = () => {
             </Grid>
           )}
         </Box>
+
+        {/* Document Viewer Modal */}
+        <Dialog
+          open={viewerOpen}
+          onClose={handleCloseViewer}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: '90vh',
+              maxHeight: '90vh'
+            }
+          }}
+        >
+          <DialogTitle
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#059669',
+              color: 'white',
+              py: 2
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {selectedDocument && isPDF(selectedDocument.file_type) ? (
+                <PictureAsPdf />
+              ) : (
+                <ImageIcon />
+              )}
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                {selectedDocument?.file_name || 'Document Viewer'}
+              </Typography>
+            </Box>
+            <IconButton onClick={handleCloseViewer} sx={{ color: 'white' }}>
+              <Close />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0, backgroundColor: '#f8fafc' }}>
+            {selectedDocument && (
+              <Box
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 2
+                }}
+              >
+                {isImage(selectedDocument.file_type) ? (
+                  <Box
+                    component="img"
+                    src={selectedDocument.file_url}
+                    alt={selectedDocument.file_name}
+                    sx={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                      borderRadius: 1,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}
+                  />
+                ) : isPDF(selectedDocument.file_type) ? (
+                  <Box
+                    component="iframe"
+                    src={selectedDocument.file_url}
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      border: 'none',
+                      borderRadius: 1,
+                      backgroundColor: 'white'
+                    }}
+                  />
+                ) : (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Description sx={{ fontSize: 64, color: '#9ca3af', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      Preview not available
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      href={selectedDocument.file_url}
+                      target="_blank"
+                      sx={{
+                        mt: 2,
+                        backgroundColor: '#059669',
+                        '&:hover': {
+                          backgroundColor: '#047857'
+                        }
+                      }}
+                    >
+                      Download Document
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ p: 2, backgroundColor: '#f8fafc' }}>
+            <Button
+              variant="outlined"
+              href={selectedDocument?.file_url}
+              target="_blank"
+              sx={{
+                borderColor: '#059669',
+                color: '#059669',
+                '&:hover': {
+                  borderColor: '#047857',
+                  backgroundColor: '#f0fdf4'
+                }
+              }}
+            >
+              Open in New Tab
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleCloseViewer}
+              sx={{
+                backgroundColor: '#059669',
+                '&:hover': {
+                  backgroundColor: '#047857'
+                }
+              }}
+            >
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Box>
   );

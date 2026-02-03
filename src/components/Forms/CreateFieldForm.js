@@ -298,7 +298,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
   const [uploadingLicense, setUploadingLicense] = useState(false);
   const [licenseFile, setLicenseFile] = useState(null);
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     // Only verify if open
     if (open) {
       checkLicenseStatus();

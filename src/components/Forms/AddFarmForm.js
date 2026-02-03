@@ -177,7 +177,6 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
     location: '',
     coordinates: { lat: null, lng: null },
     webcamUrl: '',
-    webcamUrl: '',
     description: '',
     licenseFile: null
   });

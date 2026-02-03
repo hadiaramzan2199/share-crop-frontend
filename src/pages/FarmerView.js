@@ -125,7 +125,8 @@ const FarmerView = () => {
       }
     };
     loadData();
-  }, [user, addNotification]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only depend on user.id, not addNotification which changes on every render
 
   // Handle delayed zoom to newly created fields
   useEffect(() => {

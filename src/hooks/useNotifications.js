@@ -40,7 +40,7 @@ const useNotifications = () => {
       try {
         const userNotifications = await notificationsService.getUserNotifications(user.id);
         // Filter out notifications that have been dismissed locally
-        const filteredNotifications = Array.isArray(userNotifications) 
+        const filteredNotifications = Array.isArray(userNotifications)
           ? userNotifications.filter(notif => !dismissedNotificationIds.current.has(notif.id))
           : [];
         setBackendNotifications(filteredNotifications);
@@ -48,21 +48,22 @@ const useNotifications = () => {
         console.error('Failed to fetch notifications:', error);
       }
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only depend on user.id to prevent infinite loops
 
   // Mark backend notification as read
   // Note: We only update local state since the backend endpoint may not exist
   const markNotificationAsRead = useCallback(async (notificationId) => {
     // Mark as dismissed locally so it won't reappear on next fetch
     dismissedNotificationIds.current.add(notificationId);
-    
+
     // Update local state to mark as read
-    setBackendNotifications(prev => 
-      prev.map(notif => 
+    setBackendNotifications(prev =>
+      prev.map(notif =>
         notif.id === notificationId ? { ...notif, read: true } : notif
       )
     );
-    
+
     // Optionally try to call API, but don't fail if it doesn't exist
     try {
       await notificationsService.markAsRead(notificationId);
@@ -80,24 +81,27 @@ const useNotifications = () => {
   // Poll for new notifications every 30 seconds for real-time updates (reduced from 5s to avoid spam)
   useEffect(() => {
     if (user && user.id) {
-      const interval = setInterval(fetchBackendNotifications, 30000);
+      const interval = setInterval(() => {
+        fetchBackendNotifications();
+      }, 30000);
       return () => clearInterval(interval);
     }
-  }, [user, fetchBackendNotifications]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, fetchBackendNotifications]); // fetchBackendNotifications is now stable
 
   // Auto-dismiss backend notifications after 4 seconds
   // Note: We mark them as read locally, but don't call the API since the endpoint may not exist
   useEffect(() => {
     const timers = [];
-    
+
     backendNotifications.forEach(notification => {
       if (!notification.read && !dismissedNotificationIds.current.has(notification.id)) {
         const timer = setTimeout(() => {
           // Mark as dismissed so it won't reappear
           dismissedNotificationIds.current.add(notification.id);
           // Just mark as read locally without API call to avoid 404 errors
-          setBackendNotifications(prev => 
-            prev.map(notif => 
+          setBackendNotifications(prev =>
+            prev.map(notif =>
               notif.id === notification.id ? { ...notif, read: true } : notif
             )
           );

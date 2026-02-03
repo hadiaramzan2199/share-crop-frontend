@@ -45,12 +45,6 @@ const Complaints = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    if (user?.id) {
-      loadComplaints();
-    }
-  }, [user, statusFilter, loadComplaints]);
-
   const loadComplaints = useCallback(async () => {
     try {
       setLoading(true);
@@ -65,6 +59,12 @@ const Complaints = () => {
       setLoading(false);
     }
   }, [statusFilter, user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadComplaints();
+    }
+  }, [user?.id, statusFilter, loadComplaints]);
 
   const handleComplaintSuccess = () => {
     loadComplaints();

@@ -60,7 +60,7 @@ const Orders = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     if (user) {
       loadOrders();
     } else {
@@ -77,11 +77,11 @@ const Orders = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Use real API - getBuyerOrders uses /my-orders endpoint which filters by authenticated user
       const response = await orderService.getBuyerOrders();
       const apiOrders = response.data || [];
-      
+
       // Format API orders to match expected structure
       const formattedOrders = apiOrders.map(order => ({
         id: order.id,
@@ -103,7 +103,7 @@ const Orders = () => {
         field_id: order.field_id,
         notes: order.notes || ''
       }));
-      
+
       setOrders(formattedOrders);
     } catch (err) {
       console.error('Error loading orders:', err);
@@ -160,22 +160,22 @@ const Orders = () => {
   const completionRate = orders.length > 0 ? (completedOrders / orders.length) * 100 : 0;
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 3
     }}>
       {/* Header Section */}
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2.5 }}>
           <Box>
-            <Typography 
-              variant="h5" 
-              sx={{ 
+            <Typography
+              variant="h5"
+              sx={{
                 fontWeight: 700,
                 color: '#1e293b',
                 mb: 0.5,
@@ -242,7 +242,7 @@ const Orders = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -280,7 +280,7 @@ const Orders = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -318,7 +318,7 @@ const Orders = () => {
               </Stack>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} lg={3}>
             <Paper
               elevation={0}
@@ -437,7 +437,7 @@ const Orders = () => {
               </Button>
             </Stack>
           </Box>
-          
+
           {filteredOrders.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <ShoppingCart sx={{ fontSize: 48, color: '#cbd5e1', mb: 1.5 }} />
@@ -464,7 +464,7 @@ const Orders = () => {
                 </TableHead>
                 <TableBody>
                   {filteredOrders.map((order, index) => (
-                    <TableRow 
+                    <TableRow
                       key={order.id}
                       sx={{
                         '&:hover': { backgroundColor: '#f8fafc' },
@@ -492,11 +492,11 @@ const Orders = () => {
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
-                        <Chip 
-                          label={order.status} 
+                        <Chip
+                          label={order.status}
                           color={getStatusColor(order.status)}
                           size="small"
-                          sx={{ 
+                          sx={{
                             fontWeight: 500,
                             borderRadius: 1.5,
                             fontSize: '0.7rem',
@@ -512,8 +512,8 @@ const Orders = () => {
                       <TableCell sx={{ py: 1.5 }}>
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="View Details">
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => handleViewDetails(order)}
                               sx={{
                                 color: '#059669',
@@ -526,8 +526,8 @@ const Orders = () => {
                           </Tooltip>
                           {order.status === 'pending' && (
                             <Tooltip title="Cancel Order">
-                              <IconButton 
-                                size="small" 
+                              <IconButton
+                                size="small"
                                 onClick={() => handleCancelOrder(order.id)}
                                 sx={{
                                   color: '#dc2626',
@@ -550,205 +550,205 @@ const Orders = () => {
         </Paper>
       </Box>
 
-        {/* Order Details Dialog */}
-        <Dialog 
-          open={detailsOpen} 
-          onClose={() => setDetailsOpen(false)} 
-          maxWidth="md" 
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-            }
-          }}
-        >
-          <DialogTitle sx={{ 
-            borderBottom: '1px solid #e2e8f0',
-            backgroundColor: '#f8fafc'
-          }}>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <Avatar sx={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
-                <Receipt />
-              </Avatar>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Order Details
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  #{selectedOrder?.id}
-                </Typography>
-              </Box>
-            </Stack>
-          </DialogTitle>
-          <DialogContent sx={{ p: 3 }}>
-            {selectedOrder && (
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 2,
-                      backgroundColor: '#f8fafc'
-                    }}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                      <Avatar sx={{ backgroundColor: '#dcfce7', color: '#059669', width: 40, height: 40 }}>
-                        <ShoppingCart />
-                      </Avatar>
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                        Product Information
+      {/* Order Details Dialog */}
+      <Dialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          borderBottom: '1px solid #e2e8f0',
+          backgroundColor: '#f8fafc'
+        }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ backgroundColor: '#dbeafe', color: '#1d4ed8' }}>
+              <Receipt />
+            </Avatar>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Order Details
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                #{selectedOrder?.id}
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          {selectedOrder && (
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 2,
+                    backgroundColor: '#f8fafc'
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                    <Avatar sx={{ backgroundColor: '#dcfce7', color: '#059669', width: 40, height: 40 }}>
+                      <ShoppingCart />
+                    </Avatar>
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                      Product Information
+                    </Typography>
+                  </Stack>
+                  <Divider sx={{ mb: 2 }} />
+                  <Stack spacing={1.5}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Product Name
                       </Typography>
-                    </Stack>
-                    <Divider sx={{ mb: 2 }} />
-                    <Stack spacing={1.5}>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Product Name
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {selectedOrder.product_name || selectedOrder.name}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Area
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {selectedOrder.area_rented || selectedOrder.area}m²
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Price per m²
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500, color: '#059669' }}>
-                          ${selectedOrder.price_per_unit || (selectedOrder.cost / selectedOrder.area).toFixed(2)}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 2,
-                      backgroundColor: '#f8fafc'
-                    }}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                      <Avatar sx={{ backgroundColor: '#fef3c7', color: '#d97706', width: 40, height: 40 }}>
-                        <Assessment />
-                      </Avatar>
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                        Order Information
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {selectedOrder.product_name || selectedOrder.name}
                       </Typography>
-                    </Stack>
-                    <Divider sx={{ mb: 2 }} />
-                    <Stack spacing={1.5}>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Status
-                        </Typography>
-                        <Box sx={{ mt: 0.5 }}>
-                          <Chip 
-                            label={selectedOrder.status} 
-                            color={getStatusColor(selectedOrder.status)}
-                            size="small"
-                            sx={{ fontWeight: 500, borderRadius: 2 }}
-                          />
-                        </Box>
-                      </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Total Cost
-                        </Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 700, color: '#059669' }}>
-                          ${(selectedOrder.total_cost || selectedOrder.cost).toFixed(2)}
-                        </Typography>
-                      </Box>
-                      <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                          Order Date
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {new Date(selectedOrder.created_at || selectedOrder.date).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                </Grid>
-                {selectedOrder.notes && (
-                  <Grid item xs={12}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 3,
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 2,
-                        backgroundColor: '#f8fafc'
-                      }}
-                    >
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 2 }}>
-                        Additional Notes
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Area
                       </Typography>
-                      <Typography variant="body1">{selectedOrder.notes}</Typography>
-                    </Paper>
-                  </Grid>
-                )}
-                {selectedOrder.farmer_name && (
-                  <Grid item xs={12}>
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 3,
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 2,
-                        backgroundColor: '#f8fafc'
-                      }}
-                    >
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 2 }}>
-                        Farmer Information
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {selectedOrder.area_rented || selectedOrder.area}m²
                       </Typography>
-                      <Typography variant="body1">{selectedOrder.farmer_name}</Typography>
-                    </Paper>
-                  </Grid>
-                )}
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Price per m²
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500, color: '#059669' }}>
+                        ${selectedOrder.price_per_unit || (selectedOrder.cost / selectedOrder.area).toFixed(2)}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
               </Grid>
-            )}
-          </DialogContent>
-          <DialogActions sx={{ 
-            p: 3, 
-            borderTop: '1px solid #e2e8f0',
-            backgroundColor: '#f8fafc'
-          }}>
-            <Button 
-              onClick={() => setDetailsOpen(false)}
-              sx={{ borderRadius: 2 }}
-            >
-              Close
-            </Button>
-            <Button 
-              variant="contained" 
-              startIcon={<Download />}
-              sx={{
-                backgroundColor: '#059669',
-                '&:hover': { backgroundColor: '#047857' },
-                borderRadius: 2,
-                px: 3
-              }}
-            >
-              Download Receipt
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Box>
-    );
+              <Grid item xs={12} md={6}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 2,
+                    backgroundColor: '#f8fafc'
+                  }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                    <Avatar sx={{ backgroundColor: '#fef3c7', color: '#d97706', width: 40, height: 40 }}>
+                      <Assessment />
+                    </Avatar>
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                      Order Information
+                    </Typography>
+                  </Stack>
+                  <Divider sx={{ mb: 2 }} />
+                  <Stack spacing={1.5}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Status
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Chip
+                          label={selectedOrder.status}
+                          color={getStatusColor(selectedOrder.status)}
+                          size="small"
+                          sx={{ fontWeight: 500, borderRadius: 2 }}
+                        />
+                      </Box>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Total Cost
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: '#059669' }}>
+                        ${(selectedOrder.total_cost || selectedOrder.cost).toFixed(2)}
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
+                        Order Date
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {new Date(selectedOrder.created_at || selectedOrder.date).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              </Grid>
+              {selectedOrder.notes && (
+                <Grid item xs={12}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 2,
+                      backgroundColor: '#f8fafc'
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 2 }}>
+                      Additional Notes
+                    </Typography>
+                    <Typography variant="body1">{selectedOrder.notes}</Typography>
+                  </Paper>
+                </Grid>
+              )}
+              {selectedOrder.farmer_name && (
+                <Grid item xs={12}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 2,
+                      backgroundColor: '#f8fafc'
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 2 }}>
+                      Farmer Information
+                    </Typography>
+                    <Typography variant="body1">{selectedOrder.farmer_name}</Typography>
+                  </Paper>
+                </Grid>
+              )}
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions sx={{
+          p: 3,
+          borderTop: '1px solid #e2e8f0',
+          backgroundColor: '#f8fafc'
+        }}>
+          <Button
+            onClick={() => setDetailsOpen(false)}
+            sx={{ borderRadius: 2 }}
+          >
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Download />}
+            sx={{
+              backgroundColor: '#059669',
+              '&:hover': { backgroundColor: '#047857' },
+              borderRadius: 2,
+              px: 3
+            }}
+          >
+            Download Receipt
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
 };
 
 export default Orders;

@@ -245,9 +245,9 @@ const MyFarms = () => {
   };
 
   // Load my farms data
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     fetchFarms();
-  }, [user]);
+  }, [user?.id]); // Only depend on user.id to prevent excessive refetching
 
   const getStatusColor = (status) => {
     switch (status) {

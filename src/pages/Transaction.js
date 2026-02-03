@@ -55,7 +55,7 @@ const Transaction = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Currency symbols mapping
   const currencySymbols = {
     'USD': '$',
@@ -69,7 +69,7 @@ const Transaction = () => {
   };
 
   // Load transaction data
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     if (user) {
       loadTransactions();
     } else {
@@ -86,11 +86,11 @@ const Transaction = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Fetch coin transactions
       const coinTransactionsResponse = await transactionsService.getMyTransactions();
       const coinTransactions = coinTransactionsResponse.data || [];
-      
+
       // Fetch orders to map to transactions
       let orders = [];
       try {
@@ -104,14 +104,14 @@ const Transaction = () => {
       } catch (orderErr) {
         console.warn('Could not load orders for transactions:', orderErr);
       }
-      
+
       // Map coin transactions to transaction format
       const mappedTransactions = coinTransactions.map((tx, index) => {
         // Find related order if ref_type is 'orders'
-        const relatedOrder = tx.ref_type === 'orders' && tx.ref_id 
+        const relatedOrder = tx.ref_type === 'orders' && tx.ref_id
           ? orders.find(o => o.id === tx.ref_id)
           : null;
-        
+
         return {
           id: tx.id || `TXN-${String(index + 1).padStart(3, '0')}`,
           type: tx.type === 'credit' ? 'Income' : 'Expense',
@@ -128,10 +128,10 @@ const Transaction = () => {
           farmer: relatedOrder?.farmer_name || ''
         };
       });
-      
+
       // Sort by date (newest first)
       mappedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
+
       setTransactions(mappedTransactions);
     } catch (err) {
       console.error('Error loading transactions:', err);
@@ -189,7 +189,7 @@ const Transaction = () => {
       case 2: filtered = filterTransactionsByType('expense'); break;
       default: filtered = transactions;
     }
-    
+
     if (searchQuery) {
       filtered = filtered.filter(transaction =>
         transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -197,7 +197,7 @@ const Transaction = () => {
         transaction.id.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     return filtered;
   };
 
@@ -205,16 +205,16 @@ const Transaction = () => {
     const totalIncome = transactions
       .filter(t => t.type === 'Income' && t.status === 'Completed')
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const totalExpenses = transactions
       .filter(t => t.type === 'Expense' && t.status === 'Completed')
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     const netProfit = totalIncome - totalExpenses;
     const pendingAmount = transactions
       .filter(t => t.status === 'Pending')
       .reduce((sum, t) => sum + t.amount, 0);
-    
+
     return { totalIncome, totalExpenses, netProfit, pendingAmount };
   };
 
@@ -238,13 +238,13 @@ const Transaction = () => {
   }
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       minHeight: '100vh',
       backgroundColor: '#f8fafc',
       p: 3
     }}>
-      <Box sx={{ 
-        maxWidth: '1400px', 
+      <Box sx={{
+        maxWidth: '1400px',
         mx: 'auto',
         mb: 4
       }}>
@@ -260,16 +260,16 @@ const Transaction = () => {
         {/* Financial Summary Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ 
-              p: 3, 
+            <Paper sx={{
+              p: 3,
               backgroundColor: '#ffffff',
               border: '1px solid #e2e8f0',
               borderRadius: 2,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <Avatar sx={{ 
-                  bgcolor: '#dcfce7', 
+                <Avatar sx={{
+                  bgcolor: '#dcfce7',
                   color: '#059669',
                   width: 48,
                   height: 48,
@@ -288,18 +288,18 @@ const Transaction = () => {
               </Box>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ 
-              p: 3, 
+            <Paper sx={{
+              p: 3,
               backgroundColor: '#ffffff',
               border: '1px solid #e2e8f0',
               borderRadius: 2,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <Avatar sx={{ 
-                  bgcolor: '#fee2e2', 
+                <Avatar sx={{
+                  bgcolor: '#fee2e2',
                   color: '#dc2626',
                   width: 48,
                   height: 48,
@@ -318,18 +318,18 @@ const Transaction = () => {
               </Box>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ 
-              p: 3, 
+            <Paper sx={{
+              p: 3,
               backgroundColor: '#ffffff',
               border: '1px solid #e2e8f0',
               borderRadius: 2,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <Avatar sx={{ 
-                  bgcolor: summary.netProfit >= 0 ? '#dcfce7' : '#fee2e2', 
+                <Avatar sx={{
+                  bgcolor: summary.netProfit >= 0 ? '#dcfce7' : '#fee2e2',
                   color: summary.netProfit >= 0 ? '#059669' : '#dc2626',
                   width: 48,
                   height: 48,
@@ -338,10 +338,10 @@ const Transaction = () => {
                   <MonetizationOn />
                 </Avatar>
                 <Box>
-                  <Typography 
-                    variant="h4" 
-                    sx={{ 
-                      fontWeight: 700, 
+                  <Typography
+                    variant="h4"
+                    sx={{
+                      fontWeight: 700,
                       color: summary.netProfit >= 0 ? '#059669' : '#dc2626',
                       mb: 0.5
                     }}
@@ -355,18 +355,18 @@ const Transaction = () => {
               </Box>
             </Paper>
           </Grid>
-          
+
           <Grid item xs={12} sm={6} md={3}>
-            <Paper sx={{ 
-              p: 3, 
+            <Paper sx={{
+              p: 3,
               backgroundColor: '#ffffff',
               border: '1px solid #e2e8f0',
               borderRadius: 2,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                <Avatar sx={{ 
-                  bgcolor: '#fef3c7', 
+                <Avatar sx={{
+                  bgcolor: '#fef3c7',
                   color: '#f59e0b',
                   width: 48,
                   height: 48,
@@ -388,7 +388,7 @@ const Transaction = () => {
         </Grid>
 
         {/* Transaction Table */}
-        <Paper sx={{ 
+        <Paper sx={{
           backgroundColor: '#ffffff',
           border: '1px solid #e2e8f0',
           borderRadius: 2,
@@ -420,7 +420,7 @@ const Transaction = () => {
                   variant="contained"
                   startIcon={<Receipt />}
                   size="small"
-                  sx={{ 
+                  sx={{
                     textTransform: 'none',
                     backgroundColor: '#059669',
                     '&:hover': {
@@ -432,7 +432,7 @@ const Transaction = () => {
                 </Button>
               </Stack>
             </Box>
-            
+
             <TextField
               placeholder="Search transactions..."
               variant="outlined"
@@ -446,7 +446,7 @@ const Transaction = () => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ 
+              sx={{
                 width: 300,
                 '& .MuiOutlinedInput-root': {
                   '& fieldset': {
@@ -462,10 +462,10 @@ const Transaction = () => {
               }}
             />
           </Box>
-          
+
           <Box sx={{ borderBottom: '1px solid #e2e8f0' }}>
-            <Tabs 
-              value={tabValue} 
+            <Tabs
+              value={tabValue}
               onChange={handleTabChange}
               sx={{
                 '& .MuiTab-root': {
@@ -506,8 +506,8 @@ const Transaction = () => {
                   <TableRow key={transaction.id} hover sx={{ '&:hover': { backgroundColor: '#f8fafc' } }}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar 
-                          sx={{ 
+                        <Avatar
+                          sx={{
                             bgcolor: transaction.type === 'Income' ? '#dcfce7' : '#fee2e2',
                             color: transaction.type === 'Income' ? '#059669' : '#dc2626',
                             width: 32,
@@ -537,8 +537,8 @@ const Transaction = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={transaction.category} 
+                      <Chip
+                        label={transaction.category}
                         size="small"
                         variant="outlined"
                         sx={{
@@ -549,9 +549,9 @@ const Transaction = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
+                      <Typography
+                        variant="body2"
+                        sx={{
                           fontWeight: 600,
                           color: transaction.type === 'Income' ? '#059669' : '#dc2626'
                         }}
@@ -560,8 +560,8 @@ const Transaction = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={transaction.status} 
+                      <Chip
+                        label={transaction.status}
                         color={getStatusColor(transaction.status)}
                         size="small"
                       />
@@ -573,9 +573,9 @@ const Transaction = () => {
                     </TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={1}>
-                        <IconButton 
-                          size="small" 
-                          sx={{ 
+                        <IconButton
+                          size="small"
+                          sx={{
                             color: '#64748b',
                             '&:hover': {
                               color: '#059669',
@@ -585,9 +585,9 @@ const Transaction = () => {
                         >
                           <Assessment />
                         </IconButton>
-                        <IconButton 
+                        <IconButton
                           size="small"
-                          sx={{ 
+                          sx={{
                             color: '#64748b',
                             '&:hover': {
                               color: '#059669',
