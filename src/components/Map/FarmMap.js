@@ -12,7 +12,7 @@ const FarmMap = ({ fields, products, onFieldCreate, onProductSelect, userType })
   const [viewState, setViewState] = useState({
     longitude: 10, // Center on Central Europe
     latitude: 54, // Center on Central Europe
-    zoom: 4, // Slightly closer zoom to focus on Europe
+    zoom: 5, // Slightly closer zoom to focus on Europe
     pitch: 45, // Add pitch for 3D perspective
     bearing: 0, // Initial bearing
   });
@@ -98,7 +98,7 @@ const FarmMap = ({ fields, products, onFieldCreate, onProductSelect, userType })
           mapboxAccessToken={MAPBOX_TOKEN}
           attributionControl={false}
           style={{ width: '100%', height: '100%', position: 'relative', zIndex: 1 }}
-          mapStyle="mapbox://styles/mapbox/dark-v11"
+          mapStyle="mapbox://styles/mapbox/navigation-night-v1"
           terrain={{ source: 'mapbox-dem', exaggeration: 1.5 }}
         >
           <NavigationControl position="top-left" />

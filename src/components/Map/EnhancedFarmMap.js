@@ -72,7 +72,7 @@ const EnhancedFarmMap = forwardRef(({
   const [viewState, setViewState] = useState({
     longitude: 12.5674,
     latitude: 41.8719,
-    zoom: 0.1,
+    zoom: 1.1,
   });
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [popupPosition, setPopupPosition] = useState(null);
@@ -2503,7 +2503,7 @@ const EnhancedFarmMap = forwardRef(({
           initialViewState={{
             longitude: 12.5674,
             latitude: 41.8719,
-            zoom: 0.5,
+            zoom: 1.5,
           }}
         >
           {points.map((f) => (
@@ -2722,7 +2722,7 @@ const EnhancedFarmMap = forwardRef(({
         initialViewState={{
           longitude: 12.5674,
           latitude: 41.8719,
-          zoom: 0.5,
+          zoom: 1.5,
         }}
       >
 
