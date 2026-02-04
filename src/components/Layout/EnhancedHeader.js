@@ -460,60 +460,52 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     }
   };
 
-  // Simplified menu configuration with clean categories
+  // Menu order matching sidebar image: Rented Fields, My Orders, Profile | My Farms, Farm Orders, License Info, Transaction | Notifications, Messages, Change Currency, Settings
   const getMenuConfig = (userType) => {
     const isFarmer = userType === 'farmer';
-    
-    // Main sections
     const sections = [
       {
         id: 'main',
         title: 'Farms & Fields',
         items: [
           { text: 'Rented Fields', icon: <Landscape />, path: isFarmer ? '/farmer/rented-fields' : '/buyer/rented-fields' },
-          { text: 'My Farms', icon: <Agriculture />, path: '/farmer/my-farms' },
-        ]
-      },
-      {
-        id: 'orders',
-        title: 'Orders',
-        items: [
           { text: 'My Orders', icon: <History />, path: isFarmer ? '/farmer/orders' : '/buyer/orders' },
-          { text: 'Farm Orders', icon: <Receipt />, path: '/farmer/farm-orders' },
+          { text: 'Profile', icon: <Person />, path: isFarmer ? '/farmer/profile' : '/buyer/profile' },
         ]
       },
       {
-        id: 'account',
+        id: 'farmer',
+        title: isFarmer ? 'Farmer' : 'Information',
+        items: [
+          { text: 'My Farms', icon: <Agriculture />, path: '/farmer/my-farms' },
+          { text: 'Farm Orders', icon: <Receipt />, path: '/farmer/farm-orders' },
+          { text: 'License Info', icon: <Nature />, path: isFarmer ? '/farmer/license-info' : '/buyer/license-info' },
+          { text: 'Transaction', icon: <AccountBalance />, path: isFarmer ? '/farmer/transaction' : '/buyer/transaction' },
+        ]
+      },
+      {
+        id: 'settings',
         title: 'Account',
         items: [
-          { text: 'Profile', icon: <Person />, path: isFarmer ? '/farmer/profile' : '/buyer/profile' },
+          { text: 'Notifications', icon: <Notifications />, path: isFarmer ? '/farmer/settings' : '/buyer/settings' },
           { text: 'Messages', icon: <Message />, path: isFarmer ? '/farmer/messages' : '/buyer/messages' },
           { text: 'Change Currency', icon: <CurrencyExchange />, path: isFarmer ? '/farmer/currency' : '/buyer/currency' },
           { text: 'Settings', icon: <Settings />, path: isFarmer ? '/farmer/settings' : '/buyer/settings' },
-        ]
-      },
-      {
-        id: 'info',
-        title: 'Information',
-        items: [
-          { text: 'License Info', icon: <Nature />, path: isFarmer ? '/farmer/license-info' : '/buyer/license-info' },
-          { text: 'Transaction', icon: <AccountBalance />, path: isFarmer ? '/farmer/transaction' : '/buyer/transaction' },
           { text: 'Complaints', icon: <ReportProblem />, path: isFarmer ? '/farmer/complaints' : '/buyer/complaints' },
         ]
       }
     ];
 
-    // Filter out farmer-specific items for buyers
     if (!isFarmer) {
-      sections[0].items = sections[0].items.filter(item => item.text !== 'My Farms');
-      sections[1].items = sections[1].items.filter(item => item.text !== 'Farm Orders');
-      sections[3].items = sections[3].items.filter(item => item.text !== 'Transaction');
+      sections[1].items = sections[1].items.filter(item => item.text === 'License Info');
     }
 
     return sections;
   };
 
   const menuSections = getMenuConfig(userType);
+  const farmerProminentItems = new Set(['My Farms', 'Farm Orders', 'License Info', 'Transaction']);
+  const isFarmerProminent = (text) => userType === 'farmer' && farmerProminentItems.has(text);
 
   const appBarRef = useRef(null);
 
@@ -1249,7 +1241,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             '& .MuiDrawer-paper': {
               width: isMobile ? 220 : 280,
               boxSizing: 'border-box',
-              backgroundColor: 'background.paper',
+              backgroundColor: '#ffffff',
               top: 'var(--app-header-height)',
               height: 'calc(100% - var(--app-header-height))',
               pt: 2,
@@ -1316,9 +1308,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
           {/* Simplified Menu with Clean Categories */}
           <Box sx={{ py: isMobile ? 0.5 : 1 }}>
-            {menuSections.map((section) => (
-              <Box key={section.id} sx={{ mb: isMobile ? 0.5 : 1 }}>
-                {/* Section Header - Minimal styling */}
+            {menuSections.map((section, idx) => (
+              <React.Fragment key={section.id}>
+              <Box sx={{ mb: isMobile ? 0.5 : 1 }}>
                 <Box sx={{ 
                   px: isMobile ? 1.5 : 2, 
                   py: isMobile ? 0.25 : 0.5,
@@ -1330,16 +1322,17 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     primaryTypographyProps={{
                       fontSize: isMobile ? '0.7rem' : '0.75rem',
                       fontWeight: 600,
-                      color: 'text.secondary',
+                      color: '#2E7D32',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px'
                     }}
                   />
                 </Box>
-                
                 {/* Section Items - Clean and spaced */}
                 <List component="div" disablePadding>
-                  {section.items.map((item) => (
+                  {section.items.map((item) => {
+                    const prominent = isFarmerProminent(item.text);
+                    return (
                     <ListItem
                       button
                       key={item.path}
@@ -1353,6 +1346,11 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                         mx: isMobile ? 0.5 : 1,
                         mb: 0.25,
                         transition: 'all 0.2s ease',
+                        ...(prominent && {
+                          color: '#2E7D32',
+                          '& .MuiListItemIcon-root': { color: '#2E7D32' },
+                          '& .MuiListItemText-primary': { fontWeight: 700 },
+                        }),
                         '&.Mui-selected': {
                           backgroundColor: 'rgba(76, 175, 80, 0.1)',
                           color: '#2E7D32',
@@ -1361,16 +1359,16 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                           },
                         },
                         '&:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                          backgroundColor: prominent ? 'rgba(76, 175, 80, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                           transform: 'translateX(2px)',
                         },
                       }}
                     >
                       <ListItemIcon sx={{
-                        color: 'inherit',
+                        color: prominent ? '#2E7D32' : 'inherit',
                         minWidth: isMobile ? 24 : 32,
                         '& svg': {
-                          fontSize: isMobile ? '0.9rem' : '1rem'
+                          fontSize: isMobile ? (prominent ? '1rem' : '0.9rem') : (prominent ? '1.1rem' : '1rem')
                         }
                       }}>
                         {item.icon}
@@ -1379,13 +1377,15 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                         primary={item.text}
                         primaryTypographyProps={{
                           fontSize: isMobile ? '0.8rem' : '0.85rem',
-                          fontWeight: location.pathname === item.path ? 500 : 400
+                          fontWeight: prominent ? 700 : (location.pathname === item.path ? 500 : 400)
                         }}
                       />
                     </ListItem>
-                  ))}
+                  );})}
                 </List>
               </Box>
+              {idx < menuSections.length - 1 && <Divider sx={{ my: 1, borderStyle: 'dashed', borderColor: '#2E7D32' }} />}
+              </React.Fragment>
             ))}
           </Box>
 
