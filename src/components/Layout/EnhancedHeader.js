@@ -497,10 +497,11 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     ];
 
     if (!isFarmer) {
-      sections[1].items = sections[1].items.filter(item => item.text === 'License Info');
+      sections[0].items = sections[0].items.filter(item => item.text !== 'Rented Fields');
+      sections[1].items = [];
     }
 
-    return sections;
+    return sections.filter(s => s.items.length > 0);
   };
 
   const menuSections = getMenuConfig(userType);

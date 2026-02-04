@@ -489,7 +489,7 @@ const Orders = () => {
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: '#059669', fontSize: '0.8rem' }}>
-                          ${(order.total_cost || order.cost).toFixed(2)}
+                          ${Number(order.total_cost ?? order.cost ?? 0).toFixed(2)}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
@@ -626,7 +626,7 @@ const Orders = () => {
                         Price per m²
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500, color: '#059669' }}>
-                        ${selectedOrder.price_per_unit || (selectedOrder.cost / selectedOrder.area).toFixed(2)}
+                        ${(Number(selectedOrder.price_per_unit) || (Number(selectedOrder.cost) / (Number(selectedOrder.area) || 1))).toFixed(2)}
                       </Typography>
                     </Box>
                   </Stack>
@@ -670,7 +670,7 @@ const Orders = () => {
                         Total Cost
                       </Typography>
                       <Typography variant="h6" sx={{ fontWeight: 700, color: '#059669' }}>
-                        ${(selectedOrder.total_cost || selectedOrder.cost).toFixed(2)}
+                        ${Number(selectedOrder.total_cost ?? selectedOrder.cost ?? 0).toFixed(2)}
                       </Typography>
                     </Box>
                     <Box>
