@@ -126,7 +126,6 @@ const MyFarms = () => {
             file_type: fileExt
           });
 
-          console.log('License uploaded successfully');
         } catch (uploadErr) {
           console.error('Error uploading license:', uploadErr);
         }
@@ -199,7 +198,6 @@ const MyFarms = () => {
       }));
 
       setMyFarms(transformedFarms);
-      console.log('Loaded farms from database:', transformedFarms);
 
       // Fetch farmer-created fields if user is available
       if (user && user.id) {
@@ -232,7 +230,6 @@ const MyFarms = () => {
           }));
 
           setMyFields(transformedFields);
-          console.log('Loaded farmer fields:', transformedFields);
         } catch (fieldsError) {
           console.error('Error fetching farmer fields:', fieldsError);
           setMyFields([]);

@@ -142,32 +142,27 @@ const EnhancedFarmMap = forwardRef(({
   // Function to fetch location for a product
   const fetchLocationForProduct = useCallback(async (product) => {
     if (!product) {
-      console.log('🌍 fetchLocationForProduct: No product', product);
       return;
     }
 
     const productId = product.id;
 
-    console.log('🌍 fetchLocationForProduct called for:', product.name, 'ID:', productId, 'Existing location:', product.location, 'UserType:', userType);
 
     // Use functional update to check current state without dependency
     setProductLocations(prev => {
       // Check if we already have the location for this product
       if (prev.has(productId)) {
-        console.log('🌍 Location already cached for product:', productId, 'Location:', prev.get(productId));
         return prev; // Return same state if already exists
       }
 
       // If product already has a valid location field, use it directly
       if (product.location && product.location !== 'Unknown Location' && !product.location.includes(',')) {
-        console.log('🌍 Using existing location for:', productId, 'Location:', product.location);
         setProductLocations(current => new Map(current.set(productId, product.location)));
         return prev;
       }
 
       // Only geocode if we don't have a valid location and have coordinates
       if (!product.coordinates) {
-        console.log('🌍 No coordinates available for product:', productId);
         return prev;
       }
 
@@ -176,10 +171,8 @@ const EnhancedFarmMap = forwardRef(({
       // Fetch location asynchronously only if needed
       (async () => {
         try {
-          console.log('🌍 Starting geocoding for:', productId, 'at coords:', latitude, longitude);
           // Fix: Pass latitude first, then longitude to match the geocoding function signature
           const locationName = await cachedReverseGeocode(latitude, longitude);
-          console.log('🌍 Geocoding successful for:', productId, 'Location:', locationName);
           setProductLocations(current => new Map(current.set(productId, locationName)));
         } catch (error) {
           console.error('🌍 Failed to fetch location for product:', productId, error);
@@ -191,12 +184,11 @@ const EnhancedFarmMap = forwardRef(({
 
       return prev;
     });
-  }, [userType]);
+  }, []);
 
   // Function to fetch weather for a product
   const fetchWeatherForProduct = useCallback(async (product) => {
     if (!product || !product.coordinates) {
-      console.log('🌤️ fetchWeatherForProduct: No product or coordinates');
       return;
     }
 
@@ -205,15 +197,12 @@ const EnhancedFarmMap = forwardRef(({
 
     // Check if we already have weather data for this product
     if (productWeather.has(productId)) {
-      console.log('🌤️ Weather already cached for product:', productId);
       return;
     }
 
-    console.log(`🌤️ Fetching weather for product ${productId} (${product.name}) at ${latitude}, ${longitude}`);
     try {
       const data = await weatherService.getCurrentWeather(latitude, longitude);
       if (data && data.weatherString) {
-        console.log(`🌤️ Weather update for ${productId}:`, data.weatherString);
         setProductWeather(prev => {
           const next = new Map(prev);
           next.set(productId, data);
@@ -1153,7 +1142,6 @@ const EnhancedFarmMap = forwardRef(({
       const category = product.subcategory || product.category;
       const iconPath = getProductIcon(category);
 
-      console.log('🖼️ getProductImageSrc - Product:', product.name, 'Category:', category, 'Icon:', iconPath);
 
       return iconPath;
     } catch (e) {
@@ -1168,7 +1156,6 @@ const EnhancedFarmMap = forwardRef(({
     if (!key) {
       console.error('❌ CRITICAL: REACT_APP_OPENWEATHER_API_KEY is missing! Restart your npm start server.');
     } else {
-      console.log('✅ OpenWeather API Key detected.');
     }
   }, []);
 
@@ -1200,7 +1187,6 @@ const EnhancedFarmMap = forwardRef(({
       }
     },
     refreshData: () => {
-      console.log('🔄 Manually refreshing farm data...');
       setRefreshTrigger(prev => prev + 1);
     }
   }), [fetchLocationForProduct, fetchWeatherForProduct, isMobile]); // Removed viewState dependency to prevent unnecessary re-creation
@@ -1209,11 +1195,9 @@ const EnhancedFarmMap = forwardRef(({
 
   // Load farms data
   useEffect(() => {
-    console.log('🔄 EnhancedFarmMap useEffect triggered - externalFarms:', externalFarms?.length, 'externalFields:', externalFields?.length);
 
     // Prefer fields over farms for map rendering; only accept datasets with usable coordinates
     if (externalFields && externalFields.length > 0) {
-      console.log('🔄 Using external fields from props:', externalFields.length);
       const normalizedExternal = externalFields.map(normalizeField);
       const hasCoords = normalizedExternal.some(f => Array.isArray(f.coordinates) && Number.isFinite(f.coordinates[0]) && Number.isFinite(f.coordinates[1]));
       if (hasCoords) {
@@ -1223,7 +1207,6 @@ const EnhancedFarmMap = forwardRef(({
         setSelectedIcons(new Set());
         normalizedExternal.forEach(f => { if (f.isPurchased) stablePurchasedIdsRef.current.add(f.id); });
       } else {
-        console.log('⚠️ Skipping external fields update: no valid coordinates found');
       }
       // Don't call onFarmsLoad for external fields to prevent circular updates
     } else {
@@ -1233,19 +1216,13 @@ const EnhancedFarmMap = forwardRef(({
           // Load fields from database API
           let databaseFields = [];
           try {
-            console.log('🔄 Attempting to fetch fields from database...');
             const response = await fieldsService.getAll();
-            console.log('🔄 API Response:', response);
             databaseFields = (response.data || []).map(normalizeField);
-            console.log('🗄️ Loaded fields from database:', databaseFields.length);
-            console.log('🗄️ Database fields:', databaseFields);
 
             // Check specifically for the watermelon field
             const watermelonField = databaseFields.find(f => f.name === 'My Watermelon');
             if (watermelonField) {
-              console.log('🍉 Found watermelon field:', watermelonField);
             } else {
-              console.log('🍉 Watermelon field not found in database response');
             }
           } catch (error) {
             console.error('❌ Failed to load fields from database:', error);
@@ -1254,8 +1231,6 @@ const EnhancedFarmMap = forwardRef(({
 
           // Load mock data for demo purposes
           const allFields = databaseFields;
-          console.log('🔄 Combined all fields:', allFields.length);
-          console.log('🔄 All fields with coordinates:', allFields.filter(f => f.coordinates).length);
 
           // Note: Purchase status and rented fields are now managed via API
           // In a full implementation, we would fetch user orders and rented fields from API
@@ -1268,8 +1243,6 @@ const EnhancedFarmMap = forwardRef(({
 
           if (mapRef.current && allFields.length > 0) {
             const validFarms = allFields.filter(farm => farm.coordinates);
-            console.log('🗺️ Auto-fit Debug - Valid farms for auto-fit:', validFarms.length);
-            console.log('🗺️ Auto-fit Debug - Valid farms:', validFarms);
             if (validFarms.length > 0) {
               const coordinates = validFarms.map(farm => {
                 if (Array.isArray(farm.coordinates)) {
@@ -1333,9 +1306,7 @@ const EnhancedFarmMap = forwardRef(({
     if (externalFilters && ((Array.isArray(externalFilters.categories) && externalFilters.categories.length > 0) || (Array.isArray(externalFilters.subcategories) && externalFilters.subcategories.length > 0))) {
       return; // external filters are applied in a separate effect; avoid overriding
     }
-    console.log('🔍 SEARCH FILTER DEBUG - searchQuery:', searchQuery, 'farms length:', farms.length);
     if (!searchQuery || searchQuery.trim() === '') {
-      console.log('🔍 SEARCH FILTER DEBUG - No search query, setting filteredFarms to all farms:', farms.length);
       if (farms.length === 0 && lastNonEmptyFarmsRef.current.length > 0) {
         let base = lastNonEmptyFarmsRef.current.filter(f => !shouldFilterOutByOccupiedArea(f));
         if (selectedIcons && selectedIcons.size > 0) {
@@ -1785,10 +1756,6 @@ const EnhancedFarmMap = forwardRef(({
 
   // Debug user state
   useEffect(() => {
-    console.log('🔍 Current user state changed:', currentUser);
-    console.log('🔍 User has ID?', currentUser?.id);
-    console.log('🔍 User type:', currentUser?.user_type);
-    console.log('🔍 Full user object:', JSON.stringify(currentUser, null, 2));
   }, [currentUser]);
 
   useEffect(() => {
@@ -1821,11 +1788,6 @@ const EnhancedFarmMap = forwardRef(({
   }, [currentUser]);
 
   const handleBuyNow = async (product) => {
-    console.log('=== PURCHASE DEBUG START ===');
-    console.log('Current user object:', currentUser);
-    console.log('Current user ID:', currentUser?.id);
-    console.log('Product being purchased:', product);
-    console.log('=== PURCHASE DEBUG END ===');
 
     if (!currentUser || !currentUser.id) {
       if (onNotification) {
@@ -1930,7 +1892,6 @@ const EnhancedFarmMap = forwardRef(({
       // Note: Removed deprecated storage service calls - using API only
 
       // Create order via real API
-      console.log('Current user for order creation:', currentUser);
       if (currentUser && currentUser.id) {
         const apiOrderData = {
           buyer_id: currentUser.id,
@@ -1952,10 +1913,8 @@ const EnhancedFarmMap = forwardRef(({
           })();
         }
 
-        console.log('Creating order with API data:', apiOrderData);
         try {
           const orderResponse = await orderService.createOrder(apiOrderData);
-          console.log('Order created successfully:', orderResponse.data);
 
           // Create notification for the farmer
           const farmerId = product.farmer_id || product.created_by;
@@ -1968,7 +1927,6 @@ const EnhancedFarmMap = forwardRef(({
 
             try {
               await notificationsService.create(notificationData);
-              console.log('Farmer notification created successfully');
             } catch (notifError) {
               console.error('Failed to create farmer notification:', notifError);
             }
@@ -1980,7 +1938,6 @@ const EnhancedFarmMap = forwardRef(({
           await mockOrderService.createOrder(orderData);
         }
       } else {
-        console.log('No current user or user ID, falling back to mock service');
         // Fall back to mock service if no user
         await mockOrderService.createOrder(orderData);
       }
@@ -2892,11 +2849,8 @@ const EnhancedFarmMap = forwardRef(({
 
         {/* Farm Markers */}
         {(() => {
-          console.log('🔍 MARKER RENDER DEBUG - filteredFarms length:', filteredFarms.length);
-          console.log('🔍 MARKER RENDER DEBUG - filteredFarms:', filteredFarms.map(f => ({ id: f.id, name: f.name, coordinates: f.coordinates })));
 
           return filteredFarms.map((product) => {
-            console.log('🎯 EnhancedFarmMap Debug - Processing product:', product.name, 'category:', product.category, 'coordinates:', product.coordinates);
 
             // Handle coordinate format conversion and null checks
             let longitude, latitude;
@@ -2923,7 +2877,6 @@ const EnhancedFarmMap = forwardRef(({
               return null;
             }
 
-            console.log('🗺️ Rendering marker for:', product.name, 'at', latitude, longitude);
 
             return (
               <Marker
@@ -3385,7 +3338,6 @@ const EnhancedFarmMap = forwardRef(({
                     const cachedLocation = productLocations.get(selectedProduct.id);
                     const fallbackLocation = selectedProduct.location;
                     const displayLocation = cachedLocation || fallbackLocation || 'LOADING LOCATION...';
-                    console.log('🌍 POPUP DISPLAY - Product:', selectedProduct.name, 'ID:', selectedProduct.id, 'UserType:', userType, 'Cached:', cachedLocation, 'Fallback:', fallbackLocation, 'Display:', displayLocation);
                     return displayLocation;
                   })()}
                 </div>

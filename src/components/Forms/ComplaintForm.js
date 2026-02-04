@@ -59,9 +59,6 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
     setSearchingUsers(true);
     try {
       const response = await userService.getUserNames(query.trim());
-      console.log('User search response:', response);
-      console.log('Response type:', typeof response);
-      console.log('Response.data:', response?.data);
       
       // Axios returns { data: [...] }, so response.data should be the array
       let users = [];
@@ -75,8 +72,6 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
         users = response;
       }
       
-      console.log('Parsed users:', users);
-      console.log('Users count:', users.length);
       
       // Filter out current user (only if userId is provided)
       const filteredUsers = userId 
@@ -87,10 +82,6 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       const wasOnlyCurrentUser = userId && users.length === 1 && filteredUsers.length === 0;
       setOnlyCurrentUserFound(wasOnlyCurrentUser);
       
-      console.log('Filtered users:', filteredUsers);
-      console.log('Filtered count:', filteredUsers.length);
-      console.log('Current userId:', userId);
-      console.log('Only current user found:', wasOnlyCurrentUser);
       
       setUserSearchResults(filteredUsers);
     } catch (err) {

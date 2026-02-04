@@ -124,7 +124,6 @@ const Messages = () => {
             table: 'messages',
             filter: `conversation_id=eq.${selectedConversation.id}`
           }, payload => {
-            console.log('Realtime message received:', payload);
             const newMsg = payload.new;
 
             setMessages(prev => {
@@ -162,12 +161,10 @@ const Messages = () => {
             table: 'messages',
             filter: `conversation_id=eq.${selectedConversation.id}`
           }, payload => {
-            console.log('Realtime message update received:', payload);
             const updatedMsg = payload.new;
             setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
           })
           .subscribe((status) => {
-            console.log(`Subscription status for messages-${selectedConversation.id}:`, status);
           });
 
         return () => {
@@ -187,16 +184,13 @@ const Messages = () => {
           schema: 'public',
           table: 'conversations'
         }, payload => {
-          console.log('Conversation list update received:', payload);
           const conv = payload.new || payload.old;
           if (conv.user1_id === user.id || conv.user2_id === user.id) {
             // Background refresh without showing loading spinner
-            console.log('Relevant conversation update, fetching list...');
             fetchConversations(false);
           }
         })
         .subscribe((status) => {
-          console.log('Subscription status for conversation-updates:', status);
         });
 
       return () => {

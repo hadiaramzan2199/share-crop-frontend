@@ -51,7 +51,6 @@ const Signup = () => {
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.play().catch(err => {
-        console.log('Video autoplay prevented:', err);
       });
     }
   }, []);

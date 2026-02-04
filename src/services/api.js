@@ -13,8 +13,6 @@ const getBaseUrl = () => {
 const API_BASE_URL = getBaseUrl();
 
 // Debug logging to verify the API base URL
-console.log('Environment variable REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
-console.log('Using API_BASE_URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

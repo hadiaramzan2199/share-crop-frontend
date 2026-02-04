@@ -84,7 +84,6 @@ const WebcamPopup = ({ open, onClose, webcamUrl, farmName }) => {
         );
       } catch (error) {
         // Fallback for iframes that don't support postMessage
-        console.log('Iframe control not supported');
       }
     }
     setIsPlaying(!isPlaying);

@@ -17,15 +17,12 @@ const IconTest = () => {
   ];
 
   useEffect(() => {
-    console.log('🧪 IconTest component mounted');
     testCategories.forEach(category => {
       const iconPath = getProductIcon(category);
-      console.log(`🧪 Testing category "${category}":`, iconPath);
     });
   }, []);
 
   const handleImageLoad = (category, iconPath) => {
-    console.log(`✅ Icon loaded successfully for category "${category}":`, iconPath);
     setLoadStatus(prev => ({ ...prev, [category]: 'loaded' }));
   };
 

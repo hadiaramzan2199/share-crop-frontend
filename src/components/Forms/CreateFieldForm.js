@@ -284,7 +284,6 @@ const farmIcons = [
 
 const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialData = null, farmsList = [] }) => {
   // Debug logging
-  console.log('🔍 CreateFieldForm Debug - Received farmsList:', farmsList);
 
   // Mobile detection hook
   const isMobile = useIsMobile();

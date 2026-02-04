@@ -17,7 +17,6 @@ class WeatherService {
    * @returns {Promise<Object>} Current weather data
    */
   async getCurrentWeather(lat, lng) {
-    console.log(`🌤️ WeatherService: Getting weather for ${lat}, ${lng}`);
     if (!this.apiKey) {
       console.warn('🌤️ WeatherService: OpenWeather API Key is missing in .env (REACT_APP_OPENWEATHER_API_KEY)');
       return null;
@@ -25,7 +24,6 @@ class WeatherService {
 
     try {
       const url = `${this.baseUrl}/weather?lat=${lat}&lon=${lng}&appid=${this.apiKey}&units=metric`;
-      console.log(`🌤️ WeatherService: Fetching from ${url.replace(this.apiKey, 'HIDDEN')}`);
       const response = await fetch(url);
 
       if (!response.ok) {

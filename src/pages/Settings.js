@@ -134,7 +134,6 @@ const Settings = () => {
 
   const handleDeleteAccount = () => {
     // Simulate account deletion
-    console.log('Account deletion requested');
     setDeleteDialogOpen(false);
   };
 

@@ -184,7 +184,6 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
   const [errors, setErrors] = useState({});
 
   const handleInputChange = (field, value) => {
-    console.log(`AddFarmForm - handleInputChange: ${field} = ${value}`);
 
     setFormData(prev => ({
       ...prev,
@@ -253,14 +252,10 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
   };
 
   const handleSubmit = () => {
-    console.log('AddFarmForm - handleSubmit called');
-    console.log('AddFarmForm - formData:', formData);
-    console.log('AddFarmForm - farmIcon value:', formData.farmIcon);
 
     // Extra validation check before submission
     if (!formData.farmIcon || formData.farmIcon.trim() === '') {
       setErrors(prev => ({ ...prev, farmIcon: 'Please select a farm icon' }));
-      console.log('AddFarmForm - Blocked submission: No farm icon selected');
       return;
     }
 
@@ -272,14 +267,12 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
         created_at: new Date().toISOString()
       };
 
-      console.log('AddFarmForm - farmData being passed to onSubmit:', farmData);
 
       // storageService.addFarm(farmData); // Removed this line
 
       onSubmit(farmData);
       handleClose();
     } else {
-      console.log('AddFarmForm - Form validation failed');
     }
   };
 

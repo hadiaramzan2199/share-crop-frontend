@@ -126,7 +126,6 @@ class CoinService {
    * @returns {object} - Placeholder for admin functionality
    */
   getAllCoinsData() {
-    console.log('getAllCoinsData is not implemented for database version');
     return {};
   }
 
@@ -134,7 +133,6 @@ class CoinService {
    * Clear all coin data (for testing/reset purposes)
    */
   clearAllCoins() {
-    console.log('clearAllCoins is not implemented for database version');
   }
 }
 
