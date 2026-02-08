@@ -78,7 +78,7 @@ const useNotifications = () => {
     fetchBackendNotifications();
   }, [fetchBackendNotifications]);
 
-  // Poll for new notifications every 30 seconds for real-time updates (reduced from 5s to avoid spam)
+  // Poll for new notifications every 30 seconds for real-time updates
   useEffect(() => {
     if (user && user.id) {
       const interval = setInterval(() => {
@@ -87,34 +87,9 @@ const useNotifications = () => {
       return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, fetchBackendNotifications]); // fetchBackendNotifications is now stable
+  }, [user?.id, fetchBackendNotifications]);
 
-  // Auto-dismiss backend notifications after 4 seconds
-  // Note: We mark them as read locally, but don't call the API since the endpoint may not exist
-  useEffect(() => {
-    const timers = [];
-
-    backendNotifications.forEach(notification => {
-      if (!notification.read && !dismissedNotificationIds.current.has(notification.id)) {
-        const timer = setTimeout(() => {
-          // Mark as dismissed so it won't reappear
-          dismissedNotificationIds.current.add(notification.id);
-          // Just mark as read locally without API call to avoid 404 errors
-          setBackendNotifications(prev =>
-            prev.map(notif =>
-              notif.id === notification.id ? { ...notif, read: true } : notif
-            )
-          );
-        }, 4000);
-        timers.push(timer);
-      }
-    });
-
-    // Cleanup timers on unmount or when notifications change
-    return () => {
-      timers.forEach(timer => clearTimeout(timer));
-    };
-  }, [backendNotifications]);
+  // No auto-mark-as-read: notifications stay unread until the user clicks "Mark read" in the panel
 
   return {
     notifications,

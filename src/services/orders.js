@@ -12,8 +12,10 @@ export const orderService = {
   // Get orders for buyer with field details
   getBuyerOrdersWithFields: (buyerId) => api.get(`/api/orders/buyer/${buyerId}`),
   
-  // Get orders for farmer
+  // Get orders for farmer (legacy query param)
   getFarmerOrders: (farmerId) => api.get(`/api/orders/farmer-orders?farmerId=${farmerId}`),
+  // Get orders for farmer with full field/buyer details (same shape as buyer endpoint)
+  getFarmerOrdersWithFields: (farmerId) => api.get(`/api/orders/farmer/${farmerId}`),
   
   // Update order status
   updateOrderStatus: (id, status) => api.put(`/api/orders/${id}/status`, { status }),

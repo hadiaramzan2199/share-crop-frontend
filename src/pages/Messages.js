@@ -30,12 +30,15 @@ import {
   ArrowBack,
   DoneAll
 } from '@mui/icons-material';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { messagingService } from '../services/messaging';
 import supabase from '../services/supabase';
 
 const Messages = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [conversations, setConversations] = useState([]);
@@ -108,6 +111,28 @@ const Messages = () => {
       fetchConversations(true); // Initial load with spinner
     }
   }, [user, fetchConversations]);
+
+  // Open chat with specific user when navigated from field popup (e.g. "Chat to owner")
+  useEffect(() => {
+    const openWithUserId = location.state?.openWithUserId;
+    if (!user?.id || !openWithUserId || openWithUserId === user.id) return;
+    let cancelled = false;
+    const openWith = async () => {
+      try {
+        const conv = await messagingService.startConversation(openWithUserId);
+        if (cancelled) return;
+        const freshList = await messagingService.getConversations();
+        const found = freshList.find(c => c.id === conv.id);
+        setConversations(freshList);
+        setSelectedConversation(found || conv);
+      } catch (err) {
+        console.error('Error opening chat with owner:', err);
+      }
+      if (!cancelled) navigate(location.pathname, { replace: true, state: {} });
+    };
+    openWith();
+    return () => { cancelled = true; };
+  }, [user?.id, location.state?.openWithUserId, location.pathname, navigate]);
 
   // 2. Fetch Messages when selecting conversation
   useEffect(() => {

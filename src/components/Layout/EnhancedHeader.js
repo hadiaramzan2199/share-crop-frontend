@@ -49,9 +49,15 @@ import {
   Nature,
   AccountBalance,
   Add,
+  MonetizationOn,
   ExpandMore,
   ReportProblem,
-  Notifications
+  Notifications,
+  NotificationsActive,
+  CheckCircle,
+  Info,
+  Warning,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
@@ -99,7 +105,22 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(style);
 }
 
-const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApply, fields = [], onFarmSelect, farmerCoins = 12500, onCreateField, onCreateFarm, userType = 'farmer', onMenuClick }, ref) => {
+const EnhancedHeader = forwardRef(({
+  user,
+  onLogout,
+  onSearchChange,
+  onFilterApply,
+  fields = [],
+  onFarmSelect,
+  farmerCoins = 12500,
+  onCreateField,
+  onCreateFarm,
+  userType = 'farmer',
+  onMenuClick,
+  backendNotifications = [],
+  onMarkNotificationAsRead,
+  onRefreshNotifications,
+}, ref) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -116,14 +137,16 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     locations: []
   });
   const [expanded, setExpanded] = useState({});
-  const [userCoins, setUserCoins] = useState(12500);
+  const [userCoins, setUserCoins] = useState(0);
   const [pickupReadyCount, setPickupReadyCount] = useState(0);
   const [pickupPanelOpen, setPickupPanelOpen] = useState(false);
   const [pickupReadyList, setPickupReadyList] = useState([]);
   const [userMenuAnchorEl, setUserMenuAnchorEl] = useState(null);
+  const [coinsMenuAnchorEl, setCoinsMenuAnchorEl] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentChats, setRecentChats] = useState([]);
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [messagesAnchorEl, setMessagesAnchorEl] = useState(null);
   const [desktopSearchExpanded, setDesktopSearchExpanded] = useState(false);
   const desktopSearchRef = useRef(null);
   const desktopSearchInputRef = useRef(null);
@@ -133,18 +156,25 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     if (user && user.id) {
       try {
         const coins = await coinService.getUserCoins(user.id);
-        setUserCoins(coins);
+        // Handle 0 coins properly (0 is a valid value, not an error)
+        setUserCoins(typeof coins === 'number' ? coins : 0);
       } catch (error) {
         console.error('Error loading user coins:', error);
-        setUserCoins(12500); // Default fallback
+        setUserCoins(0); // Default fallback to 0 instead of 12500
       }
     } else {
-      setUserCoins(12500); // Default for logged out users
+      setUserCoins(0); // Default for logged out users
     }
   }, [user]);
 
   useEffect(() => {
     loadUserCoins();
+  }, [loadUserCoins]);
+
+  useEffect(() => {
+    const handler = () => loadUserCoins();
+    window.addEventListener('sharecrop-refresh-coins', handler);
+    return () => window.removeEventListener('sharecrop-refresh-coins', handler);
   }, [loadUserCoins]);
 
   // Handle Unread Count and Realtime Notifications
@@ -278,6 +308,76 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     }
 
     return filtered;
+  };
+
+  /** Returns true if the field matches the search term against all relevant text/numeric fields */
+  const fieldMatchesSearch = (field, searchTerm) => {
+    if (!searchTerm || !field) return false;
+    const term = searchTerm.toLowerCase();
+    const str = (v) => (v != null && v !== '' ? String(v).toLowerCase() : '');
+    const match = (v) => str(v).includes(term);
+    const fieldsToCheck = [
+      field.name,
+      field.description,
+      field.location,
+      field.category,
+      field.subcategory,
+      field.product_name,
+      field.productName,
+      field.farmer_name,
+      field.farmer,
+      field.owner,
+      field.farm_name,
+      field.farmName,
+      field.weather,
+      field.unit,
+      field.field_size,
+      field.field_size_unit,
+      field.area_m2,
+      field.available_area,
+      field.total_area,
+      field.price,
+      field.price_per_m2,
+      field.quantity,
+      field.production_rate,
+      field.production_rate_unit,
+      field.shipping_option,
+      field.shipping_scope,
+      field.delivery_charges,
+    ];
+    if (fieldsToCheck.some(match)) return true;
+    const harvestDates = Array.isArray(field.harvest_dates) ? field.harvest_dates : Array.isArray(field.harvestDates) ? field.harvestDates : [];
+    const harvestStr = harvestDates.map((h) => h?.date || h?.label || '').join(' ');
+    if (match(harvestStr)) return true;
+    return false;
+  };
+
+  /** Splits text by query (case-insensitive) and wraps matches in a highlight span */
+  const highlightMatch = (text, query) => {
+    if (text == null || text === '') return '';
+    const str = String(text);
+    if (!query || !String(query).trim()) return str;
+    const escaped = String(query).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = str.split(regex);
+    return parts.map((part, i) =>
+      i % 2 === 1 ? (
+        <Box
+          component="span"
+          key={`${i}-${part}`}
+          sx={{
+            backgroundColor: 'rgba(76, 175, 80, 0.35)',
+            borderRadius: 0.5,
+            px: 0.25,
+            fontWeight: 600,
+          }}
+        >
+          {part}
+        </Box>
+      ) : (
+        part
+      )
+    );
   };
 
   const handleFilterApply = () => {
@@ -468,7 +568,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
         id: 'main',
         title: 'Farms & Fields',
         items: [
-          { text: 'Rented Fields', icon: <Landscape />, path: isFarmer ? '/farmer/rented-fields' : '/buyer/rented-fields' },
+          { text: 'My Fields', icon: <Landscape />, path: isFarmer ? '/farmer/rented-fields' : '/buyer/rented-fields' },
           { text: 'My Orders', icon: <History />, path: isFarmer ? '/farmer/orders' : '/buyer/orders' },
           { text: 'Profile', icon: <Person />, path: isFarmer ? '/farmer/profile' : '/buyer/profile' },
         ]
@@ -497,7 +597,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
     ];
 
     if (!isFarmer) {
-      sections[0].items = sections[0].items.filter(item => item.text !== 'Rented Fields');
+      sections[0].items = sections[0].items.filter(item => item.text !== 'My Fields');
       sections[1].items = [];
     }
 
@@ -657,7 +757,6 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
             flex: 1,
             justifyContent: 'flex-end',
             minWidth: 0,
-            maxWidth: { xs: '70%', sm: 'none' }
           }}>
             {!isAdmin && (
               <>
@@ -682,22 +781,40 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                         <Search />
                       </IconButton>
 
-                      {/* Mobile Search Bar - positioned relative to search icon */}
+                      {/* Mobile Search Bar - full-width below header for better usability */}
+                      {mobileSearchOpen && (
+                        <Box
+                          onClick={() => setMobileSearchOpen(false)}
+                          sx={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            zIndex: 1298,
+                            backgroundColor: 'rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      )}
                       {mobileSearchOpen && (
                         <Box
                           sx={{
-                            position: 'absolute',
-                            top: '100%',
+                            position: 'fixed',
+                            top: pickupReadyCount > 0 ? 88 : 56,
                             left: 0,
                             right: 0,
-                            minWidth: '280px',
-                            zIndex: 1000,
-                            mt: 1.5,
-                            ml: -16,
+                            zIndex: 1299,
+                            px: 1.5,
+                            py: 1.5,
+                            backgroundColor: 'rgba(255,255,255,0.98)',
+                            backdropFilter: 'blur(8px)',
+                            borderBottom: '1px solid rgba(0,0,0,0.08)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                             animation: 'slideDown 0.2s ease-out'
                           }}
                         >
                           <Box
+                            onClick={(e) => e.stopPropagation()}
                             sx={{
                               display: 'flex',
                               alignItems: 'center',
@@ -705,8 +822,10 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                               borderRadius: 20,
                               px: 2,
                               py: 0.5,
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
                               border: '1px solid rgba(0,0,0,0.1)',
+                              width: '100%',
+                              maxWidth: '100%',
                             }}
                           >
                             <InputBase
@@ -718,23 +837,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
                                 if (query.trim()) {
                                   let fieldsToSearch = applyFilters(fields);
-
-                                  const filtered = fieldsToSearch.filter(field => {
-                                    const searchTerm = query.toLowerCase();
-                                    return (
-                                      field.product_name?.toLowerCase().includes(searchTerm) ||
-                                      field.productName?.toLowerCase().includes(searchTerm) ||
-                                      field.name?.toLowerCase().includes(searchTerm) ||
-                                      field.category?.toLowerCase().includes(searchTerm) ||
-                                      field.subcategory?.toLowerCase().includes(searchTerm) ||
-                                      field.farmer?.toLowerCase().includes(searchTerm) ||
-                                      field.owner?.toLowerCase().includes(searchTerm) ||
-                                      field.description?.toLowerCase().includes(searchTerm) ||
-                                      field.location?.toLowerCase().includes(searchTerm) ||
-                                      field.farm_name?.toLowerCase().includes(searchTerm) ||
-                                      field.farmName?.toLowerCase().includes(searchTerm)
-                                    );
-                                  });
+                                  const filtered = fieldsToSearch.filter(field => fieldMatchesSearch(field, query));
                                   setFilteredFields(filtered.slice(0, 5));
                                   setSearchAnchorEl(e.currentTarget.parentElement);
                                 } else {
@@ -814,23 +917,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
 
                           if (query.trim()) {
                             let fieldsToSearch = applyFilters(fields);
-
-                            const filtered = fieldsToSearch.filter(field => {
-                              const searchTerm = query.toLowerCase();
-                              return (
-                                field.product_name?.toLowerCase().includes(searchTerm) ||
-                                field.productName?.toLowerCase().includes(searchTerm) ||
-                                field.name?.toLowerCase().includes(searchTerm) ||
-                                field.category?.toLowerCase().includes(searchTerm) ||
-                                field.subcategory?.toLowerCase().includes(searchTerm) ||
-                                field.farmer?.toLowerCase().includes(searchTerm) ||
-                                field.owner?.toLowerCase().includes(searchTerm) ||
-                                field.description?.toLowerCase().includes(searchTerm) ||
-                                field.location?.toLowerCase().includes(searchTerm) ||
-                                field.farm_name?.toLowerCase().includes(searchTerm) ||
-                                field.farmName?.toLowerCase().includes(searchTerm)
-                              );
-                            });
+                            const filtered = fieldsToSearch.filter(field => fieldMatchesSearch(field, query));
                             setFilteredFields(filtered.slice(0, 5));
                             setSearchAnchorEl(e.currentTarget.parentElement);
                           } else {
@@ -920,39 +1007,15 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               </Tooltip>
             )}
 
-            {/* Farmer Coins */}
+            {/* Farmer Coins – click opens menu (like profile) */}
             {!isAdmin && (
-              <Tooltip
-                title={
-                  <Box sx={{ textAlign: 'center', py: 0.3 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.3, fontSize: '11px' }}>
-                      Farmer Coins Balance
-                    </Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mb: 0.3, fontSize: '10px' }}>
-                      1 Farmer Coin = $100
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'success.light', fontSize: '10px' }}>
-                      You have {userCoins.toLocaleString()} coins = ${(userCoins * 100).toLocaleString()}
-                    </Typography>
-                  </Box>
-                }
-                arrow
-                placement="bottom"
-                componentsProps={{
-                  tooltip: {
-                    sx: {
-                      maxWidth: 180,
-                      fontSize: '10px',
-                      p: 1
-                    }
-                  }
-                }}
-              >
+              <>
                 <Chip
                   icon={<span style={{ fontSize: isMobile ? '12px' : '14px' }}>🪙</span>}
                   label={userCoins.toLocaleString()}
                   variant="outlined"
                   size={isMobile ? "small" : "medium"}
+                  onClick={(e) => setCoinsMenuAnchorEl(e.currentTarget)}
                   sx={{
                     fontWeight: 'bold',
                     borderColor: '#FF9800',
@@ -974,14 +1037,67 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     }
                   }}
                 />
-              </Tooltip>
+                <Menu
+                  anchorEl={coinsMenuAnchorEl}
+                  open={Boolean(coinsMenuAnchorEl)}
+                  onClose={() => setCoinsMenuAnchorEl(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  PaperProps={{
+                    sx: {
+                      mt: 1.5,
+                      minWidth: 220,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      borderRadius: 2,
+                    }
+                  }}
+                >
+                  <Box sx={{ px: 2, py: 1.5, bgcolor: 'rgba(255, 152, 0, 0.08)', borderBottom: '1px solid rgba(255,152,0,0.2)' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block' }}>
+                      Coins balance
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 700, color: '#F57C00' }}>
+                      {userCoins.toLocaleString()} coins
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '10px' }}>
+                      1 coin = $0.10 · ${(userCoins * 0.1).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} value
+                    </Typography>
+                  </Box>
+                  <MenuItem
+                    onClick={() => {
+                      setCoinsMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/transaction' : '/buyer/transaction');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <History fontSize="small" />
+                    </ListItemIcon>
+                    See transaction history
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setCoinsMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/buy-coins' : '/buyer/buy-coins');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <MonetizationOn fontSize="small" />
+                    </ListItemIcon>
+                    Add coins
+                  </MenuItem>
+                </Menu>
+              </>
             )}
 
             {/* Notifications Bell */}
             {!isAdmin && (
+              <>
               <IconButton
                 color="inherit"
-                onClick={(e) => setNotifAnchorEl(e.currentTarget)}
+                onClick={(e) => {
+                  setNotifAnchorEl(e.currentTarget);
+                  if (typeof onRefreshNotifications === 'function') onRefreshNotifications();
+                }}
                 sx={{
                   mr: 1,
                   backgroundColor: 'rgba(0,0,0,0.04)',
@@ -992,10 +1108,35 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                   })
                 }}
               >
-                <Badge badgeContent={unreadCount} color="error">
+                <Badge
+                  badgeContent={(backendNotifications ?? []).filter(n => !n.read).length}
+                  color="error"
+                  invisible={(backendNotifications ?? []).filter(n => !n.read).length === 0}
+                >
                   <Notifications sx={{ fontSize: isMobile ? 20 : 24 }} />
                 </Badge>
               </IconButton>
+            {/* Messages - badge shows new messages count, click opens messages dropdown */}
+              <Tooltip title="Messages">
+                <IconButton
+                  color="inherit"
+                  onClick={(e) => {
+                    setMessagesAnchorEl(e.currentTarget);
+                    fetchUnreadStats();
+                  }}
+                  sx={{
+                    mr: 1,
+                    backgroundColor: 'rgba(0,0,0,0.04)',
+                    '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
+                    ...(messagesAnchorEl && { backgroundColor: 'rgba(76, 175, 80, 0.1)', color: 'primary.main' })
+                  }}
+                >
+                  <Badge badgeContent={unreadCount} color="error" invisible={!unreadCount}>
+                    <Message sx={{ fontSize: isMobile ? 20 : 24 }} />
+                  </Badge>
+                </IconButton>
+              </Tooltip>
+              </>
             )}
 
             {/* Profile - Clickable Avatar with Menu (visible on mobile and desktop) */}
@@ -1097,7 +1238,7 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                 </Menu>
             </>
 
-            {/* Notifications Dropdown */}
+            {/* Activity Dropdown: backend notifications only */}
             <Menu
               anchorEl={notifAnchorEl}
               open={Boolean(notifAnchorEl)}
@@ -1107,87 +1248,200 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
               PaperProps={{
                 sx: {
                   mt: 1.5,
-                  width: { xs: 280, sm: 320 },
-                  maxHeight: 400,
+                  width: { xs: 320, sm: 380 },
+                  maxHeight: 480,
                   borderRadius: 3,
                   boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
                   overflow: 'hidden'
                 }
               }}
             >
-              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#f8fafc' }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Messages</Typography>
-                {unreadCount > 0 && (
-                  <Chip label={`${unreadCount} New`} size="small" color="error" sx={{ height: 20, fontSize: '0.7rem' }} />
-                )}
+              <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b' }}>Activity</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {((backendNotifications ?? []).filter(n => !n.read).length) > 0 && (
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        (backendNotifications ?? []).filter(n => !n.read).forEach((n) => { if (typeof onMarkNotificationAsRead === 'function') onMarkNotificationAsRead(n.id); });
+                      }}
+                      sx={{ minWidth: 0, py: 0.25, px: 1, fontSize: '0.75rem', color: '#4caf50', fontWeight: 600 }}
+                    >
+                      Mark all read
+                    </Button>
+                  )}
+                  {(backendNotifications ?? []).filter(n => !n.read).length > 0 && (
+                    <Chip
+                      label={`${(backendNotifications ?? []).filter(n => !n.read).length} unread`}
+                      size="small"
+                      color="primary"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
               </Box>
-              <Divider />
-              <List sx={{ p: 0 }}>
-                {recentChats.slice(0, 5).map(chat => (
-                  <MenuItem
-                    key={chat.id}
-                    onClick={() => {
-                      setNotifAnchorEl(null);
-                      navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
-                    }}
-                    sx={{
-                      py: 1.5,
-                      px: 2,
-                      borderBottom: '1px solid #f1f5f9',
-                      bgcolor: chat.unread_count > 0 ? 'rgba(76, 175, 80, 0.04)' : 'transparent',
-                      '&:hover': { bgcolor: '#f0fdf4' }
-                    }}
-                  >
-                    <ListItemAvatar sx={{ minWidth: 48 }}>
-                      <Avatar src={chat.participant_avatar} sx={{ width: 40, height: 40 }}>
-                        {chat.participant_name?.charAt(0)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                        <Typography variant="body2" sx={{ fontWeight: chat.unread_count > 0 ? 700 : 500, color: '#1e293b' }}>
-                          {chat.participant_name}
-                        </Typography>
-                        {chat.last_message_at && (
-                          <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                            {new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </Typography>
-                        )}
+              <List sx={{ py: 0, maxHeight: 400, overflow: 'auto' }}>
+                {(() => {
+                  const notifItems = (backendNotifications ?? []).slice(0, 25).map(n => ({ type: 'notification', ...n, sortAt: new Date(n.created_at || 0).getTime() })).sort((a, b) => (b.sortAt || 0) - (a.sortAt || 0));
+                  if (notifItems.length === 0) {
+                    return (
+                      <Box sx={{ py: 4, textAlign: 'center' }}>
+                        <Notifications sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
+                        <Typography variant="body2" sx={{ color: '#94a3b8' }}>No activity yet</Typography>
                       </Box>
-                      <Typography
-                        variant="caption"
+                    );
+                  }
+                  return notifItems.map((item) => {
+                    const notif = item;
+                    const isUnread = !notif.read;
+                    const Icon = notif.type === 'success' ? CheckCircle : notif.type === 'warning' ? Warning : notif.type === 'error' ? ErrorIcon : notif.type === 'info' ? Info : NotificationsActive;
+                    const iconColor = notif.type === 'success' ? '#22c55e' : notif.type === 'warning' ? '#eab308' : notif.type === 'error' ? '#ef4444' : '#3b82f6';
+                    return (
+                      <MenuItem
+                        key={notif.id}
+                        onClick={() => { if (isUnread && typeof onMarkNotificationAsRead === 'function') onMarkNotificationAsRead(notif.id); }}
                         sx={{
-                          color: chat.unread_count > 0 ? '#334155' : '#64748b',
-                          display: '-webkit-box',
-                          overflow: 'hidden',
-                          WebkitBoxOrient: 'vertical',
-                          WebkitLineClamp: 1,
-                          fontWeight: chat.unread_count > 0 ? 500 : 400
+                          py: 1.25,
+                          px: 2,
+                          borderBottom: '1px solid #f1f5f9',
+                          bgcolor: isUnread ? 'rgba(76, 175, 80, 0.06)' : 'transparent',
+                          '&:hover': { bgcolor: isUnread ? 'rgba(76, 175, 80, 0.1)' : '#f8fafc' }
                         }}
                       >
-                        {chat.last_message || 'No messages yet'}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
-                {recentChats.length === 0 && (
-                  <Box sx={{ py: 4, textAlign: 'center' }}>
-                    <Message sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
-                    <Typography variant="body2" sx={{ color: '#94a3b8' }}>No conversations yet</Typography>
-                  </Box>
-                )}
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                          <Avatar sx={{ width: 36, height: 36, bgcolor: `${iconColor}20`, color: iconColor }}>
+                            <Icon sx={{ fontSize: 20 }} />
+                          </Avatar>
+                        </ListItemIcon>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
+                            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Notification</Typography>
+                            {notif.created_at && (
+                              <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                                {new Date(notif.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="body2" sx={{ fontWeight: isUnread ? 600 : 500, color: '#1e293b', display: '-webkit-box', overflow: 'hidden', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }}>
+                            {notif.message}
+                          </Typography>
+                          {isUnread && (
+                            <Button
+                              size="small"
+                              variant="text"
+                              onClick={(e) => { e.stopPropagation(); if (typeof onMarkNotificationAsRead === 'function') onMarkNotificationAsRead(notif.id); }}
+                              sx={{ minWidth: 0, py: 0.25, px: 0.5, mt: 0.5, fontSize: '0.7rem', color: '#4caf50', fontWeight: 600 }}
+                            >
+                              Mark read
+                            </Button>
+                          )}
+                        </Box>
+                      </MenuItem>
+                    );
+                  });
+                })()}
               </List>
               <Divider />
-              <MenuItem
-                onClick={() => {
-                  setNotifAnchorEl(null);
-                  navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
-                }}
-                sx={{ justifyContent: 'center', py: 1.5, color: '#4caf50', fontWeight: 600, fontSize: '0.875rem' }}
-              >
-                View All Messages
-              </MenuItem>
             </Menu>
+
+            {/* Messages Dropdown: recent chats only */}
+            {!isAdmin && (
+              <Menu
+                anchorEl={messagesAnchorEl}
+                open={Boolean(messagesAnchorEl)}
+                onClose={() => setMessagesAnchorEl(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                PaperProps={{
+                  sx: {
+                    mt: 1.5,
+                    width: { xs: 320, sm: 380 },
+                    maxHeight: 480,
+                    borderRadius: 3,
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                    overflow: 'hidden'
+                  }
+                }}
+              >
+                <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b' }}>Messages</Typography>
+                  {unreadCount > 0 && (
+                    <Chip label={`${unreadCount} unread`} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
+                  )}
+                </Box>
+                <List sx={{ py: 0, maxHeight: 400, overflow: 'auto' }}>
+                  {(() => {
+                    const messageItems = (recentChats || [])
+                      .filter(c => c.last_message != null && String(c.last_message).trim() !== '')
+                      .slice(0, 10)
+                      .sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
+                    if (messageItems.length === 0) {
+                      return (
+                        <Box sx={{ py: 4, textAlign: 'center' }}>
+                          <Message sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
+                          <Typography variant="body2" sx={{ color: '#94a3b8' }}>No messages yet</Typography>
+                        </Box>
+                      );
+                    }
+                    return messageItems.map((chat) => (
+                      <MenuItem
+                        key={chat.id}
+                        onClick={() => {
+                          setMessagesAnchorEl(null);
+                          navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
+                        }}
+                        sx={{
+                          py: 1.25,
+                          px: 2,
+                          borderBottom: '1px solid #f1f5f9',
+                          bgcolor: chat.unread_count > 0 ? 'rgba(76, 175, 80, 0.06)' : 'transparent',
+                          '&:hover': { bgcolor: chat.unread_count > 0 ? 'rgba(76, 175, 80, 0.1)' : '#f8fafc' }
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                          <Avatar src={chat.participant_avatar} sx={{ width: 36, height: 36, bgcolor: '#e2e8f0', color: '#64748b' }}>
+                            {chat.participant_name?.charAt(0)}
+                          </Avatar>
+                        </ListItemIcon>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
+                            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Message</Typography>
+                            {chat.last_message_at && (
+                              <Typography variant="caption" sx={{ color: '#94a3b8', flexShrink: 0 }}>
+                                {new Date(chat.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="body2" sx={{ fontWeight: chat.unread_count > 0 ? 600 : 500, color: '#1e293b' }}>
+                            {chat.participant_name}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#64748b', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {chat.last_message || 'No messages yet'}
+                            {chat.unread_count > 0 && <Typography component="span" variant="caption" sx={{ color: '#4caf50', fontWeight: 600, ml: 0.5 }}>· New</Typography>}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ));
+                  })()}
+                </List>
+                <Divider />
+                <Box sx={{ p: 1, textAlign: 'center' }}>
+                  <Button
+                    fullWidth
+                    size="small"
+                    onClick={() => {
+                      setMessagesAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/messages' : '/buyer/messages');
+                    }}
+                    sx={{ color: 'primary.main', fontWeight: 600 }}
+                  >
+                    View all messages
+                  </Button>
+                </Box>
+              </Menu>
+            )}
           </Box>
         </Toolbar>
       </AppBar>
@@ -1438,8 +1692,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
         sx={{
           zIndex: 1400,
           width: Math.max(searchAnchorEl?.offsetWidth || 280, 280),
+          maxWidth: 'calc(100vw - 24px)',
           ...(isMobile && {
-            width: '260px',
+            width: 'min(260px, calc(100vw - 24px))',
           })
         }}
       >
@@ -1447,15 +1702,26 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
           <Paper
             sx={{
               mt: 0.5,
-              maxHeight: 'none',
-              overflow: 'visible',
+              ml: -2,
+              width: '100%',
+              maxWidth: isMobile ? 'calc(100vw - 24px)' : 380,
+              maxHeight: 'min(320px, 60vh)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
               boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
               border: '1px solid rgba(0,0,0,0.08)',
               borderRadius: 2,
-              ml: -2,
             }}
           >
-            <MenuList sx={{ py: 0.5, }}>
+            <MenuList
+              sx={{
+                py: 0.5,
+                overflow: 'auto',
+                maxHeight: 'min(320px, 60vh)',
+                minWidth: 0,
+              }}
+            >
               {filteredFields.map((field) => (
                 <MenuItem
                   key={field.id}
@@ -1475,6 +1741,9 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                     px: isMobile ? 1.5 : 2,
                     minHeight: 'auto',
                     width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
                     '&:hover': {
                       backgroundColor: 'rgba(46, 125, 50, 0.04)',
                     },
@@ -1493,9 +1762,11 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      width: '100%',
+                      minWidth: 0,
                     }}
                   >
-                    {field.product_name || field.productName || field.name}
+                    {highlightMatch(field.product_name || field.productName || field.name, searchQuery)}
                   </Typography>
                   <Typography
                     variant="caption"
@@ -1506,9 +1777,12 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      width: '100%',
+                      minWidth: 0,
                     }}
                   >
-                    {field.farmer || field.owner} • {field.location}
+                    {highlightMatch(field.farmer_name || field.farmer || field.owner, searchQuery)}
+                    {(field.location != null && field.location !== '') && <> • {highlightMatch(field.location, searchQuery)}</>}
                   </Typography>
                   <Typography
                     variant="caption"
@@ -1519,9 +1793,11 @@ const EnhancedHeader = forwardRef(({ user, onLogout, onSearchChange, onFilterApp
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      width: '100%',
+                      minWidth: 0,
                     }}
                   >
-                    {field.category || field.subcategory}
+                    {highlightMatch(field.category || field.subcategory, searchQuery)}
                   </Typography>
                 </MenuItem>
               ))}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import rentedFieldsService from '../services/rentedFields';
+import React, { useState, useEffect, useMemo } from 'react';
+import fieldsService from '../services/fields';
 import {
   Container,
   Typography,
@@ -27,7 +27,17 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Pagination
+  Pagination,
+  Tabs,
+  Tab,
+  TextField,
+  InputAdornment,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   LocationOn,
@@ -40,23 +50,173 @@ import {
   Close,
   Download,
   Description,
+  Search,
+  HomeWork,
+  Store,
+  Edit as EditIcon,
+  ReceiptLong as RentIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import storageService from '../services/storage';
-import { orderService } from '../services/orders';
+import rentedFieldsService from '../services/rentedFields';
+import farmsService from '../services/farms';
+import CreateFieldForm from '../components/Forms/CreateFieldForm';
+
+const SEGMENT_ALL = 'all';
+const SEGMENT_OWNED = 'owned';
+const SEGMENT_RENTED = 'rented';
+
+// Map fields API response to the shape the UI expects
+function mapFieldFromApi(raw) {
+  const areaM2 = typeof raw.area_m2 === 'string' ? parseFloat(raw.area_m2) : (raw.area_m2 ?? 0);
+  const availableArea = typeof raw.available_area === 'string' ? parseFloat(raw.available_area) : (raw.available_area ?? 0);
+  const totalArea = typeof raw.total_area === 'string' ? parseFloat(raw.total_area) : (raw.total_area ?? areaM2) || areaM2;
+  const pricePerM2 = typeof raw.price_per_m2 === 'string' ? parseFloat(raw.price_per_m2) : (raw.price_per_m2 ?? 0);
+  const quantity = typeof raw.quantity === 'string' ? parseFloat(raw.quantity) : (raw.quantity ?? 0);
+  const occupied = Math.max(0, totalArea - availableArea);
+  const progress = totalArea > 0 ? Math.round((occupied / totalArea) * 100) : 0;
+  const harvestDates = Array.isArray(raw.harvest_dates)
+    ? raw.harvest_dates.map((h) => (typeof h === 'object' && h?.date != null ? { date: h.date, label: h.label || '' } : { date: h, label: '' }))
+    : [];
+  const shippingOption = raw.shipping_option || '';
+  const shippingModes = shippingOption ? shippingOption.split(/[,/]/).map((s) => s.trim()).filter(Boolean) : [];
+  const availableForBuy = raw.available_for_buy !== false && raw.available_for_buy !== 'false';
+  const availableForRent = raw.available_for_rent === true || raw.available_for_rent === 'true';
+  const rentPricePerMonth = raw.rent_price_per_month != null && raw.rent_price_per_month !== '' ? parseFloat(raw.rent_price_per_month) : null;
+  return {
+    id: raw.id,
+    name: raw.name,
+    farmName: raw.farmer_name,
+    location: raw.location,
+    cropType: raw.category || raw.subcategory || '—',
+    category: raw.category,
+    subcategory: raw.subcategory,
+    is_own_field: Boolean(raw.is_own_field),
+    total_area: totalArea,
+    area_m2: areaM2,
+    available_area: availableArea,
+    area: quantity ? `${quantity} ${raw.unit || 'm²'}` : `${areaM2} m²`,
+    price_per_m2: pricePerM2,
+    monthlyRent: (pricePerM2 * (quantity || areaM2)) || (typeof raw.price === 'string' ? parseFloat(raw.price) : raw.price) || 0,
+    status: raw.available !== false ? 'Active' : 'Inactive',
+    progress,
+    selected_harvests: harvestDates,
+    selected_harvest_date: harvestDates[0]?.date,
+    selected_harvest_label: harvestDates[0]?.label,
+    shipping_modes: shippingModes.length ? shippingModes : ['Not specified'],
+    image_url: raw.image,
+    farmer_name: raw.farmer_name,
+    created_at: raw.created_at,
+    rentPeriod: totalArea > 0 ? 'Ongoing' : '—',
+    available_for_buy: availableForBuy,
+    available_for_rent: availableForRent,
+    rent_price_per_month: rentPricePerMonth,
+    rent_duration_monthly: raw.rent_duration_monthly === true || raw.rent_duration_monthly === 'true',
+    rent_duration_quarterly: raw.rent_duration_quarterly === true || raw.rent_duration_quarterly === 'true',
+    rent_duration_yearly: raw.rent_duration_yearly === true || raw.rent_duration_yearly === 'true',
+  };
+}
+
+// Convert raw field from API to CreateFieldForm initialData shape
+function fieldToFormInitialData(raw) {
+  if (!raw) return null;
+  const coords = Array.isArray(raw.coordinates) ? raw.coordinates : [];
+  const lng = coords[0] != null ? Number(coords[0]) : '';
+  const lat = coords[1] != null ? Number(coords[1]) : '';
+  const harvestDates = Array.isArray(raw.harvest_dates)
+    ? raw.harvest_dates.map((h) => (typeof h === 'object' && h != null ? { date: h.date ?? '', label: h.label ?? '' } : { date: h ?? '', label: '' }))
+    : [{ date: '', label: '' }];
+  return {
+    ...raw,
+    name: raw.name ?? '',
+    productName: raw.name ?? '',
+    category: raw.category ?? '',
+    subcategory: raw.subcategory ?? '',
+    description: raw.description ?? '',
+    price: raw.price ?? raw.price_per_m2,
+    sellingPrice: raw.price ?? raw.price_per_m2 ?? '',
+    latitude: lat,
+    longitude: lng,
+    harvestDates: harvestDates.length ? harvestDates : [{ date: '', label: '' }],
+    shippingScope: raw.shipping_scope ?? 'Global',
+    shippingOption: raw.shipping_option ?? 'Both',
+    farmId: raw.farm_id ?? '',
+    fieldSize: raw.field_size ?? raw.area_m2 ?? raw.total_area ?? '',
+    productionRate: raw.production_rate ?? '',
+    available_for_rent: Boolean(raw.available_for_rent),
+    rent_price_per_month: raw.rent_price_per_month ?? '',
+    rent_duration_monthly: Boolean(raw.rent_duration_monthly),
+    rent_duration_quarterly: Boolean(raw.rent_duration_quarterly),
+    rent_duration_yearly: Boolean(raw.rent_duration_yearly),
+  };
+}
+
+// Map my-rentals API response (rented_fields + field details) to same shape as owned fields for the card
+function mapRentalFromApi(r) {
+  const totalArea = typeof r.total_area === 'string' ? parseFloat(r.total_area) : (r.total_area ?? 0);
+  const availableArea = typeof r.available_area === 'string' ? parseFloat(r.available_area) : (r.available_area ?? 0);
+  const areaRented = r.area_rented != null && r.area_rented !== '' ? parseFloat(r.area_rented) : 0;
+  const occupied = Math.max(0, totalArea > 0 ? totalArea - availableArea : areaRented);
+  const progress = totalArea > 0 ? Math.round((occupied / totalArea) * 100) : 0;
+  const status = (r.status || 'active').toLowerCase();
+  return {
+    id: `rental-${r.id}`,
+    _rentalId: r.id,
+    _fieldId: r.field_id,
+    is_own_field: false,
+    name: r.field_name || `Field ${r.field_id}`,
+    farmName: r.owner_name,
+    location: r.field_location || '—',
+    cropType: r.category || r.subcategory || '—',
+    category: r.category,
+    subcategory: r.subcategory,
+    total_area: totalArea,
+    area_m2: areaRented,
+    available_area: availableArea,
+    area: `${areaRented} m²`,
+    price_per_m2: r.price_per_m2,
+    monthlyRent: typeof r.price === 'number' ? r.price : (typeof r.price === 'string' ? parseFloat(r.price) : 0) || 0,
+    status: status === 'active' ? 'Active' : status === 'ended' ? 'Ended' : status === 'cancelled' ? 'Cancelled' : status,
+    progress,
+    selected_harvests: [],
+    shipping_modes: ['Not specified'],
+    farmer_name: r.owner_name,
+    rentPeriod: r.start_date && r.end_date ? `${r.start_date} – ${r.end_date}` : '—',
+    rental_start_date: r.start_date,
+    rental_end_date: r.end_date,
+  };
+}
 
 const RentedFields = () => {
-  // Get current user from AuthContext
   const { user } = useAuth();
   const [rentedFields, setRentedFields] = useState([]);
+  const [myRentals, setMyRentals] = useState([]);
   const [userCurrency, setUserCurrency] = useState('USD');
   const [loading, setLoading] = useState(true);
+  const [loadingRentals, setLoadingRentals] = useState(false);
   const [selectedField, setSelectedField] = useState(null);
   const [fieldDetailOpen, setFieldDetailOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(8);
   const [showAllFields, setShowAllFields] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [segment, setSegment] = useState(SEGMENT_ALL);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [editFieldOpen, setEditFieldOpen] = useState(false);
+  const [editingFieldFull, setEditingFieldFull] = useState(null);
+  const [farmsListForEdit, setFarmsListForEdit] = useState([]);
+  const [editRentOpen, setEditRentOpen] = useState(false);
+  const [editRentField, setEditRentField] = useState(null);
+  const [editRentForm, setEditRentForm] = useState({
+    available_for_buy: true,
+    available_for_rent: false,
+    rent_price_per_month: '',
+    rent_duration_monthly: false,
+    rent_duration_quarterly: false,
+    rent_duration_yearly: false,
+  });
+  const [editRentSaving, setEditRentSaving] = useState(false);
+  const [editRentError, setEditRentError] = useState('');
 
   // Exchange rates for currency conversion
   const exchangeRates = {
@@ -166,107 +326,87 @@ const RentedFields = () => {
     // User currency will default to 'USD' or be managed by a future backend.
   }, []);
 
-  // Load rented fields based on user type
-  useEffect(() => {
-    const loadRentedFields = async () => {
-      try {
-        // If no user from auth context, return early
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-
-        // Both farmers and buyers use the same API to get their purchased fields
-        // The difference is that farmers see fields they purchased as buyers
-        // while buyers see fields they purchased as buyers
-        try {
-          const response = await orderService.getBuyerOrdersWithFields(user.id);
-          const orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
-          const byField = new Map();
-          orders.forEach((order) => {
-            const fid = order.field_id;
-            if (!fid) return;
-            const prev = byField.get(fid) || { quantity: 0, total_price: 0, selected_harvests: [], shipping_modes: [] };
-            const qtyRaw = order.quantity ?? order.area_rented ?? order.area ?? 0;
-            const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
-            byField.set(fid, {
-              field_id: fid,
-              id: fid,
-              name: order.field_name,
-              location: order.location,
-              cropType: order.crop_type,
-              total_area: order.total_area,
-              price_per_m2: order.price_per_m2,
-              image_url: order.image_url,
-              farmer_name: order.farmer_name,
-              created_at: order.created_at,
-              status: order.status === 'pending' ? 'Pending' : 'Active',
-              selected_harvest_date: order.selected_harvest_date || calculateHarvestDate(order.created_at, order.crop_type),
-              selected_harvest_label: order.selected_harvest_label || null,
-              selected_harvests: (() => {
-                const listPrev = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
-                const shDate = order.selected_harvest_date || null;
-                const shLabel = order.selected_harvest_label || null;
-                const item = { date: shDate, label: shLabel };
-                const added = (item.date || item.label) ? [...listPrev, item] : listPrev;
-                const s = new Set();
-                return added.filter(it => {
-                  const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
-                  const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
-                  if (s.has(k)) return false; s.add(k); return true;
-                });
-              })(),
-              shipping_modes: (() => {
-                const prevModes = Array.isArray(prev.shipping_modes) ? prev.shipping_modes : [];
-                const m = (order.mode_of_shipping || order.shipping_method || '').trim();
-                const canon = m.toLowerCase() === 'pickup' ? 'Pickup' : (m.toLowerCase() === 'delivery' ? 'Delivery' : (m ? m : null));
-                const added = canon ? [...prevModes, canon] : prevModes;
-                const set = new Set();
-                return added.filter(x => { const k = (x || '').toLowerCase(); if (set.has(k)) return false; set.add(k); return true; });
-              })(),
-              quantity: (prev.quantity || 0) + qty,
-              total_price: (prev.total_price || 0) + (order.total_price || 0)
-            });
-          });
-          const aggregated = Array.from(byField.values()).map(f => ({
-            ...f,
-            area: `${f.quantity}m²`,
-            available_area: Math.max(0, (typeof f.total_area === 'string' ? parseFloat(f.total_area) : (f.total_area || 0)) - (f.quantity || 0)),
-            monthlyRent: convertCurrency(f.total_price || 0, 'USD', userCurrency),
-            progress: Math.floor(Math.random() * 100) + 1,
-            rentPeriod: calculateRentPeriod(f.created_at)
-          }));
-          setRentedFields(aggregated);
-        } catch (dbError) {
-          console.error('Error fetching from database, falling back to stored data:', dbError);
-
-          // Fallback to stored fields if database fails
-          const storedFields = storageService.getItem('rentedFields') || [];
-
-          if (storedFields.length > 0) {
-            const formattedFields = storedFields.map((field, index) => ({
-              ...field,
-              monthlyRent: convertCurrency(field.monthlyRent || field.price_per_m2 * field.area, 'USD', userCurrency),
-              progress: Math.floor(((field.id || index) * 43) % 100) + 1, // Deterministic progress
-              rentPeriod: calculateRentPeriod(field.created_at),
-              status: 'Active'
-            }));
-            setRentedFields(formattedFields);
-          } else {
-            // No fallback to mock data - just set empty array if no data
-            setRentedFields([]);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading rented fields:', error);
-      } finally {
+  const loadFields = React.useCallback(async () => {
+    try {
+      if (!user) {
         setLoading(false);
+        return;
       }
-    };
+      setLoading(true);
+      const response = await fieldsService.getAll();
+      const rawList = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const mapped = rawList.map(mapFieldFromApi);
+      setRentedFields(mapped);
+    } catch (error) {
+      console.error('Error loading fields:', error);
+      setRentedFields([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
-    loadRentedFields();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userCurrency]);
+  const loadMyRentals = React.useCallback(async () => {
+    try {
+      if (!user?.id) {
+        setMyRentals([]);
+        return;
+      }
+      setLoadingRentals(true);
+      const res = await rentedFieldsService.getMyRentals();
+      const list = Array.isArray(res.data) ? res.data : [];
+      setMyRentals(list.map(mapRentalFromApi));
+    } catch (error) {
+      console.error('Error loading my rentals:', error);
+      setMyRentals([]);
+    } finally {
+      setLoadingRentals(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadFields();
+  }, [loadFields]);
+
+  useEffect(() => {
+    loadMyRentals();
+  }, [loadMyRentals]);
+
+  // Combine owned fields + rented fields by segment; then filter by search and category
+  const displayedFields = useMemo(() => {
+    let list;
+    if (segment === SEGMENT_OWNED) list = rentedFields.filter((f) => f.is_own_field);
+    else if (segment === SEGMENT_RENTED) list = [...myRentals];
+    else list = [...rentedFields, ...myRentals];
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (f) =>
+          (f.name || '').toLowerCase().includes(q) ||
+          (f.location || '').toLowerCase().includes(q) ||
+          (f.cropType || '').toLowerCase().includes(q) ||
+          (f.farmer_name || '').toLowerCase().includes(q)
+      );
+    }
+    if (categoryFilter) {
+      list = list.filter(
+        (f) => (f.category || f.cropType || '').toLowerCase() === categoryFilter.toLowerCase()
+      );
+    }
+    return list;
+  }, [rentedFields, myRentals, segment, searchQuery, categoryFilter]);
+
+  const categories = useMemo(() => {
+    const set = new Set();
+    rentedFields.forEach((f) => {
+      const c = f.category || f.cropType;
+      if (c) set.add(c);
+    });
+    myRentals.forEach((f) => {
+      const c = f.category || f.cropType;
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [rentedFields, myRentals]);
 
 
   const getStatusColor = (status) => {
@@ -289,11 +429,97 @@ const RentedFields = () => {
     setSelectedField(null);
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(rentedFields.length / itemsPerPage);
+  const openEditField = async (field) => {
+    if (!field?.id || !field.is_own_field) return;
+    try {
+      const [fieldRes, farmsRes] = await Promise.all([
+        fieldsService.getById(field.id),
+        farmsService.getAll(user?.id).catch(() => ({ data: [] })),
+      ]);
+      const raw = fieldRes.data;
+      const farms = Array.isArray(farmsRes.data) ? farmsRes.data : farmsRes.data?.data ?? [];
+      setEditingFieldFull(raw);
+      setFarmsListForEdit(farms.map((f) => ({ id: f.id, farmName: f.farm_name ?? f.name ?? f.farmName, name: f.farm_name ?? f.name ?? f.farmName })));
+      setEditFieldOpen(true);
+    } catch (e) {
+      console.error('Failed to load field for edit:', e);
+    }
+  };
+
+  const handleFullFieldSubmit = async (formData) => {
+    if (!editingFieldFull?.id) return;
+    try {
+      await fieldsService.update(editingFieldFull.id, { ...editingFieldFull, ...formData, shipping_scope: formData.shippingScope });
+      await loadFields();
+      setEditFieldOpen(false);
+      setEditingFieldFull(null);
+    } catch (e) {
+      console.error('Failed to update field:', e);
+    }
+  };
+
+  const openEditRent = (field) => {
+    if (!field) return;
+    setEditRentField(field);
+    setEditRentForm({
+      available_for_rent: Boolean(field.available_for_rent),
+      rent_price_per_month: field.rent_price_per_month != null && field.rent_price_per_month !== '' ? String(field.rent_price_per_month) : '',
+      rent_duration_monthly: Boolean(field.rent_duration_monthly),
+      rent_duration_quarterly: Boolean(field.rent_duration_quarterly),
+      rent_duration_yearly: Boolean(field.rent_duration_yearly),
+    });
+    setEditRentError('');
+    setEditRentOpen(true);
+  };
+
+  const closeEditRent = () => {
+    setEditRentOpen(false);
+    setEditRentField(null);
+    setEditRentError('');
+  };
+
+  const handleEditRentSave = async () => {
+    if (!editRentField?.id) return;
+    if (editRentForm.available_for_rent) {
+      const priceOk = editRentForm.rent_price_per_month !== '' && !isNaN(parseFloat(editRentForm.rent_price_per_month)) && parseFloat(editRentForm.rent_price_per_month) >= 0;
+      const anyDuration = editRentForm.rent_duration_monthly || editRentForm.rent_duration_quarterly || editRentForm.rent_duration_yearly;
+      if (!priceOk) {
+        setEditRentError('Rent price per month is required when available for rent.');
+        return;
+      }
+      if (!anyDuration) {
+        setEditRentError('Select at least one rent duration (Monthly, Quarterly, or Yearly).');
+        return;
+      }
+    }
+    setEditRentError('');
+    setEditRentSaving(true);
+    try {
+      await fieldsService.update(editRentField.id, {
+        available_for_buy: true,
+        available_for_rent: editRentForm.available_for_rent,
+        rent_price_per_month: editRentForm.available_for_rent && editRentForm.rent_price_per_month !== '' ? parseFloat(editRentForm.rent_price_per_month) : null,
+        rent_duration_monthly: editRentForm.rent_duration_monthly,
+        rent_duration_quarterly: editRentForm.rent_duration_quarterly,
+        rent_duration_yearly: editRentForm.rent_duration_yearly,
+      });
+      await loadFields();
+      closeEditRent();
+      setFieldDetailOpen(false);
+      setSelectedField(null);
+    } catch (e) {
+      const msg = e.response?.data?.message || e.response?.data?.error || e.message || 'Failed to update field';
+      setEditRentError(msg);
+    } finally {
+      setEditRentSaving(false);
+    }
+  };
+
+  // Pagination over filtered list
+  const totalPages = Math.ceil(displayedFields.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const displayedFields = showAllFields ? rentedFields : rentedFields.slice(startIndex, endIndex);
+  const paginatedFields = showAllFields ? displayedFields : displayedFields.slice(startIndex, endIndex);
 
   const handlePageChange = (event, value) => {
     setCurrentPage(value);
@@ -319,11 +545,11 @@ const RentedFields = () => {
     // Generate report data
     const reportData = {
       generatedAt: new Date().toLocaleString(),
-      totalFields: rentedFields.length,
-      activeFields: rentedFields.filter(f => f.status === 'Active').length,
+      totalFields: displayedFields.length,
+      activeFields: displayedFields.filter(f => f.status === 'Active').length,
       totalMonthlyRent: totalMonthlyRent,
       avgProgress: avgProgress,
-      fields: rentedFields.map(field => ({
+      fields: displayedFields.map(field => ({
         name: field.name || field.farmName,
         location: field.location,
         cropType: field.cropType,
@@ -512,31 +738,14 @@ const RentedFields = () => {
     }
   };
 
-  // Calculate stats for overview
-  const totalFields = rentedFields.length;
-  const activeFields = rentedFields.filter(f => f.status === 'Active').length;
-
-  // Calculate total monthly rent with proper dummy values
-  let totalMonthlyRent = rentedFields.reduce((sum, field) => sum + (field.monthlyRent || 0), 0);
-
-  // Always use dummy revenue for demo purposes - generate realistic values
-  if (totalFields > 0) {
-    // Generate deterministic dummy monthly revenue: $800-$1500 per field
-    const minPerField = 800;
-    const maxPerField = 1500;
-    const avgPerField = (minPerField + maxPerField) / 2;
-    // Use deterministic variation based on total fields to ensure stability
-    const variation = ((totalFields * 17) % 40 - 20) / 100; // ±20% variation but deterministic
-    const revenuePerField = avgPerField * (1 + variation);
-    totalMonthlyRent = Math.round(totalFields * revenuePerField);
-  } else {
-    totalMonthlyRent = 0;
-  }
-
-  // Calculate average progress with proper validation
-  const validFields = rentedFields.filter(field => field.progress && !isNaN(field.progress));
-  const avgProgress = validFields.length > 0 ?
-    Math.round(validFields.reduce((sum, field) => sum + field.progress, 0) / validFields.length) : 0;
+  // Calculate stats from filtered list
+  const totalFields = displayedFields.length;
+  const activeFields = displayedFields.filter(f => f.status === 'Active').length;
+  const totalMonthlyRent = displayedFields.reduce((sum, field) => sum + (parseFloat(field.monthlyRent) || 0), 0);
+  const validFields = displayedFields.filter(field => field.progress != null && !isNaN(field.progress));
+  const avgProgress = validFields.length > 0
+    ? Math.round(validFields.reduce((sum, field) => sum + field.progress, 0) / validFields.length)
+    : 0;
 
   // Show loading state while data is being fetched
   if (loading) {
@@ -577,10 +786,10 @@ const RentedFields = () => {
                 fontSize: '1.75rem'
               }}
             >
-              My Rented Fields
+              My Fields
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
-              Monitor and manage your agricultural field rentals with real-time insights
+              View and manage your owned and rented fields
             </Typography>
           </Box>
           <Button
@@ -754,6 +963,57 @@ const RentedFields = () => {
           </Grid>
         </Grid>
 
+        {/* Filters: segment, search, category */}
+        <Paper elevation={0} sx={{ p: 2, mb: 3, border: '1px solid #e2e8f0', borderRadius: 2 }}>
+          <Tabs
+            value={segment}
+            onChange={(_, v) => { setSegment(v); setCurrentPage(1); }}
+            sx={{ minHeight: 40, mb: 2, '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontWeight: 600 } }}
+          >
+            <Tab value={SEGMENT_ALL} label="All fields" />
+            <Tab value={SEGMENT_OWNED} label="My fields (owned)" icon={<HomeWork sx={{ fontSize: 18 }} />} iconPosition="start" />
+            <Tab value={SEGMENT_RENTED} label="Rented from others" icon={<Store sx={{ fontSize: 18 }} />} iconPosition="start" />
+          </Tabs>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+            <TextField
+              placeholder="Search by name, location, crop..."
+              size="small"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search sx={{ color: 'text.secondary' }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+            />
+            <FormControl size="small" sx={{ minWidth: 180, borderRadius: 2 }}>
+              <InputLabel>Category</InputLabel>
+              <Select
+                value={categoryFilter}
+                label="Category"
+                onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+                sx={{ borderRadius: 2 }}
+              >
+                <MenuItem value="">All categories</MenuItem>
+                {categories.map((c) => (
+                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {(searchQuery || categoryFilter || segment !== SEGMENT_ALL) && (
+              <Button
+                size="small"
+                onClick={() => { setSearchQuery(''); setCategoryFilter(''); setSegment(SEGMENT_ALL); setCurrentPage(1); }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </Stack>
+        </Paper>
+
         {/* Fields Grid */}
         <Box sx={{
           display: 'grid',
@@ -766,7 +1026,7 @@ const RentedFields = () => {
           alignItems: 'stretch',
           width: '100%'
         }}>
-          {displayedFields.map((field) => (
+          {paginatedFields.map((field) => (
             <Card
               key={field.id}
               elevation={0}
@@ -801,8 +1061,8 @@ const RentedFields = () => {
               }}>
                 {/* Card Header */}
                 <Box sx={{ p: 2, pb: 1.5, minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                    <Box sx={{ flex: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5, gap: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography
                         variant="h6"
                         sx={{
@@ -825,19 +1085,65 @@ const RentedFields = () => {
                         </Typography>
                       </Box>
                     </Box>
+                    {field.is_own_field && (
+                      <Stack direction="row" spacing={0.5} flexShrink={0}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); openEditField(field); }}
+                          sx={{
+                            color: '#3b82f6',
+                            bgcolor: '#eff6ff',
+                            '&:hover': { bgcolor: '#dbeafe', color: '#2563eb' },
+                            width: 32,
+                            height: 32
+                          }}
+                          title="Edit field"
+                        >
+                          <EditIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => { e.stopPropagation(); openEditRent(field); }}
+                          sx={{
+                            color: '#059669',
+                            bgcolor: '#f0fdf4',
+                            '&:hover': { bgcolor: '#dcfce7', color: '#047857' },
+                            width: 32,
+                            height: 32
+                          }}
+                          title="Edit rent settings"
+                        >
+                          <RentIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Stack>
+                    )}
                   </Box>
 
-                  <Chip
-                    label={field.status}
-                    color={getStatusColor(field.status)}
-                    size="small"
-                    sx={{
-                      fontWeight: 600,
-                      fontSize: '0.7rem',
-                      height: 24,
-                      borderRadius: 1.5
-                    }}
-                  />
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip
+                      label={field.is_own_field ? 'My field' : 'Rented'}
+                      size="small"
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.7rem',
+                        height: 24,
+                        borderRadius: 1.5,
+                        bgcolor: field.is_own_field ? '#dbeafe' : '#fef3c7',
+                        color: field.is_own_field ? '#1d4ed8' : '#b45309'
+                      }}
+                    />
+                    <Chip
+                      label={field.status}
+                      color={getStatusColor(field.status)}
+                      size="small"
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.7rem',
+                        height: 24,
+                        borderRadius: 1.5
+                      }}
+                    />
+                  </Stack>
                 </Box>
 
                 <Divider sx={{ mx: 2 }} />
@@ -992,7 +1298,7 @@ const RentedFields = () => {
         </Box>
 
         {/* Pagination Controls */}
-        {rentedFields.length > itemsPerPage && (
+        {displayedFields.length > itemsPerPage && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, mt: 4 }}>
             {!showAllFields ? (
               <>
@@ -1010,7 +1316,7 @@ const RentedFields = () => {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                  Showing {startIndex + 1}-{Math.min(endIndex, rentedFields.length)} of {rentedFields.length} fields
+                  Showing {startIndex + 1}-{Math.min(endIndex, displayedFields.length)} of {displayedFields.length} fields
                 </Typography>
                 <Button
                   variant="outlined"
@@ -1031,7 +1337,7 @@ const RentedFields = () => {
                     }
                   }}
                 >
-                  View All Fields ({rentedFields.length})
+                  View All Fields ({displayedFields.length})
                 </Button>
               </>
             ) : (
@@ -1279,7 +1585,42 @@ const RentedFields = () => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2.5, pt: 2, borderTop: '1px solid #e2e8f0' }}>
+        <DialogActions sx={{ p: 2.5, pt: 2, borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 1 }}>
+          {selectedField?.is_own_field && (
+            <>
+              <Button
+                onClick={() => { openEditField(selectedField); handleCloseFieldDetail(); }}
+                variant="contained"
+                startIcon={<EditIcon />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  bgcolor: '#3b82f6',
+                  '&:hover': { bgcolor: '#2563eb' }
+                }}
+              >
+                Edit field
+              </Button>
+              <Button
+                onClick={() => { openEditRent(selectedField); handleCloseFieldDetail(); }}
+                variant="outlined"
+                startIcon={<RentIcon />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  borderColor: '#059669',
+                  color: '#059669',
+                  '&:hover': { borderColor: '#047857', bgcolor: '#f0fdf4' }
+                }}
+              >
+                Rent settings
+              </Button>
+            </>
+          )}
           <Button
             onClick={handleCloseFieldDetail}
             variant="outlined"
@@ -1298,6 +1639,109 @@ const RentedFields = () => {
             }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Full Edit Field (CreateFieldForm in edit mode) */}
+      <CreateFieldForm
+        open={editFieldOpen}
+        onClose={() => { setEditFieldOpen(false); setEditingFieldFull(null); }}
+        onSubmit={handleFullFieldSubmit}
+        editMode={true}
+        initialData={editingFieldFull ? fieldToFormInitialData(editingFieldFull) : null}
+        farmsList={farmsListForEdit}
+      />
+
+      {/* Edit Rent Settings Dialog */}
+      <Dialog open={editRentOpen} onClose={closeEditRent} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0', pb: 2 }}>
+          Make this field available for rent
+          {editRentField && (
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mt: 0.5 }}>
+              {editRentField.name || editRentField.farmName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            This field is always available for buy. You can also make it available for rent and set rent price and durations.
+          </Typography>
+          <Stack spacing={2.5}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={editRentForm.available_for_rent}
+                  onChange={(e) => setEditRentForm((f) => ({ ...f, available_for_rent: e.target.checked }))}
+                  color="primary"
+                />
+              }
+              label="Also available for rent"
+            />
+            {editRentForm.available_for_rent && (
+              <>
+                <TextField
+                  label="Rent price per month ($)"
+                  type="number"
+                  fullWidth
+                  size="small"
+                  value={editRentForm.rent_price_per_month}
+                  onChange={(e) => setEditRentForm((f) => ({ ...f, rent_price_per_month: e.target.value }))}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  error={editRentForm.available_for_rent && (!editRentForm.rent_price_per_month || isNaN(parseFloat(editRentForm.rent_price_per_month)))}
+                />
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, display: 'block', mb: 1 }}>
+                    Rent duration(s) offered (select at least one)
+                  </Typography>
+                  <Stack direction="row" spacing={2} flexWrap="wrap">
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={editRentForm.rent_duration_monthly}
+                          onChange={(e) => setEditRentForm((f) => ({ ...f, rent_duration_monthly: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label="Monthly"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={editRentForm.rent_duration_quarterly}
+                          onChange={(e) => setEditRentForm((f) => ({ ...f, rent_duration_quarterly: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label="Quarterly"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={editRentForm.rent_duration_yearly}
+                          onChange={(e) => setEditRentForm((f) => ({ ...f, rent_duration_yearly: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label="Yearly"
+                    />
+                  </Stack>
+                </Box>
+              </>
+            )}
+          </Stack>
+          {editRentError && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setEditRentError('')}>
+              {editRentError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: '1px solid #e2e8f0' }}>
+          <Button onClick={closeEditRent} disabled={editRentSaving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleEditRentSave} disabled={editRentSaving} sx={{ bgcolor: '#059669', '&:hover': { bgcolor: '#047857' } }}>
+            {editRentSaving ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1395,7 +1839,7 @@ const RentedFields = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {rentedFields.map((field) => (
+                    {displayedFields.map((field) => (
                       <TableRow key={field.id}>
                         <TableCell>{field.name || field.farmName}</TableCell>
                         <TableCell>{field.location}</TableCell>

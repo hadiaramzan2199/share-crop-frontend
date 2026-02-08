@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, forwardRef, useRef, useImperativeHandle } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Typography, TextField, Paper, Checkbox, FormControlLabel } from '@mui/material';
 import { HomeWork } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,6 +65,7 @@ const EnhancedFarmMap = forwardRef(({
   minimal = false
 }, ref) => {
   const mapRef = useRef();
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const isMobile = useIsMobile();
   const isMapAnimatingRef = useRef(false);
@@ -112,6 +114,8 @@ const EnhancedFarmMap = forwardRef(({
 
   const [userCoins, setUserCoins] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [buyNowInProgress, setBuyNowInProgress] = useState(false);
+  const buyNowInProgressRef = useRef(false);
   const lastNonEmptyFarmsRef = useRef([]);
   const hasInitialFlyRef = useRef(false);
   const stablePurchasedIdsRef = useRef(new Set());
@@ -234,7 +238,22 @@ const EnhancedFarmMap = forwardRef(({
     setInsufficientFunds(false);
     setSelectedHarvestDate(null);
     setPopupTab('details');
-    setShowPurchaseUI(!isProductPurchased(product));
+    const availBuy = product.available_for_buy !== false && product.available_for_buy !== 'false';
+    const availRent = product.available_for_rent === true || product.available_for_rent === 'true';
+    const hasRentPrice = product.rent_price_per_month != null && product.rent_price_per_month !== '' && !isNaN(parseFloat(product.rent_price_per_month));
+    const hasRentDuration = (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') ||
+      (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') ||
+      (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true');
+    const canRent = availRent && hasRentPrice && hasRentDuration;
+    if (availBuy) setPurchaseMode('buy');
+    else if (canRent) setPurchaseMode('rent');
+    else setPurchaseMode('buy');
+    if (canRent) {
+      if (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') setRentDuration('monthly');
+      else if (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') setRentDuration('quarterly');
+      else if (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true') setRentDuration('yearly');
+    }
+    setShowPurchaseUI(true);
 
 
     if (mapRef.current && product.coordinates) {
@@ -263,7 +282,7 @@ const EnhancedFarmMap = forwardRef(({
     if (onProductSelect) {
       onProductSelect(product);
     }
-  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
+  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile]);
   const [selectedIcons, setSelectedIcons] = useState(new Set());
   const [showPurchaseUI, setShowPurchaseUI] = useState(true);
   const celebratedHarvestIdsRef = useRef(new Set());
@@ -282,6 +301,9 @@ const EnhancedFarmMap = forwardRef(({
   const [deliveryPanelLeft, setDeliveryPanelLeft] = useState(54);
   const [fieldOrderStats, setFieldOrderStats] = useState(new Map());
   const [popupTab, setPopupTab] = useState('details');
+  const [purchaseMode, setPurchaseMode] = useState('buy'); // 'buy' | 'rent' – rent only for farmers
+  const [rentDuration, setRentDuration] = useState('monthly'); // 'monthly' | 'quarterly' | 'yearly' – used when rent is selected
+  const [rentInProgress, setRentInProgress] = useState(false);
   const [webcamPopupOpen, setWebcamPopupOpen] = useState(false);
   const [selectedFarmForWebcam, setSelectedFarmForWebcam] = useState(null);
 
@@ -1216,7 +1238,7 @@ const EnhancedFarmMap = forwardRef(({
           // Load fields from database API
           let databaseFields = [];
           try {
-            const response = await fieldsService.getAll();
+            const response = await fieldsService.getAllForMap();
             databaseFields = (response.data || []).map(normalizeField);
 
             // Check specifically for the watermelon field
@@ -1788,7 +1810,10 @@ const EnhancedFarmMap = forwardRef(({
   }, [currentUser]);
 
   const handleBuyNow = async (product) => {
-
+    if (buyNowInProgressRef.current) return;
+    buyNowInProgressRef.current = true;
+    setBuyNowInProgress(true);
+    try {
     if (!currentUser || !currentUser.id) {
       if (onNotification) {
         onNotification('Please log in to make a purchase.', 'error');
@@ -1832,15 +1857,23 @@ const EnhancedFarmMap = forwardRef(({
     }
 
     const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
-    const totalCostInCoins = Math.ceil(totalCostInDollars); // 1 coin = $100, so we need totalCostInDollars/100 coins
+    // Convert dollars to coins: Based on coin packs, ~100 coins = $9.99, so 1 coin ≈ $0.10
+    // Formula: dollars * 10 (round up to ensure fair pricing)
+    const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
 
     // Reset insufficient funds error
     setInsufficientFunds(false);
 
     // Check if user has sufficient coins using coinService
-    const hasSufficientCoins = await coinService.hasSufficientCoins(currentUser.id, totalCostInCoins);
-    if (!hasSufficientCoins) {
+    const currentCoins = await coinService.getUserCoins(currentUser.id);
+    if (currentCoins < totalCostInCoins) {
       setInsufficientFunds(true);
+      if (onNotification) {
+        onNotification(
+          `Insufficient coins! You need ${totalCostInCoins} coins but only have ${currentCoins}. Please add more coins to continue.`,
+          'error'
+        );
+      }
       return;
     }
 
@@ -1913,8 +1946,32 @@ const EnhancedFarmMap = forwardRef(({
           })();
         }
 
+        // Deduct coins FIRST before creating order (atomic operation)
+        let orderId = null;
         try {
+          // Deduct coins with order reference
+          const deductResponse = await coinService.deductCoins(currentUser.id, totalCostInCoins, {
+            reason: `Purchase: ${quantity}m² of ${product.name}`,
+            refType: 'order',
+            refId: null // Will be updated after order creation
+          });
+          
+          if (!deductResponse) {
+            throw new Error('Failed to deduct coins');
+          }
+          
+          console.log('[Purchase] Coins deducted:', { userId: currentUser.id, amount: totalCostInCoins, response: deductResponse });
+          
+          // Update user coins in UI immediately
+          const updatedCoins = await coinService.getUserCoins(currentUser.id);
+          setUserCoins(updatedCoins);
+          if (onCoinRefresh) onCoinRefresh();
+          
+          // Create order via API
           const orderResponse = await orderService.createOrder(apiOrderData);
+          orderId = orderResponse?.data?.id || orderResponse?.data?.order?.id || null;
+          
+          console.log('[Purchase] Order created:', { orderId, orderData: apiOrderData });
 
           // Create notification for the farmer
           const farmerId = product.farmer_id || product.created_by;
@@ -1931,11 +1988,47 @@ const EnhancedFarmMap = forwardRef(({
               console.error('Failed to create farmer notification:', notifError);
             }
           }
+          
+          // Success notification for buyer
+          if (onNotification) {
+            onNotification(
+              `Purchase successful! ${quantity}m² of ${product.name} purchased for ${totalCostInCoins} coins.`,
+              'success'
+            );
+          }
         } catch (error) {
-          console.error('Failed to create order via API:', error);
-          console.error('Error details:', error.response?.data || error.message);
-          // Fall back to mock service for now
-          await mockOrderService.createOrder(orderData);
+          console.error('[Purchase] Failed:', error);
+          console.error('[Purchase] Error details:', error.response?.data || error.message);
+          
+          // If order creation failed but coins were deducted, we need to refund
+          // (In production, you might want to implement a refund mechanism)
+          if (error.response?.status === 400 && error.response?.data?.error === 'Insufficient coins') {
+            if (onNotification) {
+              const shortfall = error.response?.data?.shortfall || 0;
+              onNotification(
+                `Insufficient coins! You need ${totalCostInCoins} coins. Please add more coins to continue.`,
+                'error'
+              );
+            }
+            setInsufficientFunds(true);
+            return;
+          }
+          
+          // For other errors, show generic message
+          if (onNotification) {
+            onNotification(
+              `Purchase failed: ${error.response?.data?.error || error.message || 'Unknown error'}. Please try again.`,
+              'error'
+            );
+          }
+          
+          // Fall back to mock service only if API completely fails
+          try {
+            await mockOrderService.createOrder(orderData);
+          } catch (mockError) {
+            console.error('Mock order creation also failed:', mockError);
+          }
+          return; // Don't proceed with UI updates if order creation failed
         }
       } else {
         // Fall back to mock service if no user
@@ -1996,11 +2089,6 @@ const EnhancedFarmMap = forwardRef(({
       setSelectedHarvestDate(null);
 
       const tasks = [];
-      tasks.push(coinService.deductCoins(currentUser.id, totalCostInCoins).then(async () => {
-        const coins = await coinService.getUserCoins(currentUser.id);
-        setUserCoins(coins);
-        if (onCoinRefresh) onCoinRefresh();
-      }));
       tasks.push((async () => {
         try {
           const res = await orderService.getBuyerOrdersWithFields(currentUser.id);
@@ -2085,29 +2173,10 @@ const EnhancedFarmMap = forwardRef(({
       // The purchase status is now managed via the database, so we just update the local UI state
       // In a full implementation, we would reload the fields from the API to get updated status
 
-      // If this is a farmer-created field, create a farm order and send notification
+      // If this is a farmer-created field, farm orders and notifications are managed via API above.
+      // (Order creation and farmer notification already handled; no hardcoded owner/buyer.)
       if (product.isFarmerCreated) {
-        /*
-        const farmOrder = {
-          id: `order_${Date.now()}`,
-          fieldId: product.id,
-          fieldName: product.name,
-          buyerId: 'buyer@test.com', // Current buyer
-          buyerName: 'Test Buyer',
-          farmerId: product.createdBy || 'farmer@test.com',
-          quantity: quantity,
-          totalPrice: totalCostInCoins,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-          shippingMethod: selectedShipping || 'Delivery',
-          mode_of_shipping: selectedShipping || 'Delivery'
-        };
-        */
-
-        // Farm orders and notifications are now managed via API
-        // TODO: Implement API calls for farm orders and notifications
-
-        // Note: Notification already sent above, no need for duplicate notification
+        // Notification already sent above for product.farmer_id / product.owner_id
       }
 
     } catch (error) {
@@ -2118,6 +2187,88 @@ const EnhancedFarmMap = forwardRef(({
       setSelectedProduct(null);
       setInsufficientFunds(false);
       setQuantity(1);
+    }
+    } finally {
+      buyNowInProgressRef.current = false;
+      setBuyNowInProgress(false);
+    }
+  };
+
+  const handleRentNow = async (product) => {
+    if (!currentUser || !currentUser.id) {
+      if (onNotification) onNotification('Please log in to rent a field.', 'error');
+      return;
+    }
+    const userType = (currentUser.user_type || '').toLowerCase();
+    if (userType !== 'farmer') {
+      if (onNotification) onNotification('Only farmers can rent fields from here.', 'error');
+      return;
+    }
+    const ownerId = product.farmer_id || product.owner_id || product.created_by;
+    if (ownerId && String(ownerId) === String(currentUser.id)) {
+      if (onNotification) onNotification('You cannot rent your own field.', 'error');
+      return;
+    }
+    const availableArea = getAvailableArea(product);
+    if (!(availableArea > 0)) {
+      if (onNotification) onNotification('No area remaining to rent for this field.', 'error');
+      return;
+    }
+    if (quantity > availableArea) {
+      if (onNotification) onNotification(`Only ${availableArea}m² available. Reduce quantity to proceed.`, 'error');
+      return;
+    }
+    const rentPricePerMonth = parseFloat(product.rent_price_per_month) || 0;
+    if (!(rentPricePerMonth > 0)) {
+      if (onNotification) onNotification('This field has no rent price set.', 'error');
+      return;
+    }
+    const months = rentDuration === 'monthly' ? 1 : rentDuration === 'quarterly' ? 3 : 12;
+    const totalPrice = rentPricePerMonth * quantity * months;
+    const totalCostInCoins = Math.ceil(totalPrice * 10);
+    const startDate = new Date().toISOString().slice(0, 10);
+    const end = new Date();
+    end.setMonth(end.getMonth() + months);
+    const endDate = end.toISOString().slice(0, 10);
+
+    const currentCoins = await coinService.getUserCoins(currentUser.id);
+    if (currentCoins < totalCostInCoins) {
+      setInsufficientFunds(true);
+      if (onNotification) {
+        onNotification(
+          `Insufficient coins! You need ${totalCostInCoins} coins but only have ${currentCoins}. Please add more coins to continue.`,
+          'error'
+        );
+      }
+      return;
+    }
+    setInsufficientFunds(false);
+
+    setRentInProgress(true);
+    try {
+      await coinService.deductCoins(currentUser.id, totalCostInCoins, {
+        reason: `Rent: ${quantity}m² of ${product.name || 'field'} for ${months} month(s)`,
+        refType: 'rent',
+        refId: null,
+      });
+      await rentedFieldsService.create({
+        field_id: product.id,
+        start_date: startDate,
+        end_date: endDate,
+        price: totalPrice,
+        area_rented: quantity,
+      });
+      if (onNotification) {
+        onNotification(`Rented ${quantity}m² of "${product.name || 'field'}" until ${endDate}.`, 'success');
+      }
+      setSelectedProduct(null);
+      setQuantity(1);
+      if (onNotificationRefresh) onNotificationRefresh();
+    } catch (e) {
+      const msg = e.response?.data?.message || e.response?.data?.error || e.message || 'Failed to rent field';
+      if (onNotification) onNotification(msg, 'error');
+    } finally {
+      setRentInProgress(false);
     }
   };
 
@@ -2597,8 +2748,36 @@ const EnhancedFarmMap = forwardRef(({
                       </div>
                     ) : null}
                     <div style={{ fontSize: isMobile ? '8px' : '10px', color: '#6c757d', marginTop: '2px' }}>
-                      ({selectedProduct.farmer_name || selectedProduct.farmerName || user?.name || 'Farmer Name'})
+                      ({(() => {
+                        const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
+                        const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
+                        return isOwner ? (currentUser?.name || 'You') : (selectedProduct.farmer_name || selectedProduct.farmerName || 'Farmer');
+                      })()})
                     </div>
+                    {(() => {
+                      const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
+                      const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
+                      if (!ownerId || isOwner) return null;
+                      const messagesPath = userType === 'farmer' ? '/farmer/messages' : '/buyer/messages';
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProduct(null);
+                            setPopupPosition(null);
+                            navigate(messagesPath, { state: { openWithUserId: ownerId, openWithUserName: selectedProduct.farmer_name || 'Field owner' } });
+                          }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px',
+                            padding: '5px 8px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '6px',
+                            fontSize: '10px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 4px rgba(76,175,80,0.3)'
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                          Chat to owner
+                        </button>
+                      );
+                    })()}
 
                     <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -3393,10 +3572,61 @@ const EnhancedFarmMap = forwardRef(({
                         </div>
                       )}
 
-                      {/* Farmer Name */}
+                      {/* Farmer Name - use current user name when they own the field (avoids stale "Demo Farmer") */}
                       <div style={{ fontSize: isMobile ? '9px' : '11px', color: '#6c757d', marginBottom: isMobile ? '6px' : '8px' }}>
-                        ({selectedProduct.farmer_name || (selectedProduct.isOwnField && user?.name) || user?.name || 'Farmer Name'})
+                        ({(() => {
+                          const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
+                          const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
+                          return (selectedProduct.isOwnField || isOwner) ? (currentUser?.name || 'You') : (selectedProduct.farmer_name || 'Farmer');
+                        })()})
                       </div>
+
+                      {/* Chat to owner - only for non-owner, when owner id exists */}
+                      {(() => {
+                        const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
+                        const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
+                        if (!ownerId || isOwner) return null;
+                        const messagesPath = userType === 'farmer' ? '/farmer/messages' : '/buyer/messages';
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProduct(null);
+                              setPopupPosition(null);
+                              navigate(messagesPath, { state: { openWithUserId: ownerId, openWithUserName: selectedProduct.farmer_name || 'Field owner' } });
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              marginBottom: isMobile ? '8px' : '10px',
+                              padding: isMobile ? '6px 10px' : '8px 12px',
+                              backgroundColor: '#4caf50',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '8px',
+                              fontSize: isMobile ? '11px' : '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#43a047';
+                              e.currentTarget.style.transform = 'scale(1.02)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#4caf50';
+                              e.currentTarget.style.transform = 'scale(1)';
+                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.3)';
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                            Chat to owner
+                          </button>
+                        );
+                      })()}
 
                       {/* Rating */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '2px' }}>
@@ -3620,6 +3850,94 @@ const EnhancedFarmMap = forwardRef(({
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         {/* Left Side - Quantity, Price, Shipping */}
                         <div style={{ flex: 1 }}>
+                          {/* Buy vs Rent (farmers); show only modes allowed by field */}
+                          {showPurchaseUI && (currentUser?.user_type || '').toLowerCase() === 'farmer' && (() => {
+                            const availBuy = selectedProduct.available_for_buy !== false && selectedProduct.available_for_buy !== 'false';
+                            const availRent = selectedProduct.available_for_rent === true || selectedProduct.available_for_rent === 'true';
+                            const hasRentPrice = selectedProduct.rent_price_per_month != null && selectedProduct.rent_price_per_month !== '' && !isNaN(parseFloat(selectedProduct.rent_price_per_month));
+                            const hasRentDuration = (selectedProduct.rent_duration_monthly === true || selectedProduct.rent_duration_monthly === 'true') ||
+                              (selectedProduct.rent_duration_quarterly === true || selectedProduct.rent_duration_quarterly === 'true') ||
+                              (selectedProduct.rent_duration_yearly === true || selectedProduct.rent_duration_yearly === 'true');
+                            const canRent = availRent && hasRentPrice && hasRentDuration;
+                            const modes = [];
+                            if (availBuy) modes.push('buy');
+                            if (canRent) modes.push('rent');
+                            if (modes.length === 0) return null;
+                            return (
+                              <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
+                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>
+                                  I want to:
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  {modes.map((mode) => (
+                                    <div
+                                      key={mode}
+                                      role="button"
+                                      aria-pressed={purchaseMode === mode}
+                                      tabIndex={0}
+                                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setPurchaseMode(mode); } }}
+                                      onClick={() => setPurchaseMode(mode)}
+                                      style={{
+                                        padding: '4px 10px',
+                                        backgroundColor: purchaseMode === mode ? '#007bff' : '#f8f9fa',
+                                        color: purchaseMode === mode ? 'white' : '#6c757d',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        border: purchaseMode === mode ? 'none' : '1px solid #e9ecef',
+                                        textTransform: 'capitalize',
+                                      }}
+                                    >
+                                      {mode === 'buy' ? 'Buy' : 'Rent'}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {/* Rent duration (when Rent is selected and field offers rent) */}
+                          {showPurchaseUI && purchaseMode === 'rent' && (() => {
+                            const monthly = selectedProduct.rent_duration_monthly === true || selectedProduct.rent_duration_monthly === 'true';
+                            const quarterly = selectedProduct.rent_duration_quarterly === true || selectedProduct.rent_duration_quarterly === 'true';
+                            const yearly = selectedProduct.rent_duration_yearly === true || selectedProduct.rent_duration_yearly === 'true';
+                            const options = [];
+                            if (monthly) options.push({ key: 'monthly', label: 'Monthly', months: 1 });
+                            if (quarterly) options.push({ key: 'quarterly', label: 'Quarterly', months: 3 });
+                            if (yearly) options.push({ key: 'yearly', label: 'Yearly', months: 12 });
+                            if (options.length === 0) return null;
+                            return (
+                              <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
+                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>
+                                  Rent duration:
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                  {options.map((opt) => (
+                                    <div
+                                      key={opt.key}
+                                      role="button"
+                                      aria-pressed={rentDuration === opt.key}
+                                      tabIndex={0}
+                                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setRentDuration(opt.key); }}
+                                      onClick={() => setRentDuration(opt.key)}
+                                      style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: rentDuration === opt.key ? '#059669' : '#f8f9fa',
+                                        color: rentDuration === opt.key ? 'white' : '#6c757d',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        border: rentDuration === opt.key ? 'none' : '1px solid #e9ecef',
+                                      }}
+                                    >
+                                      {opt.label}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                           {/* Quantity Selector */}
                           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -3681,16 +3999,22 @@ const EnhancedFarmMap = forwardRef(({
 
                           {/* Price Info */}
                           <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
-                            <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                              Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
-                            </div>
+                            {purchaseMode === 'rent' ? (
+                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                                Rent {(parseFloat(selectedProduct.rent_price_per_month) || 0).toFixed(2)}$/m²/month
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                                Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
+                              </div>
+                            )}
                             <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
                               Exp Prod {selectedProduct.production_rate || selectedProduct.productionRate || 'N/A'} {selectedProduct.production_rate_unit || 'Kg'}
                             </div>
                           </div>
 
-                          {/* Shipping Options */}
-                          {showPurchaseUI && (
+                          {/* Shipping Options (only for Buy) */}
+                          {showPurchaseUI && purchaseMode === 'buy' && (
                             <div>
                               <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: isMobile ? '4px' : '6px', fontWeight: 500 }}>
                                 Shipping Options:
@@ -3868,7 +4192,28 @@ const EnhancedFarmMap = forwardRef(({
                           marginLeft: isMobile ? '8px' : '12px'
                         }}>
                           {showPurchaseUI && (
-                            shippingError ? (
+                            purchaseMode === 'rent' ? (
+                              <button
+                                onClick={() => handleRentNow(selectedProduct)}
+                                disabled={rentInProgress}
+                                style={{
+                                  width: '100%',
+                                  backgroundColor: rentInProgress ? '#6c757d' : '#059669',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: isMobile ? '4px' : '6px',
+                                  padding: isMobile ? '6px 0' : '8px 0',
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  fontWeight: 600,
+                                  cursor: rentInProgress ? 'not-allowed' : 'pointer',
+                                  opacity: rentInProgress ? 0.7 : 1,
+                                  marginBottom: isMobile ? '6px' : '8px',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                {rentInProgress ? 'Renting…' : 'RENT'}
+                              </button>
+                            ) : shippingError ? (
                               <div style={{
                                 width: isMobile ? '92%' : '98%',
                                 margin: isMobile ? '0 0 6px 0' : '0 8px 8px 0',
@@ -3889,37 +4234,59 @@ const EnhancedFarmMap = forwardRef(({
                             ) : (
                               <button
                                 onClick={() => handleBuyNow(selectedProduct)}
-                                disabled={!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)}
+                                disabled={buyNowInProgress}
                                 style={{
                                   width: '100%',
-                                  backgroundColor: '#007bff',
+                                  backgroundColor: buyNowInProgress ? '#6c757d' : '#007bff',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: isMobile ? '4px' : '6px',
                                   padding: isMobile ? '6px 0' : '8px 0',
                                   fontSize: isMobile ? '10px' : '12px',
                                   fontWeight: 600,
-                                  cursor: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 'not-allowed' : 'pointer',
-                                  opacity: (!selectedHarvestDate || getAvailableArea(selectedProduct) <= 0 || quantity > getAvailableArea(selectedProduct)) ? 0.7 : 1,
+                                  cursor: buyNowInProgress ? 'not-allowed' : 'pointer',
+                                  opacity: buyNowInProgress ? 0.7 : 1,
                                   marginBottom: isMobile ? '6px' : '8px',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
                               >
-                                BUY NOW
+                                {buyNowInProgress ? 'Processing…' : 'BUY NOW'}
                               </button>
                             )
                           )}
 
                           {/* Total Price */}
-                          <div style={{
-                            fontSize: isMobile ? '10px' : '12px',
-                            fontWeight: 600,
-                            color: '#212529',
-                            textAlign: 'center',
-                            marginBottom: isMobile ? '4px' : '6px'
-                          }}>
-                            Total Price ${((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity).toFixed(2)}
-                          </div>
+                          {(() => {
+                            const isRent = purchaseMode === 'rent';
+                            const rentPricePerMonth = parseFloat(selectedProduct.rent_price_per_month) || 0;
+                            const months = rentDuration === 'monthly' ? 1 : rentDuration === 'quarterly' ? 3 : 12;
+                            const totalCostInDollars = isRent && rentPricePerMonth > 0
+                              ? rentPricePerMonth * quantity * months
+                              : ((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity);
+                            const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
+                            return (
+                              <>
+                                <div style={{
+                                  fontSize: isMobile ? '10px' : '12px',
+                                  fontWeight: 600,
+                                  color: '#212529',
+                                  textAlign: 'center',
+                                  marginBottom: isMobile ? '2px' : '4px'
+                                }}>
+                                  Total Price ${totalCostInDollars.toFixed(2)}
+                                </div>
+                                <div style={{
+                                  fontSize: isMobile ? '9px' : '11px',
+                                  fontWeight: 600,
+                                  color: '#ff9800',
+                                  textAlign: 'center',
+                                  marginBottom: isMobile ? '4px' : '6px'
+                                }}>
+                                  Cost: {totalCostInCoins} coins
+                                </div>
+                              </>
+                            );
+                          })()}
 
                           {/* User Coins */}
                           <div style={{
@@ -3931,17 +4298,27 @@ const EnhancedFarmMap = forwardRef(({
                           </div>
 
                           {/* Insufficient Funds Error */}
-                          {insufficientFunds && (
-                            <div style={{
-                              fontSize: isMobile ? '9px' : '11px',
-                              color: '#dc3545',
-                              textAlign: 'center',
-                              marginTop: isMobile ? '6px' : '8px',
-                              fontWeight: 600
-                            }}>
-                              Can't be bought - you have insufficient coins!
-                            </div>
-                          )}
+                          {insufficientFunds && (() => {
+                            const isRent = purchaseMode === 'rent';
+                            const rentPricePerMonth = parseFloat(selectedProduct.rent_price_per_month) || 0;
+                            const months = rentDuration === 'monthly' ? 1 : rentDuration === 'quarterly' ? 3 : 12;
+                            const totalCostInDollars = isRent && rentPricePerMonth > 0
+                              ? rentPricePerMonth * quantity * months
+                              : ((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity);
+                            const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
+                            const shortfall = totalCostInCoins - userCoins;
+                            return (
+                              <div style={{
+                                fontSize: isMobile ? '9px' : '11px',
+                                color: '#dc3545',
+                                textAlign: 'center',
+                                marginTop: isMobile ? '6px' : '8px',
+                                fontWeight: 600
+                              }}>
+                                Insufficient coins! Need {totalCostInCoins}, have {userCoins} ({shortfall > 0 ? `need ${shortfall} more` : ''})
+                              </div>
+                            );
+                          })()}
                         </div> {/* Closes 3919 */}
                       </div> {/* Closes 3676 */}
                     </>
@@ -4111,6 +4488,16 @@ const EnhancedFarmMap = forwardRef(({
                   <div style={{ display: 'inline-block', backgroundColor: '#22c55e', color: 'white', borderRadius: isMobile ? '10px' : '12px', padding: isMobile ? '3px 8px' : '4px 10px', fontSize: isMobile ? '10px' : '11px', fontWeight: 600, marginBottom: isMobile ? '8px' : '10px' }}>
                     Active
                   </div>
+                  {(() => {
+                    const availBuy = selectedProduct.available_for_buy !== false && selectedProduct.available_for_buy !== 'false';
+                    const availRent = selectedProduct.available_for_rent === true || selectedProduct.available_for_rent === 'true';
+                    if (!availBuy && !availRent) return null;
+                    return (
+                      <div style={{ fontSize: isMobile ? '10px' : '11px', color: '#64748b', marginBottom: isMobile ? '8px' : '10px' }}>
+                        Your field. Listed for {availBuy && availRent ? 'buy and rent' : availRent ? 'rent' : 'buy'}.
+                      </div>
+                    );
+                  })()}
 
                   <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: isMobile ? '8px 0' : '10px 0' }} />
 

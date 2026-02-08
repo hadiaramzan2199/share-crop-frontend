@@ -24,20 +24,12 @@ import {
   InputAdornment,
 } from '@mui/material';
 import {
-  LocationOn,
-  CalendarToday,
-  Agriculture,
   TrendingUp,
-  MoreVert,
   Assessment,
-  AccountBalance,
-  Payment,
   Receipt,
   MonetizationOn,
   TrendingDown,
   Search,
-  FilterList,
-  Download,
   ArrowUpward,
   ArrowDownward,
   SwapHoriz,
@@ -106,9 +98,8 @@ const Transaction = () => {
         console.warn('Could not load orders for transactions:', orderErr);
       }
 
-      // Map coin transactions to transaction format
+      // Map coin transactions to transaction format (ensure numeric amount/balance_after)
       const mappedTransactions = coinTransactions.map((tx, index) => {
-        // Find related order if ref_type is 'orders'
         const relatedOrder = tx.ref_type === 'orders' && tx.ref_id
           ? orders.find(o => o.id === tx.ref_id)
           : null;
@@ -118,12 +109,14 @@ const Transaction = () => {
           type: tx.type === 'credit' ? 'Income' : 'Expense',
           category: tx.reason || (tx.type === 'credit' ? 'Coin Credit' : 'Coin Debit'),
           description: tx.reason || (tx.type === 'credit' ? 'Coins credited' : 'Coins debited'),
-          amount: tx.amount || 0,
+          amount: Number(tx.amount) || 0,
+          created_at: tx.created_at || null,
           date: tx.created_at ? new Date(tx.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           status: 'Completed',
           paymentMethod: 'Coins',
           reference: tx.ref_id || '',
-          balanceAfter: tx.balance_after || 0,
+          balanceAfter: Number(tx.balance_after) || 0,
+          ref_type: tx.ref_type || '',
           farmName: relatedOrder?.field_name || 'N/A',
           buyer: relatedOrder?.buyer_name || '',
           farmer: relatedOrder?.farmer_name || ''
@@ -131,7 +124,7 @@ const Transaction = () => {
       });
 
       // Sort by date (newest first)
-      mappedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+      mappedTransactions.sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date));
 
       setTransactions(mappedTransactions);
     } catch (err) {
@@ -170,7 +163,18 @@ const Transaction = () => {
 
   const formatCurrency = (amount) => {
     const symbol = currencySymbols[userCurrency] || '₨';
-    return `${symbol}${amount.toLocaleString()}`;
+    return `${symbol}${Number(amount).toLocaleString()}`;
+  };
+
+  // Format full timestamp with milliseconds (e.g. "Feb 7, 2026, 7:02:29.859 PM")
+  const formatTransactionTime = (createdAt) => {
+    if (!createdAt) return '—';
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return String(createdAt);
+    const datePart = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    const timePart = d.toLocaleTimeString(undefined, { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const ms = String(d.getMilliseconds()).padStart(3, '0');
+    return `${datePart}, ${timePart}.${ms}`;
   };
 
   const handleTabChange = (event, newValue) => {
@@ -400,38 +404,6 @@ const Transaction = () => {
               <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b' }}>
                 Transaction Details
               </Typography>
-              <Stack direction="row" spacing={2}>
-                <Button
-                  variant="outlined"
-                  startIcon={<Download />}
-                  size="small"
-                  sx={{
-                    textTransform: 'none',
-                    borderColor: '#e2e8f0',
-                    color: '#64748b',
-                    '&:hover': {
-                      borderColor: '#059669',
-                      color: '#059669'
-                    }
-                  }}
-                >
-                  Export
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<Receipt />}
-                  size="small"
-                  sx={{
-                    textTransform: 'none',
-                    backgroundColor: '#059669',
-                    '&:hover': {
-                      backgroundColor: '#047857'
-                    }
-                  }}
-                >
-                  Add Transaction
-                </Button>
-              </Stack>
             </Box>
 
             <TextField
@@ -493,13 +465,13 @@ const Transaction = () => {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Transaction ID</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Date & time</TableCell>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Description</TableCell>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Category</TableCell>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Amount</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Balance after</TableCell>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Payment Method</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: '#374151' }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -523,8 +495,8 @@ const Transaction = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" sx={{ color: '#64748b' }}>
-                        {new Date(transaction.date).toLocaleDateString()}
+                      <Typography variant="body2" sx={{ color: '#64748b' }} title={transaction.created_at || transaction.date}>
+                        {formatTransactionTime(transaction.created_at || transaction.date)}
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -561,6 +533,11 @@ const Transaction = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2" sx={{ color: '#374151', fontWeight: 500 }}>
+                        {Number(transaction.balanceAfter).toLocaleString()} coins
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       <Chip
                         label={transaction.status}
                         color={getStatusColor(transaction.status)}
@@ -571,34 +548,6 @@ const Transaction = () => {
                       <Typography variant="body2" sx={{ color: '#64748b' }}>
                         {transaction.paymentMethod}
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={1}>
-                        <IconButton
-                          size="small"
-                          sx={{
-                            color: '#64748b',
-                            '&:hover': {
-                              color: '#059669',
-                              backgroundColor: '#f0fdf4'
-                            }
-                          }}
-                        >
-                          <Assessment />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          sx={{
-                            color: '#64748b',
-                            '&:hover': {
-                              color: '#059669',
-                              backgroundColor: '#f0fdf4'
-                            }
-                          }}
-                        >
-                          <Receipt />
-                        </IconButton>
-                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}

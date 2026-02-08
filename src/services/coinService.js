@@ -15,7 +15,11 @@ class CoinService {
 
     try {
       const response = await api.get(`/api/coins/${userId}`);
-      return response.data.coins || DEFAULT_COINS;
+      // Handle 0 coins properly (0 is falsy, so || would use DEFAULT_COINS incorrectly)
+      if (response.data && typeof response.data.coins === 'number') {
+        return response.data.coins;
+      }
+      return DEFAULT_COINS;
     } catch (error) {
       console.error('Error getting user coins:', error);
       return DEFAULT_COINS;
@@ -49,20 +53,30 @@ class CoinService {
    * Deduct coins from a user's balance
    * @param {string} userId - User ID
    * @param {number} amount - Amount to deduct
-   * @returns {Promise<boolean>} - True if deduction was successful, false if insufficient funds
+   * @param {{ reason?: string, refType?: string, refId?: string }} opts - Optional transaction metadata
+   * @returns {Promise<{ coins: number, deducted: number, balanceBefore: number, balanceAfter: number } | null>} - Response data or null on error
    */
-  async deductCoins(userId, amount) {
+  async deductCoins(userId, amount, opts = {}) {
     if (!userId || typeof amount !== 'number' || amount <= 0) {
       console.error('Invalid parameters for deductCoins');
-      return false;
+      return null;
     }
 
     try {
-      await api.post(`/api/coins/${userId}/deduct`, { amount });
-      return true;
+      const response = await api.post(`/api/coins/${userId}/deduct`, { 
+        amount,
+        reason: opts.reason,
+        refType: opts.refType,
+        refId: opts.refId
+      });
+      return response.data;
     } catch (error) {
       console.error('Error deducting coins:', error);
-      return false;
+      // Re-throw to allow caller to handle insufficient funds specifically
+      if (error.response?.status === 400 && error.response?.data?.error === 'Insufficient coins') {
+        throw error;
+      }
+      return null;
     }
   }
 
@@ -119,6 +133,46 @@ class CoinService {
 
     // With database, users get default coins automatically
     return await this.getUserCoins(userId);
+  }
+
+  /**
+   * Get coin packs for purchase
+   * @returns {Promise<{ packs: Array<{ id, coins, usdCents, usd }> }>}
+   */
+  async getCoinPacks() {
+    try {
+      const response = await api.get('/api/coins/packs');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching coin packs:', error);
+      return {
+        packs: [
+          { id: 'pack_small', coins: 100, usdCents: 999, usd: '9.99' },
+          { id: 'pack_medium', coins: 500, usdCents: 4499, usd: '44.99' },
+          { id: 'pack_large', coins: 1200, usdCents: 9999, usd: '99.99' },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Create a purchase intent (redirects to Stripe Checkout)
+   * @param {string} packId - Pack id from getCoinPacks()
+   * @param {{ successUrl?: string, cancelUrl?: string, pack?: { name?: string, coins?: number, usd?: string } }} opts - Optional return URLs and pack details for Stripe line_items
+   * @returns {Promise<{ url: string }>} - Redirect to url
+   */
+  async createPurchaseIntent(packId, opts = {}) {
+    const body = { pack_id: packId };
+    if (opts.successUrl) body.success_url = opts.successUrl;
+    if (opts.cancelUrl) body.cancel_url = opts.cancelUrl;
+    // Send pack details so backend can show product name and breakdown on Stripe Checkout page
+    if (opts.pack) {
+      if (opts.pack.name != null) body.pack_name = opts.pack.name;
+      if (opts.pack.coins != null) body.pack_coins = opts.pack.coins;
+      if (opts.pack.usd != null) body.pack_usd = opts.pack.usd;
+    }
+    const response = await api.post('/api/coins/purchase-intent', body);
+    return response.data;
   }
 
   /**

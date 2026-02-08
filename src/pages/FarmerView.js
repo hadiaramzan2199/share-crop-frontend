@@ -21,6 +21,7 @@ import Orders from './Orders';
 import FarmOrders from './FarmOrders';
 import LicenseInfo from './LicenseInfo';
 import Transaction from './Transaction';
+import BuyCoins from './BuyCoins';
 import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
@@ -90,7 +91,7 @@ const FarmerView = () => {
           setFarmsList(mappedFarms);
 
           // Load ALL fields for map display (not filtered by user)
-          const fieldsResponse = await fieldsService.getAll();
+          const fieldsResponse = await fieldsService.getAllForMap();
 
 
           // Map database field names to frontend expected names
@@ -317,8 +318,8 @@ const FarmerView = () => {
           location: actualLocation,
           image: formData.imagePreview || formData.image || '/api/placeholder/300/200',
           farm_id: formData.farmId, // Use farm_id for backend
-          owner_id: user.id, // Add owner_id
-          farmer_name: 'Demo Farmer',
+          owner_id: user.id,
+          farmer_name: user?.name || '',
           isOwnField: true,
           available: true,
           rating: 0,
@@ -395,6 +396,9 @@ const FarmerView = () => {
         onLogout={logout}
         onCreateField={handleCreateField}
         onCreateFarm={handleCreateFarm}
+        backendNotifications={backendNotifications}
+        onMarkNotificationAsRead={markNotificationAsRead}
+        onRefreshNotifications={fetchBackendNotifications}
       />
 
       <Box sx={{
@@ -506,6 +510,7 @@ const FarmerView = () => {
           <Route path="/farm-orders" element={<FarmOrders />} />
           <Route path="/license-info" element={<LicenseInfo />} />
           <Route path="/transaction" element={<Transaction />} />
+          <Route path="/buy-coins" element={<BuyCoins />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
@@ -516,16 +521,8 @@ const FarmerView = () => {
 
       {/* Notification System */}
       <NotificationSystem
-        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]}
-        onRemove={(id) => {
-          // Check if it's a backend notification
-          const backendNotif = backendNotifications.find(n => n.id === id);
-          if (backendNotif) {
-            markNotificationAsRead(id);
-          } else {
-            removeNotification(id);
-          }
-        }}
+        notifications={notifications}
+        onRemove={removeNotification}
       />
 
       {/* Create Field Form Dialog */}

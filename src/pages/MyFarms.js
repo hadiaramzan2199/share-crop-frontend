@@ -44,6 +44,7 @@ import {
   Settings,
   Download,
   Description,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import storageService from '../services/storage';
 import fieldsService from '../services/fields';
@@ -61,6 +62,7 @@ const MyFarms = () => {
   const [selectedFarm, setSelectedFarm] = useState(null);
   const [farmDetailOpen, setFarmDetailOpen] = useState(false);
   const [addFarmOpen, setAddFarmOpen] = useState(false);
+  const [editingFarm, setEditingFarm] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [showAllFarms, setShowAllFarms] = useState(false);
@@ -90,10 +92,43 @@ const MyFarms = () => {
     setSelectedFarm(null);
   };
 
-  const handleAddFarmOpen = () => setAddFarmOpen(true);
-  const handleAddFarmClose = () => setAddFarmOpen(false);
-  const handleAddFarmSubmit = async (farmData) => {
+  const handleAddFarmOpen = () => {
+    setEditingFarm(null);
+    setAddFarmOpen(true);
+  };
+  const handleAddFarmClose = () => {
+    setAddFarmOpen(false);
+    setEditingFarm(null);
+  };
+  const openEditFarm = async (farm) => {
+    setFarmDetailOpen(false);
+    setSelectedFarm(null);
     try {
+      const res = await farmsService.getById(farm.id);
+      setEditingFarm(res.data);
+      setAddFarmOpen(true);
+    } catch (err) {
+      console.error('Failed to load farm for edit:', err);
+    }
+  };
+  const handleAddFarmSubmit = async (farmData) => {
+    const isEdit = farmData.id != null && editingFarm != null;
+    try {
+      if (isEdit) {
+        const payload = {
+          farmName: farmData.farmName,
+          farmIcon: farmData.farmIcon,
+          location: farmData.location,
+          coordinates: farmData.coordinates,
+          webcamUrl: farmData.webcamUrl,
+          description: farmData.description
+        };
+        await farmsService.update(farmData.id, payload);
+        await fetchFarms();
+        setAddFarmOpen(false);
+        setEditingFarm(null);
+        return;
+      }
       const newFarm = {
         ...farmData,
         name: farmData.farmName, // key mapping for backend
@@ -133,6 +168,10 @@ const MyFarms = () => {
 
       await fetchFarms();
     } catch (error) {
+      if (isEdit) {
+        console.error('Failed to update farm:', error);
+        return;
+      }
       setMyFarms(prev => [{
         id: farmData.id || Date.now(),
         name: farmData.farmName,
@@ -152,6 +191,7 @@ const MyFarms = () => {
       }, ...prev]);
     }
     setAddFarmOpen(false);
+    setEditingFarm(null);
   };
 
 
@@ -703,12 +743,26 @@ const MyFarms = () => {
               }}>
                 {/* Top Section */}
                 <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-                  {/* Header with location and menu */}
-                  <Stack direction="row" alignItems="center" spacing={0.5} mb={1}>
-                    <LocationOn sx={{ fontSize: 16, color: '#6b7280' }} />
-                    <Typography variant="body2" color="#6b7280" sx={{ fontSize: '0.875rem' }}>
-                      {farm.location}
-                    </Typography>
+                  {/* Farm name title */}
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.1rem', mb: 0.5 }} noWrap title={farm.name}>
+                    {farm.name || 'Unnamed Farm'}
+                  </Typography>
+                  {/* Header with location and Edit */}
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={0.5} mb={1}>
+                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ minWidth: 0 }}>
+                      <LocationOn sx={{ fontSize: 16, color: '#6b7280', flexShrink: 0 }} />
+                      <Typography variant="body2" color="#6b7280" sx={{ fontSize: '0.875rem' }} noWrap>
+                        {farm.location}
+                      </Typography>
+                    </Stack>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); openEditFarm(farm); }}
+                      sx={{ color: '#4caf50', flexShrink: 0, '&:hover': { bgcolor: 'rgba(76, 175, 80, 0.1)' } }}
+                      title="Edit farm"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
                   </Stack>
 
                   {/* Status Badge */}
@@ -930,9 +984,14 @@ const MyFarms = () => {
                   Farm Details & Affiliated Fields
                 </Typography>
               </Box>
-              <IconButton onClick={handleCloseFarmDetail} sx={{ color: '#64748b' }}>
-                <Close />
-              </IconButton>
+              <Stack direction="row" alignItems="center" spacing={0.5}>
+                <IconButton onClick={() => selectedFarm && openEditFarm(selectedFarm)} sx={{ color: '#4caf50' }} title="Edit farm">
+                  <EditIcon />
+                </IconButton>
+                <IconButton onClick={handleCloseFarmDetail} sx={{ color: '#64748b' }}>
+                  <Close />
+                </IconButton>
+              </Stack>
             </Stack>
           </DialogTitle>
           <DialogContent sx={{ mt: 2 }}>
@@ -1402,7 +1461,13 @@ const MyFarms = () => {
           </DialogActions>
         </Dialog>
       </Box>
-      <AddFarmForm open={addFarmOpen} onClose={handleAddFarmClose} onSubmit={handleAddFarmSubmit} />
+      <AddFarmForm
+        open={addFarmOpen}
+        onClose={handleAddFarmClose}
+        onSubmit={handleAddFarmSubmit}
+        editMode={!!editingFarm}
+        initialData={editingFarm}
+      />
     </Box>
   );
 };

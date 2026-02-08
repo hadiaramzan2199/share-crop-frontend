@@ -79,22 +79,22 @@ const Orders = () => {
       setLoading(true);
       setError(null);
 
-      // Use real API - getBuyerOrders uses /my-orders endpoint which filters by authenticated user
-      const response = await orderService.getBuyerOrders();
-      const apiOrders = response.data || [];
+      // Use buyer ID-based endpoint so orders are returned for the current user
+      const response = await orderService.getBuyerOrdersWithFields(user.id);
+      const apiOrders = Array.isArray(response.data) ? response.data : [];
 
-      // Format API orders to match expected structure
+      // Format API orders to match expected structure (ensure numbers for total_cost to avoid string concat in sum)
       const formattedOrders = apiOrders.map(order => ({
         id: order.id,
         product_name: order.field_name || 'Unknown Field',
         buyer_name: user.name || 'You',
         area_rented: `${order.quantity || 0} m²`,
-        total_cost: order.total_price || 0,
+        total_cost: Number(order.total_price) || 0,
         status: order.status || 'pending',
         created_at: order.created_at,
         farm_name: order.field_name || 'Unknown Field',
         crop_type: order.crop_type || 'Mixed',
-        price_per_unit: order.price_per_m2 || 0,
+        price_per_unit: Number(order.price_per_m2) || 0,
         location: order.location || 'Unknown',
         farmer_name: order.farmer_name || 'Unknown Farmer',
         farmer_email: order.farmer_email || '',
@@ -102,7 +102,8 @@ const Orders = () => {
         payment_status: order.status === 'completed' ? 'paid' : 'pending',
         mode_of_shipping: order.mode_of_shipping || 'delivery',
         field_id: order.field_id,
-        notes: order.notes || ''
+        notes: order.notes || '',
+        image_url: order.image_url || ''
       }));
 
       setOrders(formattedOrders);
@@ -154,7 +155,7 @@ const Orders = () => {
   if (loading) return <Loader message="Loading your orders..." />;
   if (error) return <ErrorMessage message={error} onRetry={loadOrders} />;
 
-  const totalSpent = orders.reduce((sum, order) => sum + (order.total_cost || 0), 0);
+  const totalSpent = orders.reduce((sum, order) => sum + (Number(order.total_cost) || 0), 0);
   const activeOrders = orders.filter(o => ['confirmed', 'active', 'pending'].includes(o.status)).length;
   const completedOrders = orders.filter(o => o.status === 'completed').length;
   const pendingOrders = orders.filter(o => o.status === 'pending').length;
@@ -310,7 +311,7 @@ const Orders = () => {
                 </Avatar>
                 <Box>
                   <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '1.5rem' }}>
-                    ${totalSpent.toLocaleString()}
+                    ${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                     Total Spent
@@ -478,9 +479,30 @@ const Orders = () => {
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.8rem' }}>
-                          {order.product_name || order.name}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                          {(order.image_url || order.image) ? (
+                            <Box
+                              component="img"
+                              src={order.image_url || order.image}
+                              alt={order.product_name || order.name}
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 1.5,
+                                objectFit: 'cover',
+                                border: '1px solid #e2e8f0'
+                              }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <Avatar sx={{ width: 40, height: 40, bgcolor: '#dcfce7', color: '#059669' }}>
+                              <ShoppingCart sx={{ fontSize: 20 }} />
+                            </Avatar>
+                          )}
+                          <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.8rem' }}>
+                            {order.product_name || order.name}
+                          </Typography>
+                        </Stack>
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
                         <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
@@ -596,9 +618,25 @@ const Orders = () => {
                   }}
                 >
                   <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                    <Avatar sx={{ backgroundColor: '#dcfce7', color: '#059669', width: 40, height: 40 }}>
-                      <ShoppingCart />
-                    </Avatar>
+                    {(selectedOrder.image_url || selectedOrder.image) ? (
+                      <Box
+                        component="img"
+                        src={selectedOrder.image_url || selectedOrder.image}
+                        alt={selectedOrder.product_name || selectedOrder.name}
+                        sx={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 2,
+                          objectFit: 'cover',
+                          border: '1px solid #e2e8f0'
+                        }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <Avatar sx={{ backgroundColor: '#dcfce7', color: '#059669', width: 40, height: 40 }}>
+                        <ShoppingCart />
+                      </Avatar>
+                    )}
                     <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b' }}>
                       Product Information
                     </Typography>

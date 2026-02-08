@@ -18,7 +18,8 @@ import {
   InputAdornment,
   FormControlLabel,
   RadioGroup,
-  Radio
+  Radio,
+  Checkbox
 } from '@mui/material';
 
 import {
@@ -419,7 +420,12 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     latitude: '',
     longitude: '',
     shippingScope: 'Global',
-    farmId: ''
+    farmId: '',
+    available_for_rent: false,
+    rent_price_per_month: '',
+    rent_duration_monthly: false,
+    rent_duration_quarterly: false,
+    rent_duration_yearly: false
   });
 
   const [errors, setErrors] = useState({});
@@ -463,7 +469,13 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
         sellingPrice: initialData.price || '',
         latitude: initialData.latitude || '',
         longitude: initialData.longitude || '',
-        harvestDates: initialData.harvestDates || [{ date: '', label: '' }]
+        harvestDates: initialData.harvestDates || [{ date: '', label: '' }],
+        available_for_buy: true,
+        available_for_rent: Boolean(initialData.available_for_rent),
+        rent_price_per_month: initialData.rent_price_per_month ?? '',
+        rent_duration_monthly: Boolean(initialData.rent_duration_monthly),
+        rent_duration_quarterly: Boolean(initialData.rent_duration_quarterly),
+        rent_duration_yearly: Boolean(initialData.rent_duration_yearly)
       }));
       // Set location address if coordinates exist
       if (initialData.latitude && initialData.longitude) {
@@ -671,6 +683,14 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     if (!formData.latitude) newErrors.latitude = 'Latitude is required';
     if (!formData.longitude) newErrors.longitude = 'Longitude is required';
     if (!formData.farmId) newErrors.farmId = 'Please select a farm for this field';
+    if (formData.available_for_rent) {
+      if (!formData.rent_price_per_month || String(formData.rent_price_per_month).trim() === '' || isNaN(parseFloat(formData.rent_price_per_month))) {
+        newErrors.rent_price_per_month = 'Rent price per month is required when available for rent';
+      }
+      if (!formData.rent_duration_monthly && !formData.rent_duration_quarterly && !formData.rent_duration_yearly) {
+        newErrors.rent_duration = 'Select at least one rent duration (Monthly, Quarterly, or Yearly)';
+      }
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -732,7 +752,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       farmId: formData.farmId, // Include the selected farm ID
       // Add these default values for popup compatibility:
       coordinates: [parseFloat(formData.longitude), parseFloat(formData.latitude)],
-      farmer_name: 'Your Name', // Or get from user profile
+      farmer_name: user?.name || '',
       location: actualLocation,
       available_area: formData.fieldSize || 100,
       total_area: formData.fieldSize || 100,
@@ -742,7 +762,13 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       shipping_pickup: formData.shippingOption !== 'Shipping',
       shipping_delivery: formData.shippingOption !== 'Pickup',
       harvest_date: (formData.harvestDates || []).length > 0 && formData.harvestDates[0].date ? formData.harvestDates[0].date : '15 Sep, 2025',
-      isOwnField: true // Mark as your own field for edit button
+      isOwnField: true, // Mark as your own field for edit button
+      available_for_buy: true,
+      available_for_rent: Boolean(formData.available_for_rent),
+      rent_price_per_month: formData.available_for_rent && formData.rent_price_per_month ? parseFloat(formData.rent_price_per_month) : null,
+      rent_duration_monthly: Boolean(formData.rent_duration_monthly),
+      rent_duration_quarterly: Boolean(formData.rent_duration_quarterly),
+      rent_duration_yearly: Boolean(formData.rent_duration_yearly)
     };
 
     setTimeout(() => {
@@ -780,7 +806,13 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       latitude: '',
       longitude: '',
       shippingScope: 'Global',
-      farmId: ''
+      farmId: '',
+      available_for_buy: true,
+      available_for_rent: false,
+      rent_price_per_month: '',
+      rent_duration_monthly: false,
+      rent_duration_quarterly: false,
+      rent_duration_yearly: false
     });
     setErrors({});
     setIsSubmitting(false);
@@ -1797,6 +1829,81 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                       This is the user area virtual "rent" price per unit: $/m²
                     </Typography>
                   </Grid>
+                </Grid>
+              </FormSection>
+
+              {/* Availability: Rent is optional; buy is always on */}
+              <FormSection>
+                <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Availability</SectionTitle>
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  This field is always available for buy. You can also make it available for rent.
+                </Typography>
+                <Grid container spacing={3}>
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={Boolean(formData.available_for_rent)}
+                          onChange={(e) => setFormData(prev => ({ ...prev, available_for_rent: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label="Also available for rent"
+                    />
+                  </Grid>
+                  {formData.available_for_rent && (
+                    <>
+                      <Grid item xs={12} sm={6}>
+                        <StyledTextField
+                          fullWidth
+                          type="number"
+                          label="Rent price per month ($)"
+                          value={formData.rent_price_per_month}
+                          onChange={(e) => { setFormData(prev => ({ ...prev, rent_price_per_month: e.target.value })); setErrors(prev => ({ ...prev, rent_price_per_month: '' })); }}
+                          inputProps={{ min: 0, step: 0.01 }}
+                          error={Boolean(errors.rent_price_per_month)}
+                          helperText={errors.rent_price_per_month}
+                          isMobile={isMobile}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Rent duration(s) offered (select at least one)</Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={Boolean(formData.rent_duration_monthly)}
+                                onChange={(e) => { setFormData(prev => ({ ...prev, rent_duration_monthly: e.target.checked })); setErrors(prev => ({ ...prev, rent_duration: '' })); }}
+                                color="primary"
+                              />
+                            }
+                            label="Monthly"
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={Boolean(formData.rent_duration_quarterly)}
+                                onChange={(e) => { setFormData(prev => ({ ...prev, rent_duration_quarterly: e.target.checked })); setErrors(prev => ({ ...prev, rent_duration: '' })); }}
+                                color="primary"
+                              />
+                            }
+                            label="Quarterly"
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={Boolean(formData.rent_duration_yearly)}
+                                onChange={(e) => { setFormData(prev => ({ ...prev, rent_duration_yearly: e.target.checked })); setErrors(prev => ({ ...prev, rent_duration: '' })); }}
+                                color="primary"
+                              />
+                            }
+                            label="Yearly"
+                          />
+                        </Box>
+                        {errors.rent_duration && <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{errors.rent_duration}</Typography>}
+                      </Grid>
+                    </>
+                  )}
                 </Grid>
               </FormSection>
 

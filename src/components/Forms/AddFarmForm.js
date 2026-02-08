@@ -169,7 +169,29 @@ const farmIcons = [
   { value: 'yard', label: 'Yard', icon: <Yard sx={{ color: '#558b2f' }} /> }
 ];
 
-const AddFarmForm = ({ open, onClose, onSubmit }) => {
+// Map API farm (snake_case) to form initial values
+const apiFarmToFormInitial = (farm) => {
+  if (!farm) return null;
+  let coords = { lat: null, lng: null };
+  if (farm.coordinates) {
+    if (Array.isArray(farm.coordinates)) {
+      coords = { lng: farm.coordinates[0], lat: farm.coordinates[1] };
+    } else if (farm.coordinates.lat != null && farm.coordinates.lng != null) {
+      coords = { lat: farm.coordinates.lat, lng: farm.coordinates.lng };
+    }
+  }
+  return {
+    farmName: farm.farm_name || farm.name || '',
+    farmIcon: farm.farm_icon || farm.farmIcon || '',
+    location: farm.location || '',
+    coordinates: coords,
+    webcamUrl: farm.webcam_url || farm.webcamUrl || '',
+    description: farm.description || '',
+    licenseFile: null
+  };
+};
+
+const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = null }) => {
   const isMobile = useIsMobile();
   const [formData, setFormData] = useState({
     farmName: '',
@@ -182,6 +204,25 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
   });
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // When opening in edit mode, prefill from initialData
+  useEffect(() => {
+    if (open && editMode && initialData) {
+      const initial = apiFarmToFormInitial(initialData);
+      if (initial) setFormData(initial);
+    }
+    if (open && !editMode) {
+      setFormData({
+        farmName: '',
+        farmIcon: '',
+        location: '',
+        coordinates: { lat: null, lng: null },
+        webcamUrl: '',
+        description: '',
+        licenseFile: null
+      });
+    }
+  }, [open, editMode, initialData]);
 
   const handleInputChange = (field, value) => {
 
@@ -260,19 +301,23 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
     }
 
     if (validateForm()) {
-      // Save farm to persistent storage
       const farmData = {
-        ...formData,
-        id: Date.now(),
-        created_at: new Date().toISOString()
+        farmName: formData.farmName,
+        farmIcon: formData.farmIcon,
+        location: formData.location,
+        coordinates: formData.coordinates,
+        webcamUrl: formData.webcamUrl,
+        description: formData.description,
+        licenseFile: formData.licenseFile
       };
-
-
-      // storageService.addFarm(farmData); // Removed this line
-
+      if (editMode && initialData && initialData.id) {
+        farmData.id = initialData.id;
+      } else {
+        farmData.id = Date.now();
+        farmData.created_at = new Date().toISOString();
+      }
       onSubmit(farmData);
       handleClose();
-    } else {
     }
   };
 
@@ -302,7 +347,7 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
         isMobile={isMobile}
       >
         <StyledDialogTitle isMobile={isMobile}>
-          Add New Farm
+          {editMode ? 'Edit Farm' : 'Add New Farm'}
           <IconButton
             onClick={handleClose}
             sx={{
@@ -524,7 +569,7 @@ const AddFarmForm = ({ open, onClose, onSubmit }) => {
               px: isMobile ? 2 : 3
             }}
           >
-            Save Farm
+            {editMode ? 'Update Farm' : 'Save Farm'}
           </StyledButton>
         </DialogActions>
       </StyledDialog>

@@ -9,6 +9,8 @@ import NotificationSystem from '../components/Notification/NotificationSystem';
 import useNotifications from '../hooks/useNotifications';
 import RentedFields from './RentedFields';
 import Orders from './Orders';
+import Transaction from './Transaction';
+import BuyCoins from './BuyCoins';
 import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
@@ -67,7 +69,7 @@ const BuyerView = () => {
     try {
       const [farmsResponse, fieldsResponse] = await Promise.all([
         farmsService.getAll(),
-        fieldsService.getAll(),
+        fieldsService.getAllForMap(),
       ]);
       setFarms(farmsResponse.data || []);
 
@@ -142,6 +144,9 @@ const BuyerView = () => {
         userType="buyer"
         user={currentUser}
         onLogout={logout}
+        backendNotifications={backendNotifications}
+        onMarkNotificationAsRead={markNotificationAsRead}
+        onRefreshNotifications={fetchBackendNotifications}
       />
 
       <Box sx={{
@@ -170,6 +175,8 @@ const BuyerView = () => {
           } />
           <Route path="/rented-fields" element={<RentedFields />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/transaction" element={<Transaction />} />
+          <Route path="/buy-coins" element={<BuyCoins />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
@@ -180,16 +187,8 @@ const BuyerView = () => {
 
       {/* Notification System */}
       <NotificationSystem
-        notifications={[...notifications, ...backendNotifications.filter(n => !n.read)]}
-        onRemove={(id) => {
-          // Check if it's a backend notification
-          const backendNotif = backendNotifications.find(n => n.id === id);
-          if (backendNotif) {
-            markNotificationAsRead(id);
-          } else {
-            removeNotification(id);
-          }
-        }}
+        notifications={notifications}
+        onRemove={removeNotification}
       />
     </Box>
   );
