@@ -54,9 +54,16 @@ import {
   CheckCircle,
   HourglassEmpty,
   Done,
+  Chat,
+  AccountBalanceWallet,
+  AttachFile,
+  VerifiedUser,
 } from '@mui/icons-material';
 import { adminService } from '../../services/admin';
-import { useLocation } from 'react-router-dom';
+import { complaintService } from '../../services/complaints';
+import { useLocation, useNavigate } from 'react-router-dom';
+import supabase from '../../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const StatusChip = ({ status }) => {
   const s = String(status || '').toLowerCase();
@@ -79,6 +86,7 @@ const AdminQA = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const location = useLocation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [complaints, setComplaints] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -97,6 +105,23 @@ const AdminQA = () => {
   const [highlightedId, setHighlightedId] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedItemForMenu, setSelectedItemForMenu] = useState(null);
+  const [refundCoinsInput, setRefundCoinsInput] = useState('');
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundError, setRefundError] = useState('');
+  const [adminExtraProofFiles, setAdminExtraProofFiles] = useState([]);
+  const [adminAddProofsLoading, setAdminAddProofsLoading] = useState(false);
+
+  // When detail dialog opens, fetch full complaint (with proofs)
+  useEffect(() => {
+    if (!detailId) return;
+    let cancelled = false;
+    complaintService.getComplaint(detailId)
+      .then((res) => {
+        if (!cancelled && res.data) setDetailItem(res.data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [detailId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -223,6 +248,9 @@ const AdminQA = () => {
     setDetailId(null); 
     setDetailItem(null); 
     setRemarksDraft('');
+    setRefundCoinsInput('');
+    setRefundError('');
+    setAdminExtraProofFiles([]);
   };
 
   const startStatusUpdate = (item, nextStatus) => { 
@@ -248,17 +276,70 @@ const AdminQA = () => {
   };
 
   const saveRemarks = async (id) => {
+    if (!remarksDraft.trim()) return;
     setRemarksSavingId(id);
-    const optimistic = complaints.map(c => c.id === id ? { ...c, admin_remarks: remarksDraft } : c);
-    setComplaints(optimistic);
     try {
-      await adminService.updateComplaintRemarks(id, remarksDraft);
+      await complaintService.addRemark(id, remarksDraft.trim());
+      const res = await complaintService.getComplaint(id);
+      setDetailItem(res.data);
+      setComplaints(prev => prev.map(c => c.id === id ? { ...c, admin_remarks: remarksDraft } : c));
+      setRemarksDraft('');
     } catch (e) {
-      const original = complaints.find(c => c.id === id)?.admin_remarks || '';
-      const rollback = complaints.map(c => c.id === id ? { ...c, admin_remarks: original } : c);
-      setComplaints(rollback);
+      console.error(e);
     } finally {
       setRemarksSavingId(null);
+    }
+  };
+
+  const handleAdminAddProofs = async () => {
+    if (!detailItem?.id || adminExtraProofFiles.length === 0 || !supabase) return;
+    const current = (detailItem.proofs || []).length;
+    if (current >= 5) return;
+    const toAdd = adminExtraProofFiles.slice(0, 5 - current);
+    setAdminAddProofsLoading(true);
+    try {
+      const bucket = 'user-documents';
+      const folder = `complaint-proofs/${detailItem.id}`;
+      const proofsToAdd = [];
+      for (const file of toAdd) {
+        const ext = file.name.split('.').pop() || 'bin';
+        const fileName = `${uuidv4()}-${file.name}`;
+        const filePath = `${folder}/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+        if (uploadError) continue;
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        proofsToAdd.push({ file_name: file.name, file_url: publicUrl, file_type: ext });
+      }
+      if (proofsToAdd.length > 0) {
+        await complaintService.addProofs(detailItem.id, proofsToAdd);
+        const res = await complaintService.getComplaint(detailItem.id);
+        setDetailItem(res.data);
+        setAdminExtraProofFiles([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAdminAddProofsLoading(false);
+    }
+  };
+
+  const handleRefund = async () => {
+    const num = parseInt(refundCoinsInput, 10);
+    if (!detailItem?.id || !Number.isInteger(num) || num <= 0) {
+      setRefundError('Enter a valid positive number of coins.');
+      return;
+    }
+    setRefundError('');
+    setRefundLoading(true);
+    try {
+      await adminService.refundComplaint(detailItem.id, num);
+      setComplaints(prev => prev.map(c => c.id === detailItem.id ? { ...c, refund_coins: num, refunded_at: new Date().toISOString(), status: 'resolved' } : c));
+      setDetailItem(prev => prev ? { ...prev, refund_coins: num, refunded_at: new Date().toISOString(), status: 'resolved' } : null);
+      setRefundCoinsInput('');
+    } catch (e) {
+      setRefundError(e?.response?.data?.error || 'Refund failed');
+    } finally {
+      setRefundLoading(false);
     }
   };
 
@@ -879,6 +960,18 @@ const AdminQA = () => {
                     sx={{ mt: 0.5 }}
                   />
                 )}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Chat />}
+                  onClick={() => {
+                    closeDetail();
+                    navigate('/admin/messages', { state: { openWithUserId: detailItem.created_by } });
+                  }}
+                  sx={{ mt: 1.5, borderRadius: 2, borderColor: '#2196F3', color: '#1976D2' }}
+                >
+                  Chat with this user
+                </Button>
               </Box>
 
               <Divider />
@@ -926,6 +1019,31 @@ const AdminQA = () => {
                 </Paper>
               </Box>
 
+              {detailItem.proofs && detailItem.proofs.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Attached proof ({detailItem.proofs.length})</Typography>
+                  <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 1 }}>
+                    {detailItem.proofs.map((p) => {
+                      const isImg = /\.(jpe?g|png|gif|webp)$/i.test(String(p.file_name)) || /^(jpe?g|png|gif|webp)$/i.test(String(p.file_type));
+                      return (
+                        <Box key={p.id || p.file_url}>
+                          {isImg ? (
+                            <a href={p.file_url} target="_blank" rel="noopener noreferrer">
+                              <Box component="img" src={p.file_url} alt={p.file_name} sx={{ maxWidth: 100, maxHeight: 100, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
+                            </a>
+                          ) : (
+                            <Button size="small" href={p.file_url} target="_blank" rel="noopener noreferrer" sx={{ textTransform: 'none' }}>
+                              {p.file_name || 'Document'}
+                            </Button>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                  <Divider />
+                </>
+              )}
+
               <Divider />
 
               {/* Status & Dates */}
@@ -959,48 +1077,120 @@ const AdminQA = () => {
 
               <Divider />
 
-              {/* Admin Remarks */}
+              {/* Conversation (remarks thread) */}
               <Box>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>
-                  Admin Remarks
+                  Conversation
                 </Typography>
+                {(detailItem.remarks && detailItem.remarks.length > 0) || detailItem.admin_remarks ? (
+                  <Stack spacing={1} sx={{ mb: 2 }}>
+                    {detailItem.admin_remarks && (!detailItem.remarks || detailItem.remarks.length === 0) && (
+                      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(76, 175, 80, 0.06)' }}>
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                          <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Share-Crop (legacy)</Typography>
+                        </Stack>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>{detailItem.admin_remarks}</Typography>
+                      </Paper>
+                    )}
+                    {(detailItem.remarks || []).map((r) => (
+                      <Paper key={r.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: r.author_type === 'admin' ? 'rgba(76, 175, 80, 0.06)' : 'grey.50' }}>
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                          {r.author_type === 'admin' && <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />}
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            {r.author_type === 'admin' ? 'Share-Crop' : (r.author_name || 'User')}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>{r.message}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{formatDate(r.created_at)}</Typography>
+                      </Paper>
+                    ))}
+                  </Stack>
+                ) : null}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Add a message (user will see this)</Typography>
                 <TextField
                   fullWidth
                   value={remarksDraft}
                   onChange={(e) => setRemarksDraft(e.target.value)}
                   multiline
-                  minRows={4}
-                  placeholder="Add your remarks or notes about this complaint..."
+                  minRows={3}
+                  placeholder="Ask for more details or reply to the user..."
                   variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                    }
-                  }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                 />
                 <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                   <Button 
                     variant="contained" 
                     onClick={() => saveRemarks(detailItem.id)} 
-                    disabled={remarksSavingId === detailItem.id}
-                    sx={{
-                      borderRadius: 2,
-                      background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
-                      '&:hover': {
-                        background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
-                      }
-                    }}
+                    disabled={remarksSavingId === detailItem.id || !remarksDraft.trim()}
+                    sx={{ borderRadius: 2, background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)', '&:hover': { background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)' } }}
                   >
-                    {remarksSavingId === detailItem.id ? 'Saving...' : 'Save Remarks'}
+                    {remarksSavingId === detailItem.id ? 'Sending...' : 'Send message'}
                   </Button>
-                  <Button 
-                    variant="outlined" 
-                    onClick={closeDetail}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Close
-                  </Button>
+                  <Button variant="outlined" onClick={closeDetail} sx={{ borderRadius: 2 }}>Close</Button>
                 </Stack>
+              </Box>
+
+              {/* Add more documents (max 5) */}
+              {detailItem.proofs && detailItem.proofs.length < 5 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600 }}>Add documents ({detailItem.proofs.length} / 5)</Typography>
+                  <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
+                    <Button variant="outlined" size="small" component="label" startIcon={<AttachFile />} disabled={adminAddProofsLoading} sx={{ borderRadius: 2 }}>
+                      Choose files
+                      <input type="file" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt" onChange={(e) => setAdminExtraProofFiles(e.target.files ? Array.from(e.target.files) : [])} />
+                    </Button>
+                    {adminExtraProofFiles.length > 0 && (
+                      <>
+                        <Typography variant="caption" color="text.secondary">{adminExtraProofFiles.length} file(s) selected</Typography>
+                        <Button size="small" variant="contained" disabled={adminAddProofsLoading || detailItem.proofs.length + adminExtraProofFiles.length > 5} onClick={handleAdminAddProofs} sx={{ borderRadius: 2 }}>
+                          {adminAddProofsLoading ? 'Uploading...' : 'Upload'}
+                        </Button>
+                      </>
+                    )}
+                  </Stack>
+                </Box>
+              )}
+
+              {/* Refund (credit coins to victim) */}
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <AccountBalanceWallet fontSize="small" /> Refund to customer (coins)
+                </Typography>
+                {detailItem.refunded_at ? (
+                  <Alert severity="success" sx={{ borderRadius: 2 }}>
+                    {detailItem.refund_coins} coins credited on {formatDate(detailItem.refunded_at)}.
+                  </Alert>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mt: 1 }}>
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Coins to credit"
+                      value={refundCoinsInput}
+                      onChange={(e) => { setRefundCoinsInput(e.target.value); setRefundError(''); }}
+                      inputProps={{ min: 1, step: 1 }}
+                      sx={{ width: 140, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                    />
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={refundLoading || !refundCoinsInput}
+                      onClick={handleRefund}
+                      sx={{
+                        borderRadius: 2,
+                        background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
+                        '&:hover': { background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)' },
+                      }}
+                    >
+                      {refundLoading ? 'Crediting...' : 'Credit to user account'}
+                    </Button>
+                    {refundError && (
+                      <Typography variant="body2" color="error">{refundError}</Typography>
+                    )}
+                  </Box>
+                )}
               </Box>
             </Box>
           ) : null}

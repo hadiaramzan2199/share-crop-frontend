@@ -40,11 +40,13 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
         id: k,
         category: (productCategories.find(c => c.key === k)?.name) || (p.category || k),
         purchased_area: 0,
-        total_area: 0
+        total_area: 0,
+        total_kg: 0
       };
       const merged = prev || base;
       merged.purchased_area = (merged.purchased_area || 0) + (p.purchased_area || 0);
       merged.total_area = (merged.total_area || 0) + (p.total_area || 0);
+      merged.total_kg = (merged.total_kg || 0) + (p.total_kg ?? 0);
       map.set(k, merged);
     });
     const byIcon = new Map();
@@ -56,13 +58,15 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
           ...prod,
           id: icon,
           key: icon,
-          icon
+          icon,
+          total_kg: prod.total_kg ?? 0
         });
       } else {
         byIcon.set(icon, {
           ...prev,
           purchased_area: (prev.purchased_area || 0) + (prod.purchased_area || 0),
-          total_area: (prev.total_area || 0) + (prod.total_area || 0)
+          total_area: (prev.total_area || 0) + (prod.total_area || 0),
+          total_kg: (prev.total_kg || 0) + (prod.total_kg ?? 0)
         });
       }
     });
@@ -117,8 +121,11 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
       }}>
         {currentProducts.map((product) => {
           const icon = product.icon || getProductIcon(product.subcategory || product.category);
-          const progressPercentage = Math.min(100, ((product.purchased_area || 0) / (product.total_area || 1)) * 100);
-          const progressColor = getProgressColor((product.purchased_area || 0), (product.total_area || 1));
+          const totalKg = typeof product.total_kg === 'number' && Number.isFinite(product.total_kg) ? product.total_kg : 0;
+          const purchasedArea = product.purchased_area ?? 0;
+          const totalArea = product.total_area || 0;
+          const progressPercentage = totalArea > 0 ? Math.min(100, (purchasedArea / totalArea) * 100) : 0;
+          const progressColor = getProgressColor(purchasedArea, totalArea || 1);
           const isActive = activeKeys && activeKeys.size > 0 && activeKeys.has(icon);
           
           return (
@@ -160,39 +167,40 @@ const ProductSummaryBar = ({ purchasedProducts, onProductClick, summaryRef, onIc
                   }}
                 />
               </div>
-              
               <div style={{
-                fontSize: '8px',
-                fontWeight: '600',
+                fontSize: '9px',
+                fontWeight: '700',
                 color: '#fff',
                 textAlign: 'center',
                 marginBottom: '2px',
                 lineHeight: '1'
               }}>
-                {Math.round(product.purchased_area || 0)}m²
-              </div>
-              
-              <div style={{
-                width: '50px',
-                height: '2px',
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '1px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${progressPercentage}%`,
-                  height: '100%',
-                  backgroundColor: progressColor,
-                  transition: 'width 1s cubic-bezier(0.22, 1, 0.36, 1)'
-                }} />
+                {totalKg >= 1 ? Math.round(totalKg) : totalKg.toFixed(1)} kg
               </div>
               <div style={{
                 fontSize: '7px',
-                color: 'rgba(255,255,255,0.8)',
-                marginTop: '2px'
+                color: 'rgba(255,255,255,0.85)',
+                textAlign: 'center',
+                marginBottom: '2px'
               }}>
-                {Math.round(product.total_area || 0)}m²
+                {Math.round(purchasedArea)}m²
               </div>
+              {totalArea > 0 && (
+                <div style={{
+                  width: '50px',
+                  height: '2px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '1px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    width: `${progressPercentage}%`,
+                    height: '100%',
+                    backgroundColor: progressColor,
+                    transition: 'width 1s cubic-bezier(0.22, 1, 0.36, 1)'
+                  }} />
+                </div>
+              )}
             </div>
           );
         })}

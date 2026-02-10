@@ -11,6 +11,7 @@ export const adminService = {
   getComplaints: (params) => api.get('/api/admin/qa/complaints', { params }),
   updateComplaintStatus: (id, status) => api.patch(`/api/admin/qa/complaints/${id}`, { status }),
   updateComplaintRemarks: (id, remarks) => api.patch(`/api/admin/qa/complaints/${id}/remarks`, { remarks }),
+  refundComplaint: (id, coins) => api.post(`/api/admin/qa/complaints/${id}/refund`, { coins }),
   getProfitByCategory: (params) => api.get('/api/admin/analytics/profit-by-category', { params }),
   getFarmerPerformance: (params) => api.get('/api/admin/analytics/farmers/performance', { params }),
   getReviewsSummary: (params) => api.get('/api/admin/analytics/reviews/summary', { params }),

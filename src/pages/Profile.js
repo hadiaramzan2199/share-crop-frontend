@@ -272,20 +272,19 @@ const Profile = () => {
 
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
+      // 2. Get Public URL and add cache-bust so the browser shows the new image (same path = cached otherwise)
       const { data: { publicUrl } } = supabase.storage
         .from('user-documents')
         .getPublicUrl(filePath);
+      const cacheBustedUrl = publicUrl + (publicUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
 
-      // 3. Save to backend
-      await profileService.updateProfileImage(user.id, publicUrl);
+      // 3. Save to backend (store cache-busted URL so UI everywhere shows latest)
+      await profileService.updateProfileImage(user.id, cacheBustedUrl);
 
-      // 4. Update local state
-      setProfile(prev => ({ ...prev, profile_image_url: publicUrl }));
-      setEditedProfile(prev => ({ ...prev, profile_image_url: publicUrl }));
-
-      // Update user in context
-      updateUser({ ...user, profile_image_url: publicUrl });
+      // 4. Update local state and auth context so header/sidebar etc. show new image immediately
+      setProfile(prev => ({ ...prev, profile_image_url: cacheBustedUrl }));
+      setEditedProfile(prev => ({ ...prev, profile_image_url: cacheBustedUrl }));
+      updateUser({ ...user, profile_image_url: cacheBustedUrl });
 
       setSuccess('Profile picture updated successfully!');
     } catch (err) {

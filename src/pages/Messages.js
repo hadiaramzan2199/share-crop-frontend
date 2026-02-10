@@ -28,7 +28,8 @@ import {
   ChatBubbleOutline,
   Add,
   ArrowBack,
-  DoneAll
+  DoneAll,
+  VerifiedUser
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,6 +64,10 @@ const Messages = () => {
   const [searching, setSearching] = useState(false);
 
   const messagesEndRef = useRef(null);
+
+  const displayName = (name, userType) =>
+    userType === 'admin' ? 'Share-Crop' : (name || 'User');
+  const isAdmin = (userType) => userType === 'admin';
 
   const fetchConversations = useCallback(async (showSpinner = false) => {
     try {
@@ -489,18 +494,21 @@ const Messages = () => {
                         sx={{
                           width: 44,
                           height: 44,
-                          bgcolor: conv.participant_type === 'farmer' ? '#dcfce7' : '#dbeafe',
-                          color: conv.participant_type === 'farmer' ? '#059669' : '#1d4ed8',
+                          bgcolor: isAdmin(conv.participant_type) ? '#0d9488' : conv.participant_type === 'farmer' ? '#dcfce7' : '#dbeafe',
+                          color: isAdmin(conv.participant_type) ? '#fff' : conv.participant_type === 'farmer' ? '#059669' : '#1d4ed8',
                         }}
                       >
-                        {conv.participant_name.charAt(0)}
+                        {isAdmin(conv.participant_type) ? 'S' : conv.participant_name.charAt(0)}
                       </Avatar>
 
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={0.5}>
                           <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, color: '#1e293b' }}>
-                            {conv.participant_name}
+                            {displayName(conv.participant_name, conv.participant_type)}
                           </Typography>
+                          {isAdmin(conv.participant_type) && (
+                            <VerifiedUser sx={{ fontSize: 18, color: '#0d9488' }} titleAccess="Verified" />
+                          )}
                           <Typography variant="caption" sx={{ color: '#64748b', ml: 1 }}>
                             {formatTime(conv.last_message_at)}
                           </Typography>
@@ -555,18 +563,23 @@ const Messages = () => {
                         sx={{
                           width: 44,
                           height: 44,
-                          bgcolor: selectedConversation.participant_type === 'farmer' ? '#dcfce7' : '#dbeafe',
-                          color: selectedConversation.participant_type === 'farmer' ? '#059669' : '#1d4ed8'
+                          bgcolor: isAdmin(selectedConversation.participant_type) ? '#0d9488' : selectedConversation.participant_type === 'farmer' ? '#dcfce7' : '#dbeafe',
+                          color: isAdmin(selectedConversation.participant_type) ? '#fff' : selectedConversation.participant_type === 'farmer' ? '#059669' : '#1d4ed8'
                         }}
                       >
-                        {selectedConversation.participant_name.charAt(0)}
+                        {isAdmin(selectedConversation.participant_type) ? 'S' : selectedConversation.participant_name.charAt(0)}
                       </Avatar>
                       <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: '#1e293b' }}>
-                          {selectedConversation.participant_name}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: '#1e293b' }}>
+                            {displayName(selectedConversation.participant_name, selectedConversation.participant_type)}
+                          </Typography>
+                          {isAdmin(selectedConversation.participant_type) && (
+                            <VerifiedUser sx={{ fontSize: 20, color: '#0d9488' }} titleAccess="Verified" />
+                          )}
+                        </Stack>
                         <Typography variant="caption" color="text.secondary">
-                          {selectedConversation.participant_type.charAt(0).toUpperCase() + selectedConversation.participant_type.slice(1)}
+                          {isAdmin(selectedConversation.participant_type) ? 'Verified support' : selectedConversation.participant_type.charAt(0).toUpperCase() + selectedConversation.participant_type.slice(1)}
                         </Typography>
                       </Box>
                     </Stack>
@@ -585,18 +598,36 @@ const Messages = () => {
                   {msgLoading && messages.length === 0 ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress size={20} /></Box>
                   ) : (
-                    messages.map((msg) => (
+                    messages.map((msg) => {
+                      const fromAdmin = msg.sender_id !== user.id && isAdmin(selectedConversation.participant_type);
+                      return (
                       <Box
                         key={msg.id}
                         sx={{
                           display: 'flex',
-                          justifyContent: msg.sender_id === user.id ? 'flex-end' : 'flex-start',
+                          flexDirection: 'column',
+                          alignItems: msg.sender_id === user.id ? 'flex-end' : 'flex-start',
                           mb: 2
                         }}
                       >
+                        {fromAdmin && (
+                          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5, ml: 0.5 }}>
+                            <VerifiedUser sx={{ fontSize: 14, color: '#0d9488' }} titleAccess="Verified" />
+                            <Typography variant="caption" sx={{ color: '#0d9488', fontWeight: 600 }}>
+                              Share-Crop
+                            </Typography>
+                          </Stack>
+                        )}
                         <Box
                           sx={{
+                            display: 'flex',
+                            justifyContent: msg.sender_id === user.id ? 'flex-end' : 'flex-start',
                             maxWidth: '70%',
+                          }}
+                        >
+                        <Box
+                          sx={{
+                            maxWidth: '100%',
                             p: 2,
                             borderRadius: 3,
                             backgroundColor: msg.sender_id === user.id ? '#4caf50' : 'white',
@@ -641,8 +672,10 @@ const Messages = () => {
                             </Box>
                           )}
                         </Box>
+                        </Box>
                       </Box>
-                    ))
+                    );
+                    })
                   )}
                   <div ref={messagesEndRef} />
                 </Box>
@@ -732,14 +765,19 @@ const Messages = () => {
                 <ListItemAvatar>
                   <Avatar
                     src={u.profile_image_url}
-                    sx={{ bgcolor: u.user_type === 'farmer' ? '#4caf50' : '#2196f3' }}
+                    sx={{ bgcolor: isAdmin(u.user_type) ? '#0d9488' : u.user_type === 'farmer' ? '#4caf50' : '#2196f3' }}
                   >
-                    {!u.profile_image_url && u.name.charAt(0)}
+                    {!u.profile_image_url && (isAdmin(u.user_type) ? 'S' : u.name.charAt(0))}
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
-                  primary={u.name}
-                  secondary={u.user_type.charAt(0).toUpperCase() + u.user_type.slice(1)}
+                  primary={
+                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                      <span>{displayName(u.name, u.user_type)}</span>
+                      {isAdmin(u.user_type) && <VerifiedUser sx={{ fontSize: 18, color: '#0d9488' }} titleAccess="Verified" />}
+                    </Stack>
+                  }
+                  secondary={isAdmin(u.user_type) ? 'Verified support' : u.user_type.charAt(0).toUpperCase() + u.user_type.slice(1)}
                 />
               </ListItem>
             ))}

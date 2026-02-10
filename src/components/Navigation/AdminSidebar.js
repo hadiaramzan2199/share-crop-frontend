@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Drawer, List, ListItem, ListItemIcon, ListItemText, Box, Typography, Chip, Avatar, IconButton, Divider } from '@mui/material';
-import { Dashboard, People, MonetizationOn, Payment, Assessment, Analytics, Close, QuestionAnswer, ExitToApp } from '@mui/icons-material';
+import { Dashboard, People, MonetizationOn, Payment, Assessment, Analytics, Close, QuestionAnswer, ExitToApp, Person } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const useIsMobile = () => {
@@ -21,6 +21,7 @@ const AdminSidebar = ({ user, onLogout, open, onClose }) => {
 
   const adminMenuItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/admin' },
+    { text: 'Profile', icon: <Person />, path: '/admin/profile' },
     { text: 'Users', icon: <People />, path: '/admin/users' },
     { text: 'QA', icon: <QuestionAnswer />, path: '/admin/qa' },
     { text: 'Analytics', icon: <Analytics />, path: '/admin/analytics' },

@@ -27,11 +27,14 @@ import {
   InputLabel,
   useMediaQuery,
   useTheme,
+  TextField,
 } from '@mui/material';
-import { ReportProblem, Add, Visibility, Refresh, Close } from '@mui/icons-material';
+import { ReportProblem, Add, Visibility, Refresh, Close, AttachFile, Send, VerifiedUser } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { complaintService } from '../services/complaints';
 import ComplaintForm from '../components/Forms/ComplaintForm';
+import supabase from '../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const Complaints = () => {
   const theme = useTheme();
@@ -44,6 +47,10 @@ const Complaints = () => {
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [extraProofFiles, setExtraProofFiles] = useState([]);
+  const [addProofsLoading, setAddProofsLoading] = useState(false);
 
   const loadComplaints = useCallback(async () => {
     try {
@@ -98,9 +105,63 @@ const Complaints = () => {
     }
   };
 
-  const handleViewComplaint = (complaint) => {
-    setSelectedComplaint(complaint);
+  const handleViewComplaint = async (complaint) => {
+    setReplyDraft('');
+    setExtraProofFiles([]);
+    try {
+      const res = await complaintService.getComplaint(complaint.id);
+      setSelectedComplaint(res.data || complaint);
+    } catch (_) {
+      setSelectedComplaint(complaint);
+    }
     setViewDialogOpen(true);
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedComplaint?.id || !replyDraft.trim()) return;
+    setReplyLoading(true);
+    try {
+      await complaintService.addRemark(selectedComplaint.id, replyDraft.trim());
+      const res = await complaintService.getComplaint(selectedComplaint.id);
+      setSelectedComplaint(res.data);
+      setReplyDraft('');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReplyLoading(false);
+    }
+  };
+
+  const handleAddMoreDocs = async () => {
+    if (!selectedComplaint?.id || extraProofFiles.length === 0 || !supabase) return;
+    const current = (selectedComplaint.proofs || []).length;
+    if (current >= 5) return;
+    const toAdd = extraProofFiles.slice(0, 5 - current);
+    setAddProofsLoading(true);
+    try {
+      const bucket = 'user-documents';
+      const folder = `complaint-proofs/${selectedComplaint.id}`;
+      const proofsToAdd = [];
+      for (const file of toAdd) {
+        const ext = file.name.split('.').pop() || 'bin';
+        const fileName = `${uuidv4()}-${file.name}`;
+        const filePath = `${folder}/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+        if (uploadError) continue;
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        proofsToAdd.push({ file_name: file.name, file_url: publicUrl, file_type: ext });
+      }
+      if (proofsToAdd.length > 0) {
+        await complaintService.addProofs(selectedComplaint.id, proofsToAdd);
+        const res = await complaintService.getComplaint(selectedComplaint.id);
+        setSelectedComplaint(res.data);
+        setExtraProofFiles([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAddProofsLoading(false);
+    }
   };
 
   if (!user) {
@@ -508,14 +569,129 @@ const Complaints = () => {
                 </Paper>
               </Box>
 
-              {selectedComplaint.admin_remarks && (
+              {selectedComplaint.proofs && selectedComplaint.proofs.length > 0 && (
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    Admin Response
+                    Attached proof ({selectedComplaint.proofs.length} / 5)
                   </Typography>
-                  <Alert severity="info" sx={{ mt: 0.5 }}>
-                    {selectedComplaint.admin_remarks}
+                  <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 0.5 }}>
+                    {selectedComplaint.proofs.map((p) => {
+                      const isImage = /\.(jpe?g|png|gif|webp)$/i.test(p.file_name || '') || (p.file_type && /^(jpe?g|png|gif|webp)$/i.test(p.file_type));
+                      return (
+                        <Box key={p.id || p.file_url}>
+                          {isImage ? (
+                            <a href={p.file_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                              <Box component="img" src={p.file_url} alt={p.file_name} sx={{ maxWidth: 120, maxHeight: 120, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
+                            </a>
+                          ) : (
+                            <Button size="small" href={p.file_url} target="_blank" rel="noopener noreferrer" sx={{ textTransform: 'none' }}>
+                              {p.file_name || 'Document'}
+                            </Button>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                </Box>
+              )}
+
+              {(() => {
+                const hasConversation = (selectedComplaint.remarks && selectedComplaint.remarks.length > 0) || selectedComplaint.admin_remarks;
+                const adminHasRemarked = !!(
+                  selectedComplaint.admin_remarks ||
+                  (selectedComplaint.remarks && selectedComplaint.remarks.some((r) => r.author_type === 'admin'))
+                );
+                const isResolved = String(selectedComplaint.status || '').toLowerCase() === 'resolved';
+                const canReply = adminHasRemarked && !isResolved;
+
+                if (hasConversation) {
+                  return (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                        Conversation
+                      </Typography>
+                      <Stack spacing={1} sx={{ mt: 0.5 }}>
+{selectedComplaint.admin_remarks && (!selectedComplaint.remarks || selectedComplaint.remarks.length === 0) && (
+                          <Alert severity="info" sx={{ borderRadius: 2 }}>
+                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                              <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Share-Crop</Typography>
+                            </Stack>
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{selectedComplaint.admin_remarks}</Typography>
+                          </Alert>
+                    )}
+                    {(selectedComplaint.remarks || []).map((r) => (
+                      <Paper key={r.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: r.author_type === 'admin' ? 'rgba(76, 175, 80, 0.06)' : 'grey.50' }}>
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                          {r.author_type === 'admin' && <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />}
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                            {r.author_type === 'admin' ? 'Share-Crop' : (r.author_name || 'User')}
+                          </Typography>
+                        </Stack>
+                            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>{r.message}</Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                              {formatDate(r.created_at)}
+                            </Typography>
+                          </Paper>
+                        ))}
+                      </Stack>
+                      {isResolved && (
+                        <Alert severity="info" sx={{ mt: 1.5, borderRadius: 2 }}>
+                          This complaint is resolved. Replies are closed.
+                        </Alert>
+                      )}
+                      {canReply && (
+                        <Box sx={{ mt: 1.5 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            placeholder="Reply or add details..."
+                            value={replyDraft}
+                            onChange={(e) => setReplyDraft(e.target.value)}
+                            disabled={replyLoading}
+                            multiline
+                            minRows={2}
+                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                          />
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={replyLoading ? <CircularProgress size={16} color="inherit" /> : <Send />}
+                            onClick={handleSendReply}
+                            disabled={replyLoading || !replyDraft.trim()}
+                            sx={{ mt: 1, borderRadius: 2, background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)' }}
+                          >
+                            {replyLoading ? 'Sending...' : 'Send reply'}
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                }
+                return (
+                  <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    Admin has not responded yet. You can reply once they add a message.
                   </Alert>
+                );
+              })()}
+
+              {selectedComplaint.proofs && selectedComplaint.proofs.length < 5 && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Add more documents (max 5 total)</Typography>
+                  <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1} sx={{ mt: 0.5 }}>
+                    <Button variant="outlined" size="small" component="label" startIcon={<AttachFile />} disabled={addProofsLoading} sx={{ borderRadius: 2 }}>
+                      Choose files
+                      <input type="file" hidden multiple accept="image/*,.pdf,.doc,.docx,.txt" onChange={(e) => setExtraProofFiles(e.target.files ? Array.from(e.target.files) : [])} />
+                    </Button>
+                    {extraProofFiles.length > 0 && (
+                      <>
+                        <Typography variant="caption" color="text.secondary">{extraProofFiles.length} file(s) selected</Typography>
+                        <Button size="small" variant="contained" disabled={addProofsLoading || selectedComplaint.proofs.length + extraProofFiles.length > 5} onClick={handleAddMoreDocs} sx={{ borderRadius: 2 }}>
+                          {addProofsLoading ? 'Uploading...' : 'Upload'}
+                        </Button>
+                      </>
+                    )}
+                  </Stack>
                 </Box>
               )}
 
@@ -533,6 +709,13 @@ const Complaints = () => {
                   </Typography>
                   <Typography variant="body2">{formatDate(selectedComplaint.updated_at)}</Typography>
                 </Box>
+              )}
+
+              {selectedComplaint.refund_coins != null && selectedComplaint.refund_coins > 0 && (
+                <Alert severity="success" sx={{ mt: 1 }}>
+                  Refund: {selectedComplaint.refund_coins} coins credited to your account
+                  {selectedComplaint.refunded_at && ` on ${formatDate(selectedComplaint.refunded_at)}`}.
+                </Alert>
               )}
             </Box>
           )}

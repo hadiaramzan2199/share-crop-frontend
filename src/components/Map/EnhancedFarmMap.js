@@ -614,41 +614,45 @@ const EnhancedFarmMap = forwardRef(({
     const key = match ? match.key : syn;
     return { name, key };
   }, []);
+  // Resource bar: only user's purchased/rented; values = total yield (kg) so user can avoid buying too much or not enough
   const purchasedSummary = React.useMemo(() => {
-    const totals = new Map();
-    farms.forEach(f => {
-      const key = f.subcategory || f.category;
-      const sizeRaw = f.total_area;
-      const size = typeof sizeRaw === 'string' ? parseFloat(sizeRaw) : sizeRaw;
-      const total = Number.isFinite(size) ? size : 0;
-      const canon = canonicalizeCategory(key);
-      const k = canon.key;
-      if (!k) return;
-      const prev = totals.get(k) || { id: k, category: canon.name, total_area: 0 };
-      totals.set(k, { id: k, category: prev.category, total_area: prev.total_area + total });
-    });
     const orders = new Map();
     purchasedProducts.forEach(p => {
       const rawKey = p.subcategory || p.category || p.category_key || p.id;
       const canon = canonicalizeCategory(rawKey);
       const k = canon.key;
       if (!k) return;
-      const paRaw = p.purchased_area;
+      const paRaw = p.purchased_area ?? p.quantity ?? p.area_rented;
       const pa = typeof paRaw === 'string' ? parseFloat(paRaw) : paRaw || 0;
-      const prev = orders.get(k) || { id: k, category: canon.name, purchased_area: 0 };
-      orders.set(k, { id: k, category: prev.category, purchased_area: prev.purchased_area + pa });
+      const fieldId = p.id ?? p.field_id;
+      const field = Array.isArray(farms) && fieldId != null
+        ? farms.find(f => String(f.id) === String(fieldId))
+        : null;
+      const rateRaw = field?.production_rate ?? field?.productionRate;
+      const rate = typeof rateRaw === 'string' ? parseFloat(rateRaw) : (rateRaw ?? 0);
+      const totalAreaRaw = field?.total_area ?? field?.field_size;
+      const totalArea = typeof totalAreaRaw === 'string' ? parseFloat(totalAreaRaw) : (totalAreaRaw ?? 0);
+      const unit = (field?.production_rate_unit ?? field?.productionRateUnit ?? 'Kg').toString().toLowerCase();
+      const isPerM2 = /m\s*2|m²|per\s*m|per\s*unit/.test(unit);
+      let userKg = 0;
+      if (Number.isFinite(rate) && rate >= 0) {
+        if (isPerM2) {
+          userKg = Number.isFinite(pa) ? pa * rate : 0;
+        } else {
+          userKg = (Number.isFinite(totalArea) && totalArea > 0 && Number.isFinite(pa))
+            ? (pa / totalArea) * rate
+            : 0;
+        }
+      }
+      const prev = orders.get(k) || { id: k, category: canon.name, purchased_area: 0, total_kg: 0 };
+      orders.set(k, {
+        id: k,
+        category: prev.category,
+        purchased_area: prev.purchased_area + pa,
+        total_kg: prev.total_kg + userKg
+      });
     });
-    const final = new Map();
-    const keys = new Set([...totals.keys(), ...orders.keys()]);
-    keys.forEach(k => {
-      const f = totals.get(k);
-      const o = orders.get(k);
-      const category = (f?.category) || (o?.category) || k;
-      const total_area = f?.total_area || 0;
-      const purchased_area = Math.min(o?.purchased_area || 0, total_area || Infinity);
-      final.set(k, { id: k, category, purchased_area, total_area });
-    });
-    return Array.from(final.values()).filter(item => {
+    return Array.from(orders.values()).filter(item => {
       const purchasedArea = typeof item.purchased_area === 'string' ? parseFloat(item.purchased_area) : (item.purchased_area || 0);
       return Number.isFinite(purchasedArea) && purchasedArea > 0;
     });
@@ -1333,6 +1337,7 @@ const EnhancedFarmMap = forwardRef(({
         let base = lastNonEmptyFarmsRef.current.filter(f => !shouldFilterOutByOccupiedArea(f));
         if (selectedIcons && selectedIcons.size > 0) {
           base = base.filter(f => {
+            if (!isProductPurchased(f)) return false;
             const icon = getProductIcon(f.subcategory || f.category);
             return selectedIcons.has(icon);
           });
@@ -1342,6 +1347,7 @@ const EnhancedFarmMap = forwardRef(({
         let base = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
         if (selectedIcons && selectedIcons.size > 0) {
           base = base.filter(f => {
+            if (!isProductPurchased(f)) return false;
             const icon = getProductIcon(f.subcategory || f.category);
             return selectedIcons.has(icon);
           });
@@ -1366,13 +1372,14 @@ const EnhancedFarmMap = forwardRef(({
       });
       if (selectedIcons && selectedIcons.size > 0) {
         filtered = filtered.filter(f => {
+          if (!isProductPurchased(f)) return false;
           const icon = getProductIcon(f.subcategory || f.category);
           return selectedIcons.has(icon);
         });
       }
       setFilteredFarms(filtered);
     }
-  }, [searchQuery, farms, selectedIcons, externalFilters, shouldFilterOutByOccupiedArea]);
+  }, [searchQuery, farms, selectedIcons, externalFilters, shouldFilterOutByOccupiedArea, isProductPurchased]);
 
   // Apply header-provided category/subcategory filters
   useEffect(() => {
@@ -1381,9 +1388,10 @@ const EnhancedFarmMap = forwardRef(({
     const subs = Array.isArray(externalFilters.subcategories) ? externalFilters.subcategories : [];
     if (cats.length === 0 && subs.length === 0) {
       let filtered = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
-      // Also apply selectedIcons filter if any icons are selected
+      // When resource bar filter is on: show only the user's purchased/rented fields (pulse markers) of that type
       if (selectedIcons && selectedIcons.size > 0) {
         filtered = filtered.filter(f => {
+          if (!isProductPurchased(f)) return false;
           const icon = getProductIcon(f.subcategory || f.category);
           return selectedIcons.has(icon);
         });
@@ -1439,15 +1447,16 @@ const EnhancedFarmMap = forwardRef(({
       }
       return catMatch;
     });
-    // Also apply selectedIcons filter if any icons are selected
+    // When resource bar filter is on: show only the user's purchased/rented fields of that type
     if (selectedIcons && selectedIcons.size > 0) {
       filtered = filtered.filter(f => {
+        if (!isProductPurchased(f)) return false;
         const icon = getProductIcon(f.subcategory || f.category);
         return selectedIcons.has(icon);
       });
     }
     setFilteredFarms(filtered);
-  }, [externalFilters, farms, selectedIcons, shouldFilterOutByOccupiedArea]);
+  }, [externalFilters, farms, selectedIcons, shouldFilterOutByOccupiedArea, isProductPurchased]);
 
   // const isPurchased = useCallback((productId) => {
   //   const farm = farms.find(f => f.id === productId);

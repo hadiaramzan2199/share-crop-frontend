@@ -21,5 +21,13 @@ export const complaintService = {
   
   // Get complaints against a specific user (for admin)
   getComplaintsAgainstUser: (userId) => api.get(`/api/complaints/against/${userId}`),
+
+  // Add proof attachments (images/docs) to a complaint. Optional. Max 5 per complaint.
+  addProofs: (complaintId, proofs) =>
+    api.post(`/api/complaints/${complaintId}/proofs`, { proofs }),
+
+  // Add a message to the complaint thread (user reply or admin remark).
+  addRemark: (complaintId, message) =>
+    api.post(`/api/complaints/${complaintId}/remarks`, { message }),
 };
 

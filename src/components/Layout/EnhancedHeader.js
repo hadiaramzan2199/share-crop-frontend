@@ -1213,7 +1213,7 @@ const EnhancedHeader = forwardRef(({
                   <MenuItem
                     onClick={() => {
                       setUserMenuAnchorEl(null);
-                      navigate(userType === 'farmer' ? '/farmer/profile' : '/buyer/profile');
+                      navigate(userType === 'farmer' ? '/farmer/profile' : userType === 'admin' ? '/admin/profile' : '/buyer/profile');
                     }}
                   >
                     <ListItemIcon>

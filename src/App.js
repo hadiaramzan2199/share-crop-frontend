@@ -16,6 +16,8 @@ import AdminCoins from './pages/admin/AdminCoins';
 import AdminPayments from './pages/admin/AdminPayments';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import Messages from './pages/Messages';
+import Profile from './pages/Profile';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -66,6 +68,8 @@ const AppContent = () => {
             <Route path="users" element={<AdminUsers />} />
             <Route path="users/:id" element={<UserDetailPage />} />
             <Route path="qa" element={<AdminQA />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="messages" element={<Messages />} />
             <Route path="coins" element={<AdminCoins />} />
             <Route path="payments" element={<AdminPayments />} />
             <Route path="audit" element={<AdminAudit />} />

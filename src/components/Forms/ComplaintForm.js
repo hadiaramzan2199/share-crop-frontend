@@ -20,9 +20,11 @@ import {
   Autocomplete,
   InputAdornment,
 } from '@mui/material';
-import { ReportProblem, Send, Close, Search, Person } from '@mui/icons-material';
+import { ReportProblem, Send, Close, Search, Person, AttachFile } from '@mui/icons-material';
 import { complaintService } from '../../services/complaints';
 import { userService } from '../../services/users';
+import supabase from '../../services/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId, onSuccess }) => {
   const theme = useTheme();
@@ -37,6 +39,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [onlyCurrentUserFound, setOnlyCurrentUserFound] = useState(false);
+  const [proofFiles, setProofFiles] = useState([]);
 
   const categories = [
     'Service',
@@ -136,13 +139,43 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       };
 
       const response = await complaintService.createComplaint(complaintData);
-      
+      const complaintId = response.data?.id;
+
+      // Optional: upload proof files to Supabase and attach to complaint (max 5 per complaint)
+      if (complaintId && proofFiles.length > 0 && supabase) {
+        const proofsToAdd = [];
+        const bucket = 'user-documents';
+        const folder = `complaint-proofs/${complaintId}`;
+        const filesToUpload = proofFiles.slice(0, 5);
+        for (const file of filesToUpload) {
+          try {
+            const ext = file.name.split('.').pop() || 'bin';
+            const fileName = `${uuidv4()}-${file.name}`;
+            const filePath = `${folder}/${fileName}`;
+            const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+            if (uploadError) continue;
+            const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+            proofsToAdd.push({ file_name: file.name, file_url: publicUrl, file_type: ext });
+          } catch (e) {
+            console.error('Proof upload failed for', file.name, e);
+          }
+        }
+        if (proofsToAdd.length > 0) {
+          try {
+            await complaintService.addProofs(complaintId, proofsToAdd);
+          } catch (e) {
+            console.error('Failed to attach proofs to complaint', e);
+          }
+        }
+      }
+
       setSuccess(true);
       setDescription('');
       setCategory('');
       setComplainedAgainstUser(null);
       setUserSearchQuery('');
       setUserSearchResults([]);
+      setProofFiles([]);
       
       // Call success callback if provided
       if (onSuccess) {
@@ -173,6 +206,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
       setComplainedAgainstUser(null);
       setUserSearchQuery('');
       setUserSearchResults([]);
+      setProofFiles([]);
       onClose();
     }
   };
@@ -298,7 +332,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
               getOptionLabel={(option) => {
                 if (!option || typeof option !== 'object') return '';
                 if (option.user_type === 'admin') {
-                  return 'Share-Crop Administration';
+                  return 'Share-Crop';
                 }
                 return `${option.name || 'Unknown'} (${option.user_type || 'user'})`;
               }}
@@ -365,7 +399,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
               }}
               renderOption={(props, option) => {
                 const isAdmin = option.user_type === 'admin';
-                const primaryLabel = isAdmin ? 'Share-Crop Administration' : (option.name || 'Unknown');
+                const primaryLabel = isAdmin ? 'Share-Crop' : (option.name || 'Unknown');
                 const secondaryLabel = isAdmin ? null : (option.user_type || 'user');
                 return (
                   <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -389,7 +423,7 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
               <Box sx={{ mt: 1, p: 1.5, bgcolor: 'rgba(33, 150, 243, 0.08)', borderRadius: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Person sx={{ fontSize: 18, color: '#1976d2' }} />
                 <Typography variant="body2" sx={{ flex: 1 }}>
-                  Complaining against: <strong>{complainedAgainstUser.user_type === 'admin' ? 'Share-Crop Administration' : (complainedAgainstUser.name || 'Unknown')}</strong>
+                  Complaining against: <strong>{complainedAgainstUser.user_type === 'admin' ? 'Share-Crop' : (complainedAgainstUser.name || 'Unknown')}</strong>
                   {complainedAgainstUser.user_type !== 'admin' && ` (${complainedAgainstUser.user_type || 'user'})`}
                 </Typography>
                 <IconButton
@@ -480,6 +514,46 @@ const ComplaintForm = ({ open, onClose, targetType, targetId, targetName, userId
               },
             }}
           />
+
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}>
+            Attach proof (optional, max 5)
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Button
+              variant="outlined"
+              component="label"
+              size="small"
+              startIcon={<AttachFile />}
+              disabled={loading}
+              sx={{
+                borderRadius: 2,
+                borderColor: 'rgba(0, 0, 0, 0.23)',
+                '&:hover': { borderColor: '#4CAF50', bgcolor: 'rgba(76, 175, 80, 0.04)' },
+              }}
+            >
+              Choose images or documents
+              <input
+                type="file"
+                hidden
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt"
+                onChange={(e) => {
+                  const files = e.target.files ? Array.from(e.target.files) : [];
+                  setProofFiles(prev => [...prev, ...files]);
+                }}
+              />
+            </Button>
+            {proofFiles.length > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                {proofFiles.length} file(s) selected
+              </Typography>
+            )}
+            {proofFiles.length > 0 && (
+              <IconButton size="small" onClick={() => setProofFiles([])} sx={{ color: 'text.secondary' }}>
+                <Close fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
 
           <Typography 
             variant="body2" 
