@@ -19,7 +19,8 @@ import { cachedReverseGeocode } from '../../utils/geocoding';
 import { getProductIcon, productCategories } from '../../utils/productIcons';
 import { orderService } from '../../services/orders';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { configureGlobeMap, DARK_MAP_STYLE } from '../../utils/mapConfig';
+import { configureGlobeMap, DARK_MAP_STYLE, GLOBAL_VIEW_MAX_ZOOM } from '../../utils/mapConfig';
+import GoogleGlobeMap from './GoogleGlobeMap';
 import './FarmMap.css';
 import weatherService from '../../services/weather';
 import WebcamPopup from '../Common/WebcamPopup';
@@ -65,6 +66,7 @@ const EnhancedFarmMap = forwardRef(({
   minimal = false
 }, ref) => {
   const mapRef = useRef();
+  const googleGlobeRef = useRef(null);
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const isMobile = useIsMobile();
@@ -222,7 +224,7 @@ const EnhancedFarmMap = forwardRef(({
   }, [productWeather]);
 
   const handleProductClick = useCallback((event, product) => {
-    event.stopPropagation();
+    if (event) event.stopPropagation();
 
     // Use functional update to avoid stale state issues
     setSelectedProduct(prevSelected => {
@@ -256,23 +258,30 @@ const EnhancedFarmMap = forwardRef(({
     setShowPurchaseUI(true);
 
 
-    if (mapRef.current && product.coordinates) {
-      const map = mapRef.current.getMap();
-      isMapAnimatingRef.current = true;
-      popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-      setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
-      map.flyTo({
-        center: product.coordinates,
-        zoom: 8,
-        duration: 1200,
-        essential: true,
-        offset: [0, -(isMobile ? 160 : 200)],
-        easing: (t) => t * (2 - t)
-      });
-      map.once('moveend', () => {
-        isMapAnimatingRef.current = false;
-        setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
-      });
+    if (product.coordinates) {
+      const lat = Array.isArray(product.coordinates) ? product.coordinates[1] : product.coordinates?.lat;
+      const lng = Array.isArray(product.coordinates) ? product.coordinates[0] : product.coordinates?.lng;
+      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+        if (googleGlobeRef.current?.flyTo) googleGlobeRef.current.flyTo(lat, lng, 7);
+        const map = mapRef.current && typeof mapRef.current.getMap === 'function' ? mapRef.current.getMap() : null;
+        if (map) {
+          isMapAnimatingRef.current = true;
+          popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+          setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+          map.flyTo({
+            center: product.coordinates,
+            zoom: 8,
+            duration: 1200,
+            essential: true,
+            offset: [0, -(isMobile ? 160 : 200)],
+            easing: (t) => t * (2 - t)
+          });
+          map.once('moveend', () => {
+            isMapAnimatingRef.current = false;
+            setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+          });
+        }
+      }
     }
 
     // Fetch location and weather for the selected product
@@ -1318,46 +1327,40 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, [farms]);
 
+  // Run only when farms or callback change; do NOT depend on viewState or we re-run on every pan/zoom and can cause update loops
   useEffect(() => {
     if (!mapRef.current) return;
     if (!Array.isArray(farms) || farms.length === 0) return;
-    // Render GIF overlays at exact marker positions
     if (typeof refreshHarvestGifOverlays === 'function') {
       refreshHarvestGifOverlays();
     }
-  }, [farms, viewState, refreshHarvestGifOverlays]);
+  }, [farms, refreshHarvestGifOverlays]);
 
-  // Filter farms based on search query
+  // Stable key so we don't re-run when parent passes a new object reference with same content (prevents update loop)
+  const externalFiltersKey = JSON.stringify({ c: externalFilters?.categories ?? [], s: externalFilters?.subcategories ?? [] });
+
+  // Filter farms based on search query. Only setState when result actually changed to avoid update loops.
   useEffect(() => {
     if (externalFilters && ((Array.isArray(externalFilters.categories) && externalFilters.categories.length > 0) || (Array.isArray(externalFilters.subcategories) && externalFilters.subcategories.length > 0))) {
       return; // external filters are applied in a separate effect; avoid overriding
     }
+    let next;
     if (!searchQuery || searchQuery.trim() === '') {
       if (farms.length === 0 && lastNonEmptyFarmsRef.current.length > 0) {
-        let base = lastNonEmptyFarmsRef.current.filter(f => !shouldFilterOutByOccupiedArea(f));
-        if (selectedIcons && selectedIcons.size > 0) {
-          base = base.filter(f => {
-            if (!isProductPurchased(f)) return false;
-            const icon = getProductIcon(f.subcategory || f.category);
-            return selectedIcons.has(icon);
-          });
-        }
-        setFilteredFarms(base);
+        next = lastNonEmptyFarmsRef.current.filter(f => !shouldFilterOutByOccupiedArea(f));
       } else {
-        let base = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
-        if (selectedIcons && selectedIcons.size > 0) {
-          base = base.filter(f => {
-            if (!isProductPurchased(f)) return false;
-            const icon = getProductIcon(f.subcategory || f.category);
-            return selectedIcons.has(icon);
-          });
-        }
-        setFilteredFarms(base);
+        next = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
+      }
+      if (selectedIcons && selectedIcons.size > 0) {
+        next = next.filter(f => {
+          if (!isProductPurchased(f)) return false;
+          const icon = getProductIcon(f.subcategory || f.category);
+          return selectedIcons.has(icon);
+        });
       }
     } else {
-      // Filter farms based on search query
       const searchTerm = searchQuery.toLowerCase();
-      let filtered = farms.filter(farm => {
+      next = farms.filter(farm => {
         if (shouldFilterOutByOccupiedArea(farm)) return false;
         return (
           farm.name?.toLowerCase().includes(searchTerm) ||
@@ -1371,24 +1374,42 @@ const EnhancedFarmMap = forwardRef(({
         );
       });
       if (selectedIcons && selectedIcons.size > 0) {
-        filtered = filtered.filter(f => {
+        next = next.filter(f => {
           if (!isProductPurchased(f)) return false;
           const icon = getProductIcon(f.subcategory || f.category);
           return selectedIcons.has(icon);
         });
       }
-      setFilteredFarms(filtered);
     }
-  }, [searchQuery, farms, selectedIcons, externalFilters, shouldFilterOutByOccupiedArea, isProductPurchased]);
+    setFilteredFarms((prev) => {
+      if (prev.length !== next.length) return next;
+      const same = next.every((f, i) => (f?.id ?? i) === (prev[i]?.id ?? i));
+      return same ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- externalFiltersKey not externalFilters to avoid loop.
+  }, [searchQuery, farms, selectedIcons, externalFiltersKey, shouldFilterOutByOccupiedArea, isProductPurchased]);
 
-  // Apply header-provided category/subcategory filters
+  // Apply header-provided category/subcategory filters. Only setState when result changed. Also applies search query so search + filters work together.
   useEffect(() => {
     if (!externalFilters) return;
     const cats = Array.isArray(externalFilters.categories) ? externalFilters.categories : [];
     const subs = Array.isArray(externalFilters.subcategories) ? externalFilters.subcategories : [];
+    let filtered;
     if (cats.length === 0 && subs.length === 0) {
-      let filtered = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
-      // When resource bar filter is on: show only the user's purchased/rented fields (pulse markers) of that type
+      filtered = farms.filter(f => !shouldFilterOutByOccupiedArea(f));
+      if (searchQuery && searchQuery.trim() !== '') {
+        const searchTerm = searchQuery.toLowerCase();
+        filtered = filtered.filter(farm =>
+          farm.name?.toLowerCase().includes(searchTerm) ||
+          farm.category?.toLowerCase().includes(searchTerm) ||
+          farm.farmer?.toLowerCase().includes(searchTerm) ||
+          farm.description?.toLowerCase().includes(searchTerm) ||
+          farm.location?.toLowerCase().includes(searchTerm) ||
+          farm.products?.some(product =>
+            product.name?.toLowerCase().replace(/-/g, ' ').includes(searchTerm)
+          )
+        );
+      }
       if (selectedIcons && selectedIcons.size > 0) {
         filtered = filtered.filter(f => {
           if (!isProductPurchased(f)) return false;
@@ -1396,7 +1417,11 @@ const EnhancedFarmMap = forwardRef(({
           return selectedIcons.has(icon);
         });
       }
-      setFilteredFarms(filtered);
+      setFilteredFarms((prev) => {
+        if (prev.length !== filtered.length) return filtered;
+        const same = filtered.every((f, i) => (f?.id ?? i) === (prev[i]?.id ?? i));
+        return same ? prev : filtered;
+      });
       return;
     }
     const toKey = (raw) => {
@@ -1436,16 +1461,32 @@ const EnhancedFarmMap = forwardRef(({
     };
     const catKeys = new Set(cats.map(toKey));
     const subKeys = new Set(subs.map(toKey));
-    let filtered = farms.filter(f => {
+    filtered = farms.filter(f => {
       if (shouldFilterOutByOccupiedArea(f)) return false;
       const cat = toKey(f.category);
       const sub = toKey(f.subcategory || f.product_name || f.productName);
       const catMatch = catKeys.size > 0 ? (catKeys.has(cat) || [...catKeys].some(k => cat.includes(k) || sub.includes(k))) : true;
       const subMatch = subKeys.size > 0 ? (subKeys.has(sub) || subKeys.has(cat) || [...subKeys].some(k => sub.includes(k) || cat.includes(k))) : true;
       if (subKeys.size > 0) {
-        return subMatch; // prioritize subcategory match when subs selected, including category fallback
+        if (!subMatch) return false; // prioritize subcategory match when subs selected
+      } else if (!catMatch) {
+        return false;
       }
-      return catMatch;
+      if (searchQuery && searchQuery.trim() !== '') {
+        const searchTerm = searchQuery.toLowerCase();
+        const searchMatch = (
+          f.name?.toLowerCase().includes(searchTerm) ||
+          f.category?.toLowerCase().includes(searchTerm) ||
+          f.farmer?.toLowerCase().includes(searchTerm) ||
+          f.description?.toLowerCase().includes(searchTerm) ||
+          f.location?.toLowerCase().includes(searchTerm) ||
+          f.products?.some(product =>
+            product.name?.toLowerCase().replace(/-/g, ' ').includes(searchTerm)
+          )
+        );
+        if (!searchMatch) return false;
+      }
+      return true;
     });
     // When resource bar filter is on: show only the user's purchased/rented fields of that type
     if (selectedIcons && selectedIcons.size > 0) {
@@ -1455,15 +1496,20 @@ const EnhancedFarmMap = forwardRef(({
         return selectedIcons.has(icon);
       });
     }
-    setFilteredFarms(filtered);
-  }, [externalFilters, farms, selectedIcons, shouldFilterOutByOccupiedArea, isProductPurchased]);
+    setFilteredFarms((prev) => {
+      if (prev.length !== filtered.length) return filtered;
+      const same = filtered.every((f, i) => (f?.id ?? i) === (prev[i]?.id ?? i));
+      return same ? prev : filtered;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- externalFiltersKey not externalFilters to avoid loop.
+  }, [externalFiltersKey, farms, selectedIcons, shouldFilterOutByOccupiedArea, isProductPurchased, searchQuery]);
 
   // const isPurchased = useCallback((productId) => {
   //   const farm = farms.find(f => f.id === productId);
   //   return (farm && !!farm.isPurchased) || purchasedFarms.has(productId) || purchasedProductIds.includes(productId);
   // }, [farms, purchasedFarms, purchasedProductIds]);
 
-  const getOccupiedArea = (prod) => {
+  const getOccupiedArea = useCallback((prod) => {
     const useOrderStats = Boolean(minimal && userType === 'admin');
     if (useOrderStats) {
       const key = String(prod?.id ?? prod?.field_id ?? '');
@@ -1487,7 +1533,7 @@ const EnhancedFarmMap = forwardRef(({
     const ordersOcc = typeof byOrder === 'string' ? parseFloat(byOrder) : byOrder;
     const sumOcc = (Number.isFinite(baseOcc) ? baseOcc : 0) + (Number.isFinite(ordersOcc) ? ordersOcc : 0);
     return Math.max(0, sumOcc);
-  };
+  }, [minimal, userType, fieldOrderStats, purchasedProducts]);
 
   const getAvailableArea = (prod) => {
     const useOrderStats = Boolean(minimal && userType === 'admin');
@@ -1630,6 +1676,44 @@ const EnhancedFarmMap = forwardRef(({
     const largeArc = ratio > 0.5 ? 1 : 0;
     return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
   }, []);
+
+  /** Cache of icon URL -> data URL so Google 3D markers can embed images (avoids load/CORS in iframe). */
+  const [iconDataUrlCache, setIconDataUrlCache] = useState({});
+
+  /** Build the same marker SVG as Mapbox for use on Google 3D globe. Tweak size here if markers feel too big/small on the globe. */
+  const getMarkerSvgForGoogle = useCallback((product, isMobileMarker = false, dataUrlCache = {}) => {
+    if (!product?.id) return '';
+    // Google globe marker size (desktop / mobile): decrease for smaller markers, increase for bigger
+    const size = isMobileMarker ? 38 : 50;
+    const strokeW = isMobileMarker ? 3 : 3;
+    const innerR = isMobileMarker ? 13 : 17;
+    const imgSize = isMobileMarker ? 18 : 26;
+    const { progress } = getHarvestProgressInfo(product);
+    const grad = getRingGradientByHarvest(product);
+    const occ = getOccupiedArea(product);
+    const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
+    const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
+    const r = (size / 2) - (strokeW / 2);
+    const circumference = 2 * Math.PI * r;
+    const dash = Math.max(0, Math.min(circumference, progress * circumference));
+    const path = getPiePath(innerR, occRatio);
+    const cx = size / 2;
+    const cy = size / 2;
+    const ringGradId = `g-ring-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const glowId = `g-glow-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const rentGradId = `g-rent-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const clipId = `g-clip-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const urlKey = getProductImageSrc(product);
+    let imgSrc = (dataUrlCache && dataUrlCache[urlKey]) || '';
+    if (!imgSrc && urlKey && typeof urlKey === 'string') {
+      imgSrc = (typeof window !== 'undefined' ? window.location.origin : '') + (urlKey.startsWith('/') ? urlKey : '/' + urlKey);
+      imgSrc = encodeURI(imgSrc);
+    }
+    const imgX = (size - imgSize) / 2;
+    const imgY = (size - imgSize) / 2;
+    const purchased = isProductPurchased(product);
+    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><defs><linearGradient id="${ringGradId}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${grad.start}" stop-opacity="0.95"/><stop offset="100%" stop-color="${grad.end}" stop-opacity="0.95"/></linearGradient><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="2.4" flood-color="#FFD8A8" flood-opacity="0.45"/></filter><radialGradient id="${rentGradId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(33,150,243,0.7)"/><stop offset="100%" stop-color="rgba(33,150,243,0.4)"/></radialGradient><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${imgSize/2}"/></clipPath></defs><circle cx="${cx}" cy="${cy}" r="${r}" stroke="rgba(255,255,255,0.30)" stroke-width="${strokeW}" fill="none"/><circle cx="${cx}" cy="${cy}" r="${r}" stroke="url(#${ringGradId})" stroke-width="${strokeW}" fill="none" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})" filter="url(#${glowId})"/><path d="${path}" fill="url(#${rentGradId})" stroke="rgba(33,150,243,0.85)" stroke-width="1.1" transform="translate(${cx - innerR}, ${cy - innerR})"/><image href="${imgSrc || ''}" xlink:href="${imgSrc || ''}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>${purchased ? '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r + 2) + '" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>' : ''}</svg>`;
+  }, [getHarvestProgressInfo, getRingGradientByHarvest, getPiePath, getProductImageSrc, getOccupiedArea, isProductPurchased]);
 
   // const isHarvestReached = useCallback((prod) => {
   //   const days = getDaysUntilHarvest(prod);
@@ -2563,6 +2647,64 @@ const EnhancedFarmMap = forwardRef(({
     }
   }, [selectedProduct, viewState]);
 
+  // Must be before any early return (rules of hooks)
+  // Set to true to test Google globe only (Mapbox hidden); set back to false for normal zoom-based switch.
+  const FORCE_GOOGLE_GLOBE_FOR_TESTING = true;
+  const showGoogleGlobe = FORCE_GOOGLE_GLOBE_FOR_TESTING || (process.env.REACT_APP_GOOGLE_MAPS_API_KEY && viewState.zoom <= GLOBAL_VIEW_MAX_ZOOM);
+
+  /** Preload product icon images as data URLs when Google globe is shown so marker SVGs can embed them. */
+  useEffect(() => {
+    if (!showGoogleGlobe || !Array.isArray(filteredFarms) || filteredFarms.length === 0) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const uniqueUrls = [...new Set(filteredFarms.map((f) => getProductImageSrc(f)).filter(Boolean))];
+    let cancelled = false;
+    uniqueUrls.forEach((urlKey) => {
+      const absoluteUrl = urlKey.startsWith('http') ? urlKey : origin + (urlKey.startsWith('/') ? urlKey : '/' + urlKey);
+      fetch(absoluteUrl)
+        .then((r) => r.blob())
+        .then((blob) => {
+          if (cancelled) return;
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        })
+        .then((dataUrl) => {
+          if (cancelled) return;
+          setIconDataUrlCache((prev) => (prev[urlKey] === dataUrl ? prev : { ...prev, [urlKey]: dataUrl }));
+        })
+        .catch(() => { /* ignore per-icon failure */ });
+    });
+    return () => { cancelled = true; };
+  }, [showGoogleGlobe, filteredFarms, getProductImageSrc]);
+
+  const onGoogleViewChange = useCallback((next) => {
+    setViewState((prev) => {
+      const zoomDiff = Math.abs((next.zoom ?? prev.zoom) - prev.zoom);
+      const centerDiff = Math.hypot(
+        (next.longitude ?? prev.longitude) - prev.longitude,
+        (next.latitude ?? prev.latitude) - prev.latitude
+      );
+      if (zoomDiff < 0.1 && centerDiff < 0.005) return prev;
+      return { longitude: next.longitude ?? prev.longitude, latitude: next.latitude ?? prev.latitude, zoom: next.zoom ?? prev.zoom };
+    });
+  }, []);
+
+  // When switching from Google globe to Mapbox (zoom in), resize Mapbox so it paints and markers show
+  const prevShowGoogleRef = useRef(showGoogleGlobe);
+  useEffect(() => {
+    const wasGoogle = prevShowGoogleRef.current;
+    prevShowGoogleRef.current = showGoogleGlobe;
+    if (wasGoogle && !showGoogleGlobe) {
+      const t = setTimeout(() => {
+        const map = mapRef.current?.getMap?.();
+        if (typeof map?.resize === 'function') map.resize();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [showGoogleGlobe]);
 
   // Guard: require Mapbox token to render the map
   const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
@@ -2849,27 +2991,48 @@ const EnhancedFarmMap = forwardRef(({
       overflow: 'hidden'
     }}>
       <div className="stars-bg" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
-      <MapboxMap
-        ref={mapRef}
-        {...viewState}
-        onMove={evt => setViewState(evt.viewState)}
-        attributionControl={false}
-        onClick={() => {
-          setSelectedProduct(null);
-          setPopupPosition(null); // Also clear popup position
-          setInsufficientFunds(false);
-        }}
-        mapStyle={DARK_MAP_STYLE}
-        onLoad={(e) => configureGlobeMap(e.target)}
-        style={{ width: '100%', height: '100%' }}
-        mapboxAccessToken={MAPBOX_TOKEN}
-        projection="globe"
-        initialViewState={{
-          longitude: 12.5674,
-          latitude: 41.8719,
-          zoom: 1.5,
-        }}
-      >
+      {/* Map stack: Google globe (day/night terminator) at low zoom; zoom in to see Mapbox + markers */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+        <GoogleGlobeMap
+          ref={googleGlobeRef}
+          visible={showGoogleGlobe}
+          latitude={viewState.latitude}
+          longitude={viewState.longitude}
+          zoom={viewState.zoom}
+          onViewChange={onGoogleViewChange}
+          farms={filteredFarms}
+          onMarkerClick={(product) => handleProductClick(null, product)}
+          getMarkerSvg={getMarkerSvgForGoogle}
+          isMobile={isMobile}
+          iconDataUrlCache={iconDataUrlCache}
+        />
+        <div style={{
+          position: 'absolute', inset: 0,
+          zIndex: showGoogleGlobe ? 0 : 2,
+          visibility: showGoogleGlobe ? 'hidden' : 'visible',
+          pointerEvents: showGoogleGlobe ? 'none' : 'auto',
+        }}>
+          <MapboxMap
+            ref={mapRef}
+            {...viewState}
+            onMove={evt => setViewState(evt.viewState)}
+            attributionControl={false}
+            onClick={() => {
+              setSelectedProduct(null);
+              setPopupPosition(null); // Also clear popup position
+              setInsufficientFunds(false);
+            }}
+            mapStyle={DARK_MAP_STYLE}
+            onLoad={(e) => configureGlobeMap(e.target)}
+            style={{ width: '100%', height: '100%' }}
+            mapboxAccessToken={MAPBOX_TOKEN}
+            projection="globe"
+            initialViewState={{
+              longitude: 12.5674,
+              latitude: 41.8719,
+              zoom: 1.5,
+            }}
+          >
 
         <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
         <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
@@ -3220,6 +3383,14 @@ const EnhancedFarmMap = forwardRef(({
 
 
       </MapboxMap>
+        </div>
+      </div>
+
+      {showGoogleGlobe && (
+        <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 100, pointerEvents: 'none', fontSize: 12, color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+          Zoom in to see fields and markers
+        </div>
+      )}
 
       {/* Delivery Toggle Icon - top-left of map container */}
       <div

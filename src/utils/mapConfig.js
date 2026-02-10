@@ -1,12 +1,14 @@
 /**
- * Zoom level above which Esri night layer is hidden (Mapbox only for smooth experience).
- * Below this = globe view with Earth at Night; above = direct Mapbox.
+ * Zoom threshold: at zoom <= this, Google Maps globe (day/night terminator) is shown;
+ * at zoom > this, Mapbox is shown (with markers). Zoom in past this to see fields.
  */
-export const ESRI_NIGHT_MAX_ZOOM = 6;
+export const GLOBAL_VIEW_MAX_ZOOM = 1.5;
+
+/** @deprecated Use GLOBAL_VIEW_MAX_ZOOM */
+export const ESRI_NIGHT_MAX_ZOOM = GLOBAL_VIEW_MAX_ZOOM;
 
 /**
- * Configure Mapbox globe: reduced glow, sky atmosphere, 3D buildings,
- * Esri Earth at Night only at low zoom (globe level).
+ * Configure Mapbox globe: fog, light, 3D buildings. Global view uses Google globe.
  */
 export const configureGlobeMap = (map) => {
     if (!map) return;
@@ -27,30 +29,16 @@ export const configureGlobeMap = (map) => {
 
         // Strong directional “sun” light: [r, azimuth, polar]. Polar 0=above, 90=horizon.
         // This lights terrain and 3D; one side of globe bright, one in shadow.
-        map.setLight({
-            anchor: 'viewport',
-            position: [1.5, 220, 35],
-            color: '#fff5e0',
-            intensity: 1
-        });
-
-        // Esri Earth at Night: only at globe / low zoom (maxzoom = hide above this zoom)
-        if (!map.getSource('esri-night-earth')) {
-            map.addSource('esri-night-earth', {
-                type: 'raster',
-                tiles: [
-                    'https://tiles.arcgis.com/tiles/P3ePLMYs2RVChkJx/arcgis/rest/services/Earth_at_Night_WM/MapServer/tile/{z}/{y}/{x}'
-                ],
-                tileSize: 256
-            });
-            map.addLayer({
-                id: 'esri-night-earth-layer',
-                type: 'raster',
-                source: 'esri-night-earth',
-                maxzoom: ESRI_NIGHT_MAX_ZOOM,
-                paint: {}
-            });
-        }
+        map.setLights([{
+            id: 'flat',
+            type: 'flat',
+            properties: {
+                anchor: 'viewport',
+                position: [1.5, 220, 35],
+                color: '#fff5e0',
+                intensity: 1
+            }
+        }]);
 
         // Globe does not support the sky layer; sunlight = fog + setLight only.
 
@@ -85,12 +73,16 @@ export const configureGlobeMap = (map) => {
 export const setSunPosition = (map, azimuth = 220, polar = 35) => {
     if (!map) return;
     try {
-        map.setLight({
-            anchor: 'viewport',
-            position: [1.5, azimuth, polar],
-            color: '#fff5e0',
-            intensity: 1
-        });
+        map.setLights([{
+            id: 'flat',
+            type: 'flat',
+            properties: {
+                anchor: 'viewport',
+                position: [1.5, azimuth, polar],
+                color: '#fff5e0',
+                intensity: 1
+            }
+        }]);
     } catch (e) {
         console.warn('setSunPosition:', e);
     }
