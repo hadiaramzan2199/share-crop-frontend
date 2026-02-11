@@ -38,6 +38,7 @@ import { transactionsService } from '../services/transactions';
 import { useAuth } from '../contexts/AuthContext';
 import { orderService } from '../services/orders';
 import { CircularProgress, Alert } from '@mui/material';
+import api from '../services/api';
 
 const Transaction = () => {
   const { user } = useAuth();
@@ -60,9 +61,21 @@ const Transaction = () => {
     'CHF': 'CHF'
   };
 
-  // Load transaction data
+  // Load user's preferred currency and transaction data
   useEffect(() => {
     if (user) {
+      // Load user's preferred currency
+      const loadUserCurrency = async () => {
+        try {
+          const response = await api.get(`/api/users/${user.id}/preferred-currency`);
+          if (response.data) {
+            setUserCurrency(response.data.preferred_currency || 'USD');
+          }
+        } catch (err) {
+          console.warn('Could not load user currency preference:', err);
+        }
+      };
+      loadUserCurrency();
       loadTransactions();
     } else {
       setLoading(false);
@@ -119,7 +132,8 @@ const Transaction = () => {
           ref_type: tx.ref_type || '',
           farmName: relatedOrder?.field_name || 'N/A',
           buyer: relatedOrder?.buyer_name || '',
-          farmer: relatedOrder?.farmer_name || ''
+          farmer: relatedOrder?.farmer_name || '',
+          currency: tx.currency || 'USD' // Use currency from transaction, fallback to USD
         };
       });
 
@@ -161,8 +175,9 @@ const Transaction = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
-    const symbol = currencySymbols[userCurrency] || '₨';
+  const formatCurrency = (amount, currency = null) => {
+    const currencyToUse = currency || userCurrency;
+    const symbol = currencySymbols[currencyToUse?.toUpperCase()] || currencySymbols[currencyToUse] || '$';
     return `${symbol}${Number(amount).toLocaleString()}`;
   };
 
@@ -284,7 +299,7 @@ const Transaction = () => {
                 </Avatar>
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 700, color: '#059669', mb: 0.5 }}>
-                    {formatCurrency(summary.totalIncome)}
+                    {formatCurrency(summary.totalIncome, userCurrency)}
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
                     Total Income
@@ -314,7 +329,7 @@ const Transaction = () => {
                 </Avatar>
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 700, color: '#dc2626', mb: 0.5 }}>
-                    {formatCurrency(summary.totalExpenses)}
+                    {formatCurrency(summary.totalExpenses, userCurrency)}
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
                     Total Expenses
@@ -351,7 +366,7 @@ const Transaction = () => {
                       mb: 0.5
                     }}
                   >
-                    {formatCurrency(summary.netProfit)}
+                    {formatCurrency(summary.netProfit, userCurrency)}
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
                     Net Profit
@@ -381,7 +396,7 @@ const Transaction = () => {
                 </Avatar>
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 700, color: '#f59e0b', mb: 0.5 }}>
-                    {formatCurrency(summary.pendingAmount)}
+                    {formatCurrency(summary.pendingAmount, userCurrency)}
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
                     Pending Amount
@@ -529,7 +544,7 @@ const Transaction = () => {
                           color: transaction.type === 'Income' ? '#059669' : '#dc2626'
                         }}
                       >
-                        {transaction.type === 'Expense' ? '-' : '+'}{formatCurrency(transaction.amount)}
+                        {transaction.type === 'Expense' ? '-' : '+'}{formatCurrency(transaction.amount, transaction.currency)}
                       </Typography>
                     </TableCell>
                     <TableCell>

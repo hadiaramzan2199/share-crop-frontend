@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Box,
   // Tabs,
@@ -39,6 +39,7 @@ import fieldsService from '../services/fields';
 
 const FarmerView = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const {
     addNotification,
@@ -135,6 +136,60 @@ const FarmerView = () => {
       return () => clearTimeout(timer);
     }
   }, [fieldToZoom, fields]); // Depend on fields to trigger after state update
+
+  // Handle field_id from URL params to zoom to field
+  useEffect(() => {
+    const fieldId = searchParams.get('field_id');
+    if (fieldId && mapRef.current) {
+      // Find the field in the loaded fields
+      const field = fields.find(f => f.id === fieldId);
+      if (field) {
+        const coordinates = field.coordinates || 
+          (field.longitude && field.latitude 
+            ? [field.longitude, field.latitude] 
+            : null);
+        if (coordinates) {
+          // Small delay to ensure map is ready
+          const timer = setTimeout(() => {
+            if (mapRef.current && mapRef.current.zoomToFarm) {
+              // Convert field to farm format expected by zoomToFarm
+              const farmData = {
+                ...field,
+                coordinates
+              };
+              mapRef.current.zoomToFarm(farmData, true);
+              // Clear the URL parameter after zooming
+              setSearchParams({});
+            }
+          }, 500);
+          return () => clearTimeout(timer);
+        }
+      } else if (fieldId) {
+        // Field not found in loaded fields, try fetching it
+        fieldsService.getById(fieldId)
+          .then(response => {
+            const fetchedField = response.data;
+            if (fetchedField && mapRef.current && mapRef.current.zoomToFarm) {
+              const coordinates = fetchedField.coordinates || 
+                (fetchedField.longitude && fetchedField.latitude 
+                  ? [fetchedField.longitude, fetchedField.latitude] 
+                  : null);
+              if (coordinates) {
+                const farmData = {
+                  ...fetchedField,
+                  coordinates
+                };
+                mapRef.current.zoomToFarm(farmData, true);
+                setSearchParams({});
+              }
+            }
+          })
+          .catch(err => {
+            console.error('Failed to fetch field:', err);
+          });
+      }
+    }
+  }, [searchParams, fields, setSearchParams]);
 
   const handleSearchChange = (query, filtered) => {
     setSearchQuery(query);
@@ -408,7 +463,7 @@ const FarmerView = () => {
         flexGrow: 1,
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
-        overflow: (isMapPage || location.pathname === '/farmer/messages' || location.pathname === '/farmer/currency' || location.pathname === '/farmer/settings') ? 'hidden' : 'auto',
+        overflow: (isMapPage || location.pathname === '/farmer/messages' || location.pathname === '/farmer/settings') ? 'hidden' : 'auto',
         position: 'relative',
         zIndex: 0,
         isolation: 'isolate'

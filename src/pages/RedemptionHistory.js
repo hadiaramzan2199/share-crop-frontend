@@ -28,15 +28,48 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import redemptionService from '../services/redemptionService';
+import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 
 const RedemptionHistory = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [data, setData] = useState({ redemptions: [], balance: { coins: 0, locked_coins: 0 } });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currencyRates, setCurrencyRates] = useState([]);
+
+  // Currency symbols mapping
+  const currencySymbols = {
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'PKR': '₨',
+    'JPY': '¥',
+    'CAD': 'C$',
+    'AUD': 'A$',
+    'CHF': 'CHF'
+  };
+
+  const getCurrencySymbol = (currency) => {
+    if (!currency) return '$';
+    return currencySymbols[currency.toUpperCase()] || currency.toUpperCase();
+  };
 
   useEffect(() => {
     loadHistory();
+    // Load currency rates for symbol lookup
+    const loadCurrencyRates = async () => {
+      try {
+        const response = await api.get('/api/coins/currency-rates');
+        if (response.data?.rates) {
+          setCurrencyRates(response.data.rates);
+        }
+      } catch (err) {
+        console.warn('Could not load currency rates:', err);
+      }
+    };
+    loadCurrencyRates();
   }, []);
 
   const loadHistory = async () => {
@@ -195,7 +228,7 @@ const RedemptionHistory = () => {
                     {redemption.coins_requested?.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    ${((redemption.payout_amount_cents || 0) / 100).toFixed(2)}
+                    {getCurrencySymbol(redemption.currency)}{((redemption.payout_amount_cents || 0) / 100).toFixed(2)}
                   </TableCell>
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>

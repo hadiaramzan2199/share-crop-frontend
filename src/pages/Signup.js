@@ -29,6 +29,7 @@ import {
 } from '@mui/material';
 import supabase from '../services/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import coinService from '../services/coinService';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -47,12 +48,38 @@ const Signup = () => {
   const [profileImagePreview, setProfileImagePreview] = useState(null);
   const [license, setLicense] = useState([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [preferredCurrency, setPreferredCurrency] = useState('USD');
+  const [currencyRates, setCurrencyRates] = useState([]);
+  const [loadingCurrencies, setLoadingCurrencies] = useState(false);
 
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.play().catch(err => {
       });
     }
+  }, []);
+
+  // Load available currencies
+  useEffect(() => {
+    const loadCurrencies = async () => {
+      try {
+        setLoadingCurrencies(true);
+        const ratesData = await coinService.getCurrencyRates();
+        if (ratesData.rates && ratesData.rates.length > 0) {
+          setCurrencyRates(ratesData.rates);
+          // Set default to USD if available, otherwise first currency
+          const defaultCurrency = ratesData.rates.find(r => r.currency === 'USD') || ratesData.rates[0];
+          if (defaultCurrency) {
+            setPreferredCurrency(defaultCurrency.currency);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load currencies, using USD default:', err);
+      } finally {
+        setLoadingCurrencies(false);
+      }
+    };
+    loadCurrencies();
   }, []);
 
   const handleProfileImageChange = (e) => {
@@ -150,7 +177,7 @@ const Signup = () => {
         }
       }
 
-      await signup(name, email, password, userType, profile_image_url, uploadedDocuments);
+      await signup(name, email, password, userType, profile_image_url, uploadedDocuments, preferredCurrency);
 
       // Redirect based on user type
       if (userType === 'farmer') {
@@ -427,6 +454,49 @@ const Signup = () => {
               >
                 <MenuItem value="buyer">Buyer</MenuItem>
                 <MenuItem value="farmer">Farmer</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Currency Selection */}
+            <FormControl
+              fullWidth
+              margin="normal"
+              sx={{
+                mb: 2.5,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  bgcolor: '#f5f7fa',
+                  '&:hover': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                    },
+                  },
+                  '&.Mui-focused': {
+                    bgcolor: '#ffffff',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#4CAF50',
+                      borderWidth: 2,
+                    },
+                  },
+                },
+              }}
+            >
+              <InputLabel>Preferred Currency</InputLabel>
+              <Select
+                value={preferredCurrency}
+                label="Preferred Currency"
+                onChange={(e) => setPreferredCurrency(e.target.value)}
+                disabled={loadingCurrencies}
+              >
+                {currencyRates.length === 0 ? (
+                  <MenuItem disabled>Loading currencies...</MenuItem>
+                ) : (
+                  currencyRates.map((rate) => (
+                    <MenuItem key={rate.currency} value={rate.currency}>
+                      {rate.currency} - {rate.display_name} ({rate.symbol})
+                    </MenuItem>
+                  ))
+                )}
               </Select>
             </FormControl>
 

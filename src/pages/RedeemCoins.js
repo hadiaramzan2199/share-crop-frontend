@@ -44,6 +44,24 @@ const RedeemCoins = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [userCurrency, setUserCurrency] = useState('USD');
+
+  // Currency symbols mapping
+  const currencySymbols = {
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'PKR': '₨',
+    'JPY': '¥',
+    'CAD': 'C$',
+    'AUD': 'A$',
+    'CHF': 'CHF'
+  };
+
+  const getCurrencySymbol = (currency) => {
+    if (!currency) return '$';
+    return currencySymbols[currency.toUpperCase()] || currency.toUpperCase();
+  };
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
@@ -51,7 +69,17 @@ const RedeemCoins = () => {
     setLoading(true);
     setError(null);
     try {
-        const [configData, balanceResponse, methodsData] = await Promise.all([
+      // Load user's preferred currency
+      try {
+        const currencyResponse = await api.get(`/api/users/${user.id}/preferred-currency`);
+        if (currencyResponse.data?.preferred_currency) {
+          setUserCurrency(currencyResponse.data.preferred_currency);
+        }
+      } catch (err) {
+        console.warn('Could not load user currency preference:', err);
+      }
+
+      const [configData, balanceResponse, methodsData] = await Promise.all([
         redemptionService.getConfig(),
         api.get(`/api/coins/${user.id}`).then(r => r.data).catch(() => ({ coins: 0, locked_coins: 0 })),
         redemptionService.getPayoutMethods().catch(() => ({ methods: [] }))
@@ -100,7 +128,8 @@ const RedeemCoins = () => {
 
     try {
       const result = await redemptionService.createRedemption(coins, selectedMethodId);
-      setSuccess(`Redemption request submitted! You will receive $${(result.payout_amount_cents / 100).toFixed(2)} after approval.`);
+      const currencySymbol = getCurrencySymbol(result.currency || userCurrency);
+      setSuccess(`Redemption request submitted! You will receive ${currencySymbol}${(result.payout_amount_cents / 100).toFixed(2)} after approval.`);
       setCoinsRequested('');
       loadData(); // Refresh balance
     } catch (err) {
@@ -270,17 +299,17 @@ const RedeemCoins = () => {
                     </Box>
                     <Box display="flex" justifyContent="space-between">
                       <Typography>Value:</Typography>
-                      <Typography>${payout.fiat.toFixed(2)}</Typography>
+                      <Typography>{getCurrencySymbol(userCurrency)}{payout.fiat.toFixed(2)}</Typography>
                     </Box>
                     <Box display="flex" justifyContent="space-between">
                       <Typography>Platform Fee ({config?.platform_fee_percent || 20}%):</Typography>
-                      <Typography color="error">-${payout.fee.toFixed(2)}</Typography>
+                      <Typography color="error">-{getCurrencySymbol(userCurrency)}{payout.fee.toFixed(2)}</Typography>
                     </Box>
                     <Divider />
                     <Box display="flex" justifyContent="space-between">
                       <Typography variant="h6">You Receive:</Typography>
                       <Typography variant="h6" color="primary">
-                        ${payout.payout.toFixed(2)}
+                        {getCurrencySymbol(userCurrency)}{payout.payout.toFixed(2)}
                       </Typography>
                     </Box>
                   </Stack>

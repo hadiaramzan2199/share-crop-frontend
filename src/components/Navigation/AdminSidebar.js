@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Drawer, List, ListItem, ListItemIcon, ListItemText, Box, Typography, Chip, Avatar, IconButton, Divider } from '@mui/material';
-import { Dashboard, People, MonetizationOn, Payment, Assessment, Analytics, Close, QuestionAnswer, ExitToApp, Person, AccountBalanceWallet } from '@mui/icons-material';
+import { Dashboard, People, MonetizationOn, Payment, Assessment, Analytics, Close, QuestionAnswer, ExitToApp, Person, AccountBalanceWallet, ShoppingBag, CurrencyExchange, Home } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const useIsMobile = () => {
@@ -20,12 +20,15 @@ const AdminSidebar = ({ user, onLogout, open, onClose }) => {
   const isMobile = useIsMobile();
 
   const adminMenuItems = [
+    { text: 'Home', icon: <Home />, path: '/' },
     { text: 'Dashboard', icon: <Dashboard />, path: '/admin' },
     { text: 'Profile', icon: <Person />, path: '/admin/profile' },
     { text: 'Users', icon: <People />, path: '/admin/users' },
     { text: 'QA', icon: <QuestionAnswer />, path: '/admin/qa' },
     { text: 'Analytics', icon: <Analytics />, path: '/admin/analytics' },
     { text: 'Coins', icon: <MonetizationOn />, path: '/admin/coins' },
+    { text: 'Packages', icon: <ShoppingBag />, path: '/admin/packages' },
+    { text: 'Currency Rates', icon: <CurrencyExchange />, path: '/admin/currency-rates' },
     { text: 'Redemptions', icon: <AccountBalanceWallet />, path: '/admin/redemptions' },
     { text: 'Payments', icon: <Payment />, path: '/admin/payments' },
     { text: 'Audit', icon: <Assessment />, path: '/admin/audit' },

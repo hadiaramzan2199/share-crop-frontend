@@ -22,4 +22,15 @@ export const adminService = {
   getPayments: (params) => api.get('/api/admin/payments', { params }),
   getAuditLogs: (params) => api.get('/api/admin/audit/logs', { params }),
   getNotificationsOverview: (params) => api.get('/api/admin/notifications/overview', { params }),
+  // Coin Packages Management
+  getPackages: () => api.get('/api/admin/packages'),
+  getPackage: (id) => api.get(`/api/admin/packages/${id}`),
+  createPackage: (data) => api.post('/api/admin/packages', data),
+  updatePackage: (id, data) => api.patch(`/api/admin/packages/${id}`, data),
+  deletePackage: (id) => api.delete(`/api/admin/packages/${id}`),
+  // Currency Rates Management
+  getCurrencyRates: () => api.get('/api/admin/currency-rates'),
+  upsertCurrencyRate: (data) => api.post('/api/admin/currency-rates', data),
+  updateCurrencyRate: (currency, data) => api.patch(`/api/admin/currency-rates/${currency}`, data),
+  deleteCurrencyRate: (currency) => api.delete(`/api/admin/currency-rates/${currency}`),
 };

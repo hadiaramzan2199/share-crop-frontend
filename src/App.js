@@ -17,6 +17,8 @@ import AdminRedemptions from './pages/admin/AdminRedemptions';
 import AdminPayments from './pages/admin/AdminPayments';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminPackages from './pages/admin/AdminPackages';
+import AdminCurrencyRates from './pages/admin/AdminCurrencyRates';
 import Messages from './pages/Messages';
 import Profile from './pages/Profile';
 import Home from './pages/Home';
@@ -72,6 +74,8 @@ const AppContent = () => {
             <Route path="profile" element={<Profile />} />
             <Route path="messages" element={<Messages />} />
             <Route path="coins" element={<AdminCoins />} />
+            <Route path="packages" element={<AdminPackages />} />
+            <Route path="currency-rates" element={<AdminCurrencyRates />} />
             <Route path="redemptions" element={<AdminRedemptions />} />
             <Route path="payments" element={<AdminPayments />} />
             <Route path="audit" element={<AdminAudit />} />

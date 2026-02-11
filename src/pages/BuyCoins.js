@@ -12,6 +12,11 @@ import {
   Chip,
   Stack,
   Divider,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   MonetizationOn,
@@ -27,9 +32,12 @@ import {
 } from '@mui/icons-material';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import coinService from '../services/coinService';
+import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const BuyCoins = ({ onSuccess }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const basePath = location.pathname.replace(/\/buy-coins.*/, '/buy-coins');
@@ -37,9 +45,12 @@ const BuyCoins = ({ onSuccess }) => {
   const successUrl = `${origin}${basePath}?success=1`;
   const cancelUrl = `${origin}${basePath}?cancel=1`;
   const [packs, setPacks] = useState([]);
+  const [currencyRates, setCurrencyRates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
   const [error, setError] = useState(null);
+  const [customCoins, setCustomCoins] = useState('');
+  const [selectedCurrency, setSelectedCurrency] = useState('');
   const purchaseInProgressRef = useRef(false);
   const success = searchParams.get('success');
   const cancel = searchParams.get('cancel');
@@ -52,19 +63,71 @@ const BuyCoins = ({ onSuccess }) => {
 
   useEffect(() => {
     let mounted = true;
-    coinService.getCoinPacks().then((data) => {
-      if (mounted && data.packs) setPacks(data.packs);
-    }).catch(() => {
-      if (mounted) setPacks([
-        { id: 'pack_small', coins: 100, usd: '9.99' },
-        { id: 'pack_medium', coins: 500, usd: '44.99' },
-        { id: 'pack_large', coins: 1200, usd: '99.99' },
-      ]);
+    
+    // Only fetch and set currency if not already set
+    if (selectedCurrency) {
+      // Still load packs and rates, but don't change currency
+      Promise.all([
+        coinService.getCoinPacks(),
+        coinService.getCurrencyRates()
+      ]).then(([packsData, ratesData]) => {
+        if (mounted) {
+          if (packsData.packs) {
+            setPacks(packsData.packs);
+          }
+          if (ratesData.rates) {
+            setCurrencyRates(ratesData.rates);
+          }
+        }
+      }).catch((err) => {
+        console.error('Error loading coin packs:', err);
+        if (mounted) {
+          setError('Failed to load packages. Please try again later.');
+          setPacks([]);
+        }
+      }).finally(() => {
+        if (mounted) setLoading(false);
+      });
+      return () => { mounted = false; };
+    }
+    
+    Promise.all([
+      coinService.getCoinPacks(),
+      coinService.getCurrencyRates(),
+      // Get user's preferred currency
+      user?.id ? api.get(`/api/users/${user.id}/preferred-currency`).catch(() => ({ data: { preferred_currency: null } })) : Promise.resolve({ data: { preferred_currency: null } })
+    ]).then(([packsData, ratesData, currencyData]) => {
+      if (mounted && !selectedCurrency) {
+        if (packsData.packs) {
+          setPacks(packsData.packs);
+        }
+        if (ratesData.rates) {
+          setCurrencyRates(ratesData.rates);
+        }
+        
+        // Set default currency: user's preferred > first pack > first rate > USD
+        const preferredCurrency = currencyData.data?.preferred_currency;
+        if (preferredCurrency) {
+          setSelectedCurrency(preferredCurrency);
+        } else if (packsData.packs?.length > 0) {
+          setSelectedCurrency(packsData.packs[0].currency || 'USD');
+        } else if (ratesData.rates?.length > 0) {
+          setSelectedCurrency(ratesData.rates[0].currency || 'USD');
+        } else {
+          setSelectedCurrency('USD');
+        }
+      }
+    }).catch((err) => {
+      console.error('Error loading coin packs:', err);
+      if (mounted) {
+        setError('Failed to load packages. Please try again later.');
+        setPacks([]);
+      }
     }).finally(() => {
       if (mounted) setLoading(false);
     });
     return () => { mounted = false; };
-  }, []);
+  }, [user?.id, selectedCurrency]);
 
   const handleBuy = async (packId) => {
     if (purchaseInProgressRef.current) return;
@@ -89,6 +152,55 @@ const BuyCoins = ({ onSuccess }) => {
       purchaseInProgressRef.current = false;
       setPurchasing(null);
     }
+  };
+
+  const handleCustomBuy = async () => {
+    if (purchaseInProgressRef.current) return;
+    if (!customCoins || parseInt(customCoins) < 1) {
+      setError('Please enter a valid number of coins');
+      return;
+    }
+    if (!selectedCurrency) {
+      setError('Please select a currency');
+      return;
+    }
+    
+    setError(null);
+    purchaseInProgressRef.current = true;
+    setPurchasing('custom');
+    try {
+      const { url } = await coinService.createPurchaseIntent(null, {
+        successUrl,
+        cancelUrl,
+        customCoins: parseInt(customCoins),
+        currency: selectedCurrency,
+      });
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      setError('Could not start checkout');
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Checkout failed');
+    } finally {
+      purchaseInProgressRef.current = false;
+      setPurchasing(null);
+    }
+  };
+
+  const calculateCustomPrice = () => {
+    if (!customCoins || !selectedCurrency || currencyRates.length === 0) return null;
+    const coins = parseFloat(customCoins);
+    if (isNaN(coins) || coins < 1) return null;
+    
+    const rate = currencyRates.find(r => r.currency === selectedCurrency);
+    if (!rate || !rate.coins_per_unit) return null;
+    
+    const coinsPerUnit = parseFloat(rate.coins_per_unit);
+    const price = coins / coinsPerUnit;
+    const symbol = rate.symbol || selectedCurrency;
+    
+    return { price, symbol, currency: selectedCurrency, coinsPerUnit };
   };
 
   if (success === '1') {
@@ -204,14 +316,25 @@ const BuyCoins = ({ onSuccess }) => {
     );
   }
 
-  // Calculate savings and best value
+  // Calculate savings and best value from dynamic packages
   const packsWithSavings = packs.map((pack, index) => {
-    const pricePerCoin = parseFloat(pack.usd) / pack.coins;
-    const basePricePerCoin = parseFloat(packs[0]?.usd || '9.99') / (packs[0]?.coins || 100);
-    const savings = index > 0 ? ((basePricePerCoin - pricePerCoin) / basePricePerCoin * 100).toFixed(0) : 0;
-    const isPopular = index === 1 || index === 2;
-    const isBestValue = index === packs.length - 1;
-    return { ...pack, pricePerCoin, savings, isPopular, isBestValue };
+    const finalPrice = pack.discountedPrice || pack.price || 0;
+    const pricePerCoin = pack.discountedPricePerCoin || (finalPrice / pack.coins);
+    const basePricePerCoin = packs[0]?.discountedPricePerCoin || (packs[0]?.discountedPrice || packs[0]?.price || 0) / (packs[0]?.coins || 100);
+    const savings = index > 0 && basePricePerCoin > 0 
+      ? Math.max(0, ((basePricePerCoin - pricePerCoin) / basePricePerCoin * 100).toFixed(0)) 
+      : pack.discountPercent || 0;
+    const isPopular = pack.isFeatured || (index >= 1 && index <= 2);
+    const isBestValue = pack.isFeatured || index === packs.length - 1;
+    return { 
+      ...pack, 
+      pricePerCoin, 
+      savings: parseFloat(savings), 
+      isPopular, 
+      isBestValue,
+      finalPrice: finalPrice,
+      currencySymbol: pack.currencySymbol || pack.currency || '$',
+    };
   });
 
   if (loading) {
@@ -232,7 +355,9 @@ const BuyCoins = ({ onSuccess }) => {
           Add Coins to Your Account
         </Typography>
         <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 400, mb: 1 }}>
-          1 coin = $0.10 in-app value
+          {packs.length > 0 && packs[0].currencySymbol 
+            ? `1 coin = ${packs[0].currencySymbol}1.00 USD value`
+            : '1 coin = $1.00 USD value'}
         </Typography>
         <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 2, flexWrap: 'wrap' }}>
           <Chip icon={<Security />} label="Secure Payment" size="small" color="success" variant="outlined" />
@@ -250,6 +375,135 @@ const BuyCoins = ({ onSuccess }) => {
           {error}
         </Alert>
       )}
+
+      {/* Custom Coin Input Card */}
+      <Card sx={{ mb: 4, borderRadius: 3, boxShadow: 3 }}>
+        <CardContent sx={{ p: 4 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: 'text.primary' }}>
+            Buy Custom Amount
+          </Typography>
+          <Grid container spacing={3} alignItems="stretch">
+            {/* Currency Selection */}
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Currency *</InputLabel>
+                <Select
+                  value={selectedCurrency}
+                  label="Currency *"
+                  onChange={(e) => setSelectedCurrency(e.target.value)}
+                  sx={{ height: '56px' }}
+                >
+                  {currencyRates.map((rate) => (
+                    <MenuItem key={rate.currency} value={rate.currency}>
+                      {rate.currency} - {rate.display_name} ({rate.symbol})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Coins Input */}
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                label="Number of Coins *"
+                type="number"
+                value={customCoins}
+                onChange={(e) => setCustomCoins(e.target.value)}
+                inputProps={{ min: 1 }}
+                placeholder="e.g., 500"
+                helperText={selectedCurrency && currencyRates.find(r => r.currency === selectedCurrency)
+                  ? `Rate: ${currencyRates.find(r => r.currency === selectedCurrency).coins_per_unit} coins = ${currencyRates.find(r => r.currency === selectedCurrency).symbol}1.00`
+                  : 'Select currency first'}
+                sx={{ '& .MuiInputBase-root': { height: '56px' } }}
+              />
+            </Grid>
+
+            {/* Price Display */}
+            <Grid item xs={12} md={3}>
+              <TextField
+                fullWidth
+                label=""
+                value={calculateCustomPrice() 
+                  ? `${calculateCustomPrice().symbol}${calculateCustomPrice().price.toFixed(2)}`
+                  : ''}
+                InputProps={{
+                  readOnly: true,
+                  sx: {
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                    },
+                    '& input[type=number]::-webkit-outer-spin-button': {
+                      WebkitAppearance: 'none',
+                      margin: 0,
+                    },
+                    '& input[type=number]::-webkit-inner-spin-button': {
+                      WebkitAppearance: 'none',
+                      margin: 0,
+                    },
+                  }
+                }}
+                helperText={calculateCustomPrice() 
+                  ? (calculateCustomPrice().coinsPerUnit === 1 
+                      ? `${customCoins} coins × ${calculateCustomPrice().symbol}1.00 = ${calculateCustomPrice().symbol}${calculateCustomPrice().price.toFixed(2)}`
+                      : `${customCoins} coins ÷ ${calculateCustomPrice().coinsPerUnit} = ${calculateCustomPrice().symbol}${calculateCustomPrice().price.toFixed(2)}`)
+                  : 'Enter coins and select currency'}
+                placeholder="Enter details to see price"
+                sx={{ 
+                  '& .MuiInputBase-root': { 
+                    height: '56px',
+                    bgcolor: calculateCustomPrice() ? 'success.main' : 'grey.50',
+                    '& fieldset': {
+                      borderColor: calculateCustomPrice() ? 'success.main' : undefined,
+                    },
+                    '&:hover fieldset': {
+                      borderColor: calculateCustomPrice() ? 'success.dark' : undefined,
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: calculateCustomPrice() ? 'success.dark' : undefined,
+                    },
+                  },
+                  '& .MuiInputBase-input': {
+                    fontWeight: 700,
+                    fontSize: '1.25rem',
+                    color: calculateCustomPrice() ? '#ffffff' : 'text.secondary',
+                    cursor: 'default',
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: calculateCustomPrice() ? 'rgba(255, 255, 255, 0.7)' : undefined,
+                    '&.Mui-focused': {
+                      color: calculateCustomPrice() ? 'rgba(255, 255, 255, 0.7)' : undefined,
+                    },
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: calculateCustomPrice() ? 'rgba(255, 255, 255, 0.8)' : undefined,
+                  }
+                }}
+              />
+            </Grid>
+
+            {/* Buy Button */}
+            <Grid item xs={12} md={3}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                onClick={handleCustomBuy}
+                disabled={purchasing !== null || !customCoins || parseInt(customCoins) < 1 || !selectedCurrency}
+                startIcon={purchasing === 'custom' ? <CircularProgress size={20} color="inherit" /> : <ShoppingCart />}
+                sx={{ 
+                  height: '56px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  textTransform: 'none'
+                }}
+              >
+                {purchasing === 'custom' ? 'Processing...' : 'Buy Now'}
+              </Button>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Package Cards */}
       <Grid container spacing={3} justifyContent="center">
@@ -296,9 +550,10 @@ const BuyCoins = ({ onSuccess }) => {
                 )}
                 {pack.isPopular && !pack.isBestValue && (
                   <Chip
-                    label="Popular"
+                    label={pack.isFeatured ? "Featured" : "Popular"}
                     color="primary"
                     size="small"
+                    icon={<Star />}
                     sx={{
                       position: 'absolute',
                       top: -12,
@@ -344,19 +599,40 @@ const BuyCoins = ({ onSuccess }) => {
 
                   {/* Price */}
                   <Box sx={{ mb: 2 }}>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                      ${pack.usd}
-                    </Typography>
-                    {pack.savings > 0 && (
+                    {pack.discountPercent > 0 ? (
+                      <>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            textDecoration: 'line-through', 
+                            color: 'text.secondary',
+                            mb: 0.5
+                          }}
+                        >
+                          {pack.currencySymbol}{pack.price?.toFixed(2)}
+                        </Typography>
+                        <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main', mb: 0.5 }}>
+                          {pack.currencySymbol}{pack.finalPrice?.toFixed(2)}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
+                          Save {pack.discountPercent}%
+                        </Typography>
+                      </>
+                    ) : (
+                      <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                        {pack.currencySymbol}{pack.finalPrice?.toFixed(2)}
+                      </Typography>
+                    )}
+                    {pack.savings > 0 && pack.discountPercent === 0 && (
                       <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
-                        Save {pack.savings}%
+                        Save {pack.savings.toFixed(0)}% vs base
                       </Typography>
                     )}
                   </Box>
 
                   {/* Value */}
                   <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                    ${(pack.coins * 0.1).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in-app value
+                    {pack.currencySymbol}{(pack.coins * 1).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD value
                   </Typography>
 
                   {/* Buy Button */}

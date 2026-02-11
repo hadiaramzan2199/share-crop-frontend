@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (name, email, password, userType, profile_image_url = null, documents = []) => {
+  const signup = async (name, email, password, userType, profile_image_url = null, documents = [], preferred_currency = null) => {
     setLoading(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
@@ -79,7 +79,8 @@ export const AuthProvider = ({ children }) => {
         password,
         user_type: userType,
         profile_image_url,
-        documents
+        documents,
+        preferred_currency
       });
       const { user: newUser, token } = response.data;
       setUser(newUser);

@@ -179,13 +179,36 @@ class CoinService {
   }
 
   /**
+   * Get currency rates
+   * @returns {Promise<{ rates: Array }>}
+   */
+  async getCurrencyRates() {
+    try {
+      const response = await api.get('/api/coins/currency-rates');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching currency rates:', error);
+      return { rates: [] };
+    }
+  }
+
+  /**
    * Create a purchase intent (redirects to Stripe Checkout)
-   * @param {string} packId - Pack id from getCoinPacks()
-   * @param {{ successUrl?: string, cancelUrl?: string, pack?: { name?: string, coins?: number, usd?: string } }} opts - Optional return URLs and pack details for Stripe line_items
+   * @param {string|null} packId - Pack id from getCoinPacks(), or null for custom coins
+   * @param {{ successUrl?: string, cancelUrl?: string, pack?: { name?: string, coins?: number, usd?: string }, customCoins?: number, currency?: string }} opts - Optional return URLs, pack details, or custom coin purchase
    * @returns {Promise<{ url: string }>} - Redirect to url
    */
   async createPurchaseIntent(packId, opts = {}) {
-    const body = { pack_id: packId };
+    const body = {};
+    if (packId) {
+      body.pack_id = packId;
+    } else if (opts.customCoins) {
+      body.custom_coins = opts.customCoins;
+      body.currency = opts.currency || 'USD';
+    } else {
+      throw new Error('Either packId or customCoins must be provided');
+    }
+    
     if (opts.successUrl) body.success_url = opts.successUrl;
     if (opts.cancelUrl) body.cancel_url = opts.cancelUrl;
     // Send pack details so backend can show product name and breakdown on Stripe Checkout page

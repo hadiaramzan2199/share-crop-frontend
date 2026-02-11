@@ -225,7 +225,14 @@ const AdminRedemptions = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" fontWeight={600}>
-                      ${((redemption.payout_amount_cents || 0) / 100).toFixed(2)}
+                      {(() => {
+                        const currencySymbols = {
+                          'USD': '$', 'EUR': '€', 'GBP': '£', 'PKR': '₨',
+                          'JPY': '¥', 'CAD': 'C$', 'AUD': 'A$', 'CHF': 'CHF'
+                        };
+                        const symbol = currencySymbols[redemption.currency?.toUpperCase()] || redemption.currency?.toUpperCase() || '$';
+                        return `${symbol}${((redemption.payout_amount_cents || 0) / 100).toFixed(2)}`;
+                      })()}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Fee: ${((redemption.platform_fee_cents || 0) / 100).toFixed(2)}
@@ -334,7 +341,14 @@ const AdminRedemptions = () => {
                 Coins: {selectedRedemption.coins_requested?.toLocaleString()}
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Payout Amount: ${((selectedRedemption.payout_amount_cents || 0) / 100).toFixed(2)}
+                Payout Amount: {(() => {
+                  const currencySymbols = {
+                    'USD': '$', 'EUR': '€', 'GBP': '£', 'PKR': '₨',
+                    'JPY': '¥', 'CAD': 'C$', 'AUD': 'A$', 'CHF': 'CHF'
+                  };
+                  const symbol = currencySymbols[selectedRedemption.currency?.toUpperCase()] || selectedRedemption.currency?.toUpperCase() || '$';
+                  return `${symbol}${((selectedRedemption.payout_amount_cents || 0) / 100).toFixed(2)}`;
+                })()}
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Request Date: {new Date(selectedRedemption.created_at).toLocaleString()}

@@ -1194,26 +1194,63 @@ const EnhancedFarmMap = forwardRef(({
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     zoomToFarm: (farm, autoOpenPopup = true) => {
-      if (farm && farm.coordinates && mapRef.current) {
-        // Use the map's native flyTo method instead of updating React state
-        // This prevents unnecessary re-renders that could cause markers to disappear
-        mapRef.current.flyTo({
-          center: [farm.coordinates[0], farm.coordinates[1]],
-          zoom: 15,
-          duration: 1000,
-          offset: [0, -(isMobile ? 160 : 200)],
-          easing: (t) => t * (2 - t)
-        });
+      if (!farm || !farm.coordinates) return;
+      
+      const coordinates = Array.isArray(farm.coordinates) ? farm.coordinates : null;
+      if (!coordinates || coordinates.length < 2) return;
+      
+      const lng = coordinates[0];
+      const lat = coordinates[1];
+      
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-        if (autoOpenPopup) {
-          setPopupTab('details');
-          setSelectedProduct(farm);
+      // Handle Google Maps (when zoom is low) - zoom to a closer level first
+      if (googleGlobeRef.current?.flyTo) {
+        googleGlobeRef.current.flyTo(lat, lng, 7);
+      }
 
-          fetchLocationForProduct(farm);
-          fetchWeatherForProduct(farm);
+      // Handle Mapbox - use requestAnimationFrame to ensure map is ready and preserve marker animations
+      requestAnimationFrame(() => {
+        const map = mapRef.current && typeof mapRef.current.getMap === 'function' ? mapRef.current.getMap() : null;
+        if (map) {
+          isMapAnimatingRef.current = true;
           popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
           setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+          
+          // Use map.flyTo directly without updating viewState immediately to avoid interrupting marker animations
+          // The viewState will be updated by the map's onMove handler naturally
+          map.flyTo({
+            center: coordinates,
+            zoom: 15,
+            duration: 1200,
+            essential: true,
+            offset: [0, -(isMobile ? 160 : 200)],
+            easing: (t) => t * (2 - t)
+          });
+          
+          map.once('moveend', () => {
+            isMapAnimatingRef.current = false;
+            setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
+          });
+        } else {
+          // Fallback: update viewState if map isn't ready yet
+          setViewState(prev => ({
+            ...prev,
+            longitude: lng,
+            latitude: lat,
+            zoom: 15
+          }));
         }
+      });
+
+      if (autoOpenPopup) {
+        setPopupTab('details');
+        setSelectedProduct(farm);
+
+        fetchLocationForProduct(farm);
+        fetchWeatherForProduct(farm);
+        popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
+        setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
       }
     },
     refreshData: () => {
@@ -3400,11 +3437,7 @@ const EnhancedFarmMap = forwardRef(({
         </div>
       </div>
 
-      {showGoogleGlobe && (
-        <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 100, pointerEvents: 'none', fontSize: 12, color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-          Zoom in to see fields and markers
-        </div>
-      )}
+    
 
       {/* Delivery Toggle Icon - top-left of map container */}
       <div

@@ -30,6 +30,7 @@ import {
   Settings,
   Close,
   ReportProblem,
+  Home,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -57,6 +58,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
   const isMobile = useIsMobile();
 
   const farmerMenuItems = [
+    { text: 'Home', icon: <Home />, path: '/' },
     { text: 'Dashboard', icon: <Dashboard />, path: '/farmer' },
     { text: 'My Fields', icon: <Agriculture />, path: '/farmer/fields' },
     { text: 'Products', icon: <Store />, path: '/farmer/products' },
@@ -66,6 +68,7 @@ const Sidebar = ({ user, onLogout, open, onClose }) => {
   ];
 
   const buyerMenuItems = [
+    { text: 'Home', icon: <Home />, path: '/' },
     { text: 'My Fields', icon: <Landscape />, path: '/buyer/rented-fields' },
     { text: 'My Orders', icon: <History />, path: '/buyer/orders' },
     { text: 'Profile', icon: <Person />, path: '/buyer/profile' },

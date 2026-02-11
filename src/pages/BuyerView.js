@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Box,
 } from '@mui/material';
@@ -27,6 +27,7 @@ import coinService from '../services/coinService';
 
 const BuyerView = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [farms, setFarms] = useState([]);
@@ -97,6 +98,60 @@ const BuyerView = () => {
     loadAllFieldsFromStorage();
   }, [loadAllFieldsFromStorage]);
 
+  // Handle field_id from URL params to zoom to field
+  useEffect(() => {
+    const fieldId = searchParams.get('field_id');
+    if (fieldId && mapRef.current) {
+      // Find the field in the loaded fields
+      const field = fields.find(f => f.id === fieldId);
+      if (field) {
+        const coordinates = field.coordinates || 
+          (field.longitude && field.latitude 
+            ? [field.longitude, field.latitude] 
+            : null);
+        if (coordinates) {
+          // Small delay to ensure map is ready
+          const timer = setTimeout(() => {
+            if (mapRef.current && mapRef.current.zoomToFarm) {
+              // Convert field to farm format expected by zoomToFarm
+              const farmData = {
+                ...field,
+                coordinates
+              };
+              mapRef.current.zoomToFarm(farmData, true);
+              // Clear the URL parameter after zooming
+              setSearchParams({});
+            }
+          }, 500);
+          return () => clearTimeout(timer);
+        }
+      } else if (fieldId) {
+        // Field not found in loaded fields, try fetching it
+        fieldsService.getById(fieldId)
+          .then(response => {
+            const fetchedField = response.data;
+            if (fetchedField && mapRef.current && mapRef.current.zoomToFarm) {
+              const coordinates = fetchedField.coordinates || 
+                (fetchedField.longitude && fetchedField.latitude 
+                  ? [fetchedField.longitude, fetchedField.latitude] 
+                  : null);
+              if (coordinates) {
+                const farmData = {
+                  ...fetchedField,
+                  coordinates
+                };
+                mapRef.current.zoomToFarm(farmData, true);
+                setSearchParams({});
+              }
+            }
+          })
+          .catch(err => {
+            console.error('Failed to fetch field:', err);
+          });
+      }
+    }
+  }, [searchParams, fields, setSearchParams]);
+
 
 
   const handleSearchChange = (query) => {
@@ -156,7 +211,7 @@ const BuyerView = () => {
         flexGrow: 1,
         mt: 'var(--app-header-height)',
         height: 'calc(100vh - var(--app-header-height))',
-        overflow: (isMapPage || isMessagesPage || isCurrencyPage || isSettingsPage) ? 'hidden' : 'auto', // No scroll for map, messages, currency, and settings pages, scroll for other pages
+        overflow: (isMapPage || isMessagesPage || isSettingsPage) ? 'hidden' : 'auto', // No scroll for map, messages, and settings pages, scroll for other pages
         position: 'relative',
         zIndex: 0,
         isolation: 'isolate'

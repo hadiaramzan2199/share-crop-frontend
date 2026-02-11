@@ -406,6 +406,18 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
       return () => resizeObserver.disconnect();
     }
     
+    // Ensure container has explicit height for controls to position correctly
+    // Map3DElement controls need a container with defined dimensions
+    if (!container.style.height && container.offsetHeight > 0) {
+      // Container has height from parent, which is fine
+      // But log for debugging
+      console.log('Container dimensions:', {
+        width: container.offsetWidth,
+        height: container.offsetHeight,
+        computedHeight: window.getComputedStyle(container).height
+      });
+    }
+    
     if (!visible && mapRef.current) return; // keep existing map when hidden
     if (mapRef.current) return; // already have a map
 
@@ -414,27 +426,148 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
     setMapReady(false);
     
     loadGoogleMaps3D(apiKey)
-      .then((lib) => {
+      .then(async (lib) => {
         if (cancelled || !container) {
           return;
         }
         const { Map3DElement, MapMode } = lib;
         const MarkerClass = lib.Marker3DInteractiveElement || lib.Marker3DElement;
 
+        // Calculate range - ensure it's not too large (controls hide at full zoom out)
+        // If range is near MAX_RANGE_M, Google hides zoom buttons automatically
+        // Try a smaller range first to ensure controls appear (around 15M instead of 20M)
+        let initialRange = Math.min(zoomToRange(zoom), MAX_ZOOM_OUT_RANGE);
+        
+        // If range is too close to max (>85%), reduce it to ensure controls appear
+        const rangeRatio = initialRange / MAX_ZOOM_OUT_RANGE;
+        if (rangeRatio > 0.85) {
+          initialRange = MAX_ZOOM_OUT_RANGE * 0.7; // Use 70% of max instead
+          console.log('Range too large, reducing for controls:', {
+            originalRange: Math.min(zoomToRange(zoom), MAX_ZOOM_OUT_RANGE),
+            adjustedRange: initialRange,
+            reason: 'Controls hide when range > 85% of max'
+          });
+        }
+        
+        // Debug: Log range to check if it's too large
+        console.log('Creating Map3DElement with:', {
+          range: initialRange,
+          maxRange: MAX_ZOOM_OUT_RANGE,
+          rangeRatio: initialRange / MAX_ZOOM_OUT_RANGE,
+          containerHeight: container.offsetHeight,
+          containerWidth: container.offsetWidth
+        });
+        
         mapInstance = new Map3DElement({
           center: { lat: latitude, lng: longitude, altitude: 0 },
-          range: Math.min(zoomToRange(zoom), MAX_ZOOM_OUT_RANGE),
+          range: initialRange,
           mode: MapMode.HYBRID,
           gestureHandling: 'GREEDY',
-          defaultUIHidden: true,
           minAltitude: 0,
           maxAltitude: MAX_ZOOM_OUT_RANGE,
         });
 
+        // CRITICAL: Set ui-mode BEFORE appending to DOM
+        // Options: "full" (zoom buttons + compass + interaction), "minimal", or "none"
+        mapInstance.setAttribute('ui-mode', 'full');
+        
+        // Also try setting it as a property if attribute doesn't work
+        if (mapInstance.uiMode !== undefined) {
+          mapInstance.uiMode = 'full';
+        }
+
         mapInstance.style.width = '100%';
         mapInstance.style.height = '100%';
+        
+        // Clear container and append (ui-mode must be set before this)
         container.innerHTML = '';
         container.appendChild(mapInstance);
+        
+        // Debug: Verify ui-mode was set correctly after append and check for control elements
+        setTimeout(() => {
+          const uiModeAttr = mapInstance.getAttribute('ui-mode');
+          const uiModeProp = mapInstance.uiMode;
+          
+          // Look for control elements inside the map
+          const shadowRoot = mapInstance.shadowRoot;
+          const controlElements = shadowRoot 
+            ? Array.from(shadowRoot.querySelectorAll('*')).filter(el => 
+                el.tagName?.includes('CONTROL') || 
+                el.className?.includes('control') ||
+                el.id?.includes('control') ||
+                el.getAttribute('role') === 'button'
+              )
+            : [];
+          
+          // Also check for zoom buttons, compass, etc.
+          const zoomButtons = shadowRoot 
+            ? shadowRoot.querySelectorAll('button[aria-label*="zoom"], button[aria-label*="Zoom"], [role="button"]')
+            : [];
+          
+          console.log('Map3DElement after append:', {
+            uiModeAttribute: uiModeAttr,
+            uiModeProperty: uiModeProp,
+            range: mapInstance.range,
+            hasControls: uiModeAttr === 'full' || uiModeProp === 'full',
+            containerHeight: container.offsetHeight,
+            containerWidth: container.offsetWidth,
+            mapElement: mapInstance.tagName,
+            mapInDOM: container.contains(mapInstance),
+            hasShadowRoot: !!shadowRoot,
+            controlElementsFound: controlElements.length,
+            zoomButtonsFound: zoomButtons.length,
+            allAttributes: Array.from(mapInstance.attributes).map(a => `${a.name}="${a.value}"`),
+            computedStyle: {
+              position: window.getComputedStyle(mapInstance).position,
+              zIndex: window.getComputedStyle(mapInstance).zIndex,
+              overflow: window.getComputedStyle(mapInstance).overflow
+            }
+          });
+          
+          // Check if controls exist but are hidden
+          if (shadowRoot && zoomButtons.length > 0) {
+            console.log('Found control elements:', {
+              count: zoomButtons.length,
+              elements: Array.from(zoomButtons).map(btn => ({
+                tagName: btn.tagName,
+                ariaLabel: btn.getAttribute('aria-label'),
+                visible: window.getComputedStyle(btn).display !== 'none',
+                opacity: window.getComputedStyle(btn).opacity
+              }))
+            });
+          } else if (shadowRoot) {
+            console.warn('No control elements found in shadow root. Controls may not be rendering.');
+          } else {
+            console.warn('No shadow root found. Map3DElement may not be fully initialized.');
+          }
+          
+          // Test: Try toggling ui-mode to see if it responds
+          if (uiModeAttr !== 'full' && uiModeProp !== 'full') {
+            console.warn('ui-mode was not set correctly, trying to set again...');
+            mapInstance.setAttribute('ui-mode', 'full');
+            if (mapInstance.uiMode !== undefined) {
+              mapInstance.uiMode = 'full';
+            }
+          }
+          
+          // Force a re-render by toggling ui-mode
+          setTimeout(() => {
+            console.log('Testing ui-mode toggle to force control render...');
+            mapInstance.setAttribute('ui-mode', 'minimal');
+            setTimeout(() => {
+              mapInstance.setAttribute('ui-mode', 'full');
+              console.log('Switched back to ui-mode="full"');
+              
+              // Check again after toggle
+              setTimeout(() => {
+                const newShadowRoot = mapInstance.shadowRoot;
+                const newControls = newShadowRoot?.querySelectorAll('button, [role="button"]') || [];
+                console.log('Controls after toggle:', newControls.length);
+              }, 200);
+            }, 300);
+          }, 500);
+        }, 200);
+        
         mapRef.current = mapInstance;
         if (MarkerClass) mapRef.current._MarkerClass = MarkerClass;
 
@@ -576,6 +709,7 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
         visibility: visible ? 'visible' : 'hidden',
         pointerEvents: visible ? 'auto' : 'none',
         zIndex: visible ? 2 : 0,
+        overflow: 'visible', // Ensure controls aren't clipped
         ...style,
       }}
       aria-hidden={!visible}

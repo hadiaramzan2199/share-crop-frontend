@@ -60,6 +60,7 @@ import {
   Error as ErrorIcon,
   AccountBalanceWallet,
   CreditCard,
+  Home,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
@@ -562,10 +563,17 @@ const EnhancedHeader = forwardRef(({
     }
   };
 
-  // Menu order matching sidebar image: Rented Fields, My Orders, Profile | My Farms, Farm Orders, License Info, Transaction | Notifications, Messages, Change Currency, Settings
+  // Menu order matching sidebar image: Home | Rented Fields, My Orders, Profile | My Farms, Farm Orders, License Info, Transaction | Notifications, Messages, Change Currency, Settings
   const getMenuConfig = (userType) => {
     const isFarmer = userType === 'farmer';
     const sections = [
+      {
+        id: 'home',
+        title: '',
+        items: [
+          { text: 'Home', icon: <Home />, path: '/' },
+        ]
+      },
       {
         id: 'main',
         title: 'Farms & Fields',
@@ -1611,23 +1619,25 @@ const EnhancedHeader = forwardRef(({
             {menuSections.map((section, idx) => (
               <React.Fragment key={section.id}>
               <Box sx={{ mb: isMobile ? 0.5 : 1 }}>
-                <Box sx={{ 
-                  px: isMobile ? 1.5 : 2, 
-                  py: isMobile ? 0.25 : 0.5,
-                  display: 'flex',
-                  alignItems: 'center'
-                }}>
-                  <ListItemText
-                    primary={section.title}
-                    primaryTypographyProps={{
-                      fontSize: isMobile ? '0.7rem' : '0.75rem',
-                      fontWeight: 600,
-                      color: '#2E7D32',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}
-                  />
-                </Box>
+                {section.title && (
+                  <Box sx={{ 
+                    px: isMobile ? 1.5 : 2, 
+                    py: isMobile ? 0.25 : 0.5,
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}>
+                    <ListItemText
+                      primary={section.title}
+                      primaryTypographyProps={{
+                        fontSize: isMobile ? '0.7rem' : '0.75rem',
+                        fontWeight: 600,
+                        color: '#2E7D32',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                    />
+                  </Box>
+                )}
                 {/* Section Items - Clean and spaced */}
                 <List component="div" disablePadding>
                   {section.items.map((item) => {

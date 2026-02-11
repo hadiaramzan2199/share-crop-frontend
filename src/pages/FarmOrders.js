@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -43,6 +44,7 @@ import {
   Person,
   Landscape,
   CalendarToday,
+  LocationOn,
 } from '@mui/icons-material';
 import { orderService } from '../services/orders';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,6 +53,7 @@ import ErrorMessage from '../components/Common/ErrorMessage';
 
 const FarmOrders = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -110,6 +113,13 @@ const FarmOrders = () => {
   const handleViewDetails = (order) => {
     setSelectedOrder(order);
     setDetailsOpen(true);
+  };
+
+  const handleViewOnMap = (order) => {
+    if (order.field_id) {
+      // Navigate to farmer homepage with field_id parameter
+      navigate(`/farmer?field_id=${order.field_id}`);
+    }
   };
 
   const handleStatusChange = async (orderId, newStatus) => {
@@ -435,7 +445,9 @@ const FarmOrders = () => {
                   {filteredOrders.map((order, index) => (
                     <TableRow
                       key={order.id}
+                      onClick={() => handleViewOnMap(order)}
                       sx={{
+                        cursor: order.field_id ? 'pointer' : 'default',
                         '&:hover': { backgroundColor: '#f8fafc' },
                         borderBottom: index === filteredOrders.length - 1 ? 'none' : '1px solid #e2e8f0',
                       }}
@@ -504,20 +516,43 @@ const FarmOrders = () => {
                           {new Date(order.created_at).toLocaleDateString()}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ py: 1.5 }}>
-                        <Tooltip title="View details & update status">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewDetails(order)}
-                            sx={{
-                              color: '#059669',
-                              '&:hover': { backgroundColor: '#dcfce7' },
-                              p: 0.5,
-                            }}
-                          >
-                            <Visibility sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </Tooltip>
+                      <TableCell sx={{ py: 1.5 }} onClick={(e) => e.stopPropagation()}>
+                        <Stack direction="row" spacing={0.5}>
+                          {order.field_id && (
+                            <Tooltip title="View on Map">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewOnMap(order);
+                                }}
+                                sx={{
+                                  color: '#1d4ed8',
+                                  '&:hover': { backgroundColor: '#dbeafe' },
+                                  p: 0.5,
+                                }}
+                              >
+                                <LocationOn sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          <Tooltip title="View details & update status">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(order);
+                              }}
+                              sx={{
+                                color: '#059669',
+                                '&:hover': { backgroundColor: '#dcfce7' },
+                                p: 0.5,
+                              }}
+                            >
+                              <Visibility sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
