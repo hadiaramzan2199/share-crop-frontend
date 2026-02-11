@@ -69,7 +69,7 @@ const Orders = () => {
     } else {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadOrders = async () => {
@@ -127,8 +127,10 @@ const Orders = () => {
 
   const handleViewOnMap = (order) => {
     if (order.field_id) {
-      // Navigate to buyer homepage with field_id parameter
-      navigate(`/buyer?field_id=${order.field_id}`);
+      // Navigate to correct dashboard based on user role
+      const userRole = user?.user_type?.toLowerCase() || 'buyer';
+      const path = userRole === 'farmer' ? '/farmer' : '/buyer';
+      navigate(`${path}?field_id=${order.field_id}`);
     }
   };
 

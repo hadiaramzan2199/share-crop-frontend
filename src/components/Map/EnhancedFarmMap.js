@@ -272,6 +272,13 @@ const EnhancedFarmMap = forwardRef(({
           });
           map.once('moveend', () => {
             isMapAnimatingRef.current = false;
+            setViewState({
+              longitude: map.getCenter().lng,
+              latitude: map.getCenter().lat,
+              zoom: map.getZoom(),
+              bearing: map.getBearing(),
+              pitch: map.getPitch()
+            });
             setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
           });
         }
@@ -1195,13 +1202,13 @@ const EnhancedFarmMap = forwardRef(({
   useImperativeHandle(ref, () => ({
     zoomToFarm: (farm, autoOpenPopup = true) => {
       if (!farm || !farm.coordinates) return;
-      
+
       const coordinates = Array.isArray(farm.coordinates) ? farm.coordinates : null;
       if (!coordinates || coordinates.length < 2) return;
-      
+
       const lng = coordinates[0];
       const lat = coordinates[1];
-      
+
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       // Handle Google Maps (when zoom is low) - zoom to a closer level first
@@ -1216,7 +1223,7 @@ const EnhancedFarmMap = forwardRef(({
           isMapAnimatingRef.current = true;
           popupFixedRef.current = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
           setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
-          
+
           // Use map.flyTo directly without updating viewState immediately to avoid interrupting marker animations
           // The viewState will be updated by the map's onMove handler naturally
           map.flyTo({
@@ -1227,9 +1234,16 @@ const EnhancedFarmMap = forwardRef(({
             offset: [0, -(isMobile ? 160 : 200)],
             easing: (t) => t * (2 - t)
           });
-          
+
           map.once('moveend', () => {
             isMapAnimatingRef.current = false;
+            setViewState({
+              longitude: map.getCenter().lng,
+              latitude: map.getCenter().lat,
+              zoom: map.getZoom(),
+              bearing: map.getBearing(),
+              pitch: map.getPitch()
+            });
             setPopupPosition({ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
           });
         } else {
@@ -1958,380 +1972,380 @@ const EnhancedFarmMap = forwardRef(({
     buyNowInProgressRef.current = true;
     setBuyNowInProgress(true);
     try {
-    if (!currentUser || !currentUser.id) {
-      if (onNotification) {
-        onNotification('Please log in to make a purchase.', 'error');
-      }
-      return;
-    }
-
-    if (!selectedShipping) {
-      setShippingError(true);
-      return;
-    }
-    if (selectedShipping === 'Delivery') {
-      if (!isDeliveryAllowed(product)) {
-        if (onNotification) onNotification('Delivery is unavailable at your location.', 'error');
+      if (!currentUser || !currentUser.id) {
+        if (onNotification) {
+          onNotification('Please log in to make a purchase.', 'error');
+        }
         return;
       }
-      setAddressError('');
-      if (deliveryMode === 'existing') {
-        if (!existingDeliveryAddress || existingDeliveryAddress.trim().length < 5) {
-          setAddressError('Please provide a valid saved address or add a new one');
+
+      if (!selectedShipping) {
+        setShippingError(true);
+        return;
+      }
+      if (selectedShipping === 'Delivery') {
+        if (!isDeliveryAllowed(product)) {
+          if (onNotification) onNotification('Delivery is unavailable at your location.', 'error');
           return;
         }
-      } else {
-        const { name, line1, city, zip, country } = newDeliveryAddress;
-        if (!name || !line1 || !city || !zip || !country) {
-          setAddressError('Please fill in required address fields');
-          return;
+        setAddressError('');
+        if (deliveryMode === 'existing') {
+          if (!existingDeliveryAddress || existingDeliveryAddress.trim().length < 5) {
+            setAddressError('Please provide a valid saved address or add a new one');
+            return;
+          }
+        } else {
+          const { name, line1, city, zip, country } = newDeliveryAddress;
+          if (!name || !line1 || !city || !zip || !country) {
+            setAddressError('Please fill in required address fields');
+            return;
+          }
         }
       }
-    }
-    const availableArea = getAvailableArea(product);
-    if (!(availableArea > 0)) {
-      if (onNotification) onNotification('No area remaining to purchase for this field.', 'error');
-      setInsufficientFunds(false);
-      return;
-    }
-    if (quantity > availableArea) {
-      if (onNotification) onNotification(`Only ${availableArea}m² available. Reduce quantity to proceed.`, 'error');
-      setInsufficientFunds(false);
-      return;
-    }
-
-    const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
-    // Convert dollars to coins: Based on coin packs, ~100 coins = $9.99, so 1 coin ≈ $0.10
-    // Formula: dollars * 10 (round up to ensure fair pricing)
-    const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
-
-    // Reset insufficient funds error
-    setInsufficientFunds(false);
-
-    // Check if user has sufficient coins using coinService
-    const currentCoins = await coinService.getUserCoins(currentUser.id);
-    if (currentCoins < totalCostInCoins) {
-      setInsufficientFunds(true);
-      if (onNotification) {
-        onNotification(
-          `Insufficient coins! You need ${totalCostInCoins} coins but only have ${currentCoins}. Please add more coins to continue.`,
-          'error'
-        );
+      const availableArea = getAvailableArea(product);
+      if (!(availableArea > 0)) {
+        if (onNotification) onNotification('No area remaining to purchase for this field.', 'error');
+        setInsufficientFunds(false);
+        return;
       }
-      return;
-    }
-
-    // Check if user is trying to purchase from their own farm
-    if (currentUser && (product.farmer_id === currentUser.id || product.created_by === currentUser.id)) {
-      if (onNotification) {
-        onNotification('You cannot purchase from your own farm!', 'error');
+      if (quantity > availableArea) {
+        if (onNotification) onNotification(`Only ${availableArea}m² available. Reduce quantity to proceed.`, 'error');
+        setInsufficientFunds(false);
+        return;
       }
-      return;
-    }
 
-    try {
-      // Create order data
-      const orderData = {
-        id: Date.now(),
-        fieldId: product.id,
-        product_name: product.name,
-        name: product.name,
-        farmer_name: product.farmer_name || 'Farm Owner',
-        farmer_id: product.farmer_id || product.created_by,
-        location: product.location || 'Unknown Location',
-        area_rented: quantity,
-        area: quantity,
-        crop_type: product.category || 'Mixed Crops',
-        total_cost: totalCostInDollars,
-        cost: totalCostInDollars,
-        price_per_unit: product.price || 0.55,
-        monthly_rent: Math.round(totalCostInDollars / 6), // Assuming 6-month rental
-        status: 'confirmed',
-        start_date: new Date().toISOString(),
-        end_date: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(), // 6 months from now
-        progress: 0,
-        notes: (() => {
-          const base = `Purchased via marketplace. Shipping: ${selectedShipping || 'Delivery'}`;
-          if (selectedShipping === 'Delivery') {
-            const summary = deliveryMode === 'existing'
-              ? ` | Deliver to: ${existingDeliveryAddress}`
-              : ` | Deliver to: ${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
-            return base + summary;
-          }
-          return base;
-        })(),
-        shipping_method: selectedShipping || 'Delivery',
-        selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
-        selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
-        created_at: new Date().toISOString()
-      };
+      const totalCostInDollars = (product.price_per_m2 || 0.55) * quantity;
+      // Convert dollars to coins: Based on coin packs, ~100 coins = $9.99, so 1 coin ≈ $0.10
+      // Formula: dollars * 10 (round up to ensure fair pricing)
+      const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
 
-      // Note: Removed deprecated storage service calls - using API only
+      // Reset insufficient funds error
+      setInsufficientFunds(false);
 
-      // Create order via real API
-      if (currentUser && currentUser.id) {
-        const apiOrderData = {
-          buyer_id: currentUser.id,
-          field_id: product.id,
-          quantity: quantity,
-          total_price: totalCostInDollars,
-          status: 'active',
-          mode_of_shipping: selectedShipping || 'Delivery',
-          selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
-          selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null
-        };
-        if (selectedShipping === 'Delivery') {
-          apiOrderData.notes = (() => {
-            const base = `Shipping: Delivery`;
-            const summary = deliveryMode === 'existing'
-              ? ` | Address: ${existingDeliveryAddress}`
-              : ` | Address: ${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
-            return base + summary;
-          })();
+      // Check if user has sufficient coins using coinService
+      const currentCoins = await coinService.getUserCoins(currentUser.id);
+      if (currentCoins < totalCostInCoins) {
+        setInsufficientFunds(true);
+        if (onNotification) {
+          onNotification(
+            `Insufficient coins! You need ${totalCostInCoins} coins but only have ${currentCoins}. Please add more coins to continue.`,
+            'error'
+          );
         }
+        return;
+      }
 
-        // Deduct coins FIRST before creating order (atomic operation)
-        let orderId = null;
-        try {
-          // Deduct coins with order reference
-          const deductResponse = await coinService.deductCoins(currentUser.id, totalCostInCoins, {
-            reason: `Purchase: ${quantity}m² of ${product.name}`,
-            refType: 'order',
-            refId: null // Will be updated after order creation
-          });
-          
-          if (!deductResponse) {
-            throw new Error('Failed to deduct coins');
-          }
-          
-          console.log('[Purchase] Coins deducted:', { userId: currentUser.id, amount: totalCostInCoins, response: deductResponse });
-          
-          // Update user coins in UI immediately
-          const updatedCoins = await coinService.getUserCoins(currentUser.id);
-          setUserCoins(updatedCoins);
-          if (onCoinRefresh) onCoinRefresh();
-          
-          // Create order via API
-          const orderResponse = await orderService.createOrder(apiOrderData);
-          orderId = orderResponse?.data?.id || orderResponse?.data?.order?.id || null;
-          
-          console.log('[Purchase] Order created:', { orderId, orderData: apiOrderData });
+      // Check if user is trying to purchase from their own farm
+      if (currentUser && (product.farmer_id === currentUser.id || product.created_by === currentUser.id)) {
+        if (onNotification) {
+          onNotification('You cannot purchase from your own farm!', 'error');
+        }
+        return;
+      }
 
-          // Create notification for the farmer
-          const farmerId = product.farmer_id || product.created_by;
-          if (farmerId) {
-            const notificationData = {
-              user_id: farmerId,
-              message: `New order received! ${currentUser.name || 'A buyer'} purchased ${quantity}m² of your field "${product.name}" for $${totalCostInDollars.toFixed(2)}`,
-              type: 'success'
-            };
-
-            try {
-              await notificationsService.create(notificationData);
-            } catch (notifError) {
-              console.error('Failed to create farmer notification:', notifError);
+      try {
+        // Create order data
+        const orderData = {
+          id: Date.now(),
+          fieldId: product.id,
+          product_name: product.name,
+          name: product.name,
+          farmer_name: product.farmer_name || 'Farm Owner',
+          farmer_id: product.farmer_id || product.created_by,
+          location: product.location || 'Unknown Location',
+          area_rented: quantity,
+          area: quantity,
+          crop_type: product.category || 'Mixed Crops',
+          total_cost: totalCostInDollars,
+          cost: totalCostInDollars,
+          price_per_unit: product.price || 0.55,
+          monthly_rent: Math.round(totalCostInDollars / 6), // Assuming 6-month rental
+          status: 'confirmed',
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(), // 6 months from now
+          progress: 0,
+          notes: (() => {
+            const base = `Purchased via marketplace. Shipping: ${selectedShipping || 'Delivery'}`;
+            if (selectedShipping === 'Delivery') {
+              const summary = deliveryMode === 'existing'
+                ? ` | Deliver to: ${existingDeliveryAddress}`
+                : ` | Deliver to: ${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
+              return base + summary;
             }
+            return base;
+          })(),
+          shipping_method: selectedShipping || 'Delivery',
+          selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
+          selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
+          created_at: new Date().toISOString()
+        };
+
+        // Note: Removed deprecated storage service calls - using API only
+
+        // Create order via real API
+        if (currentUser && currentUser.id) {
+          const apiOrderData = {
+            buyer_id: currentUser.id,
+            field_id: product.id,
+            quantity: quantity,
+            total_price: totalCostInDollars,
+            status: 'active',
+            mode_of_shipping: selectedShipping || 'Delivery',
+            selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
+            selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null
+          };
+          if (selectedShipping === 'Delivery') {
+            apiOrderData.notes = (() => {
+              const base = `Shipping: Delivery`;
+              const summary = deliveryMode === 'existing'
+                ? ` | Address: ${existingDeliveryAddress}`
+                : ` | Address: ${newDeliveryAddress.name}, ${newDeliveryAddress.line1}${newDeliveryAddress.line2 ? ' ' + newDeliveryAddress.line2 : ''}, ${newDeliveryAddress.city}, ${newDeliveryAddress.state ? newDeliveryAddress.state + ', ' : ''}${newDeliveryAddress.zip}, ${newDeliveryAddress.country}`;
+              return base + summary;
+            })();
           }
-          
-          // Success notification for buyer
-          if (onNotification) {
-            onNotification(
-              `Purchase successful! ${quantity}m² of ${product.name} purchased for ${totalCostInCoins} coins.`,
-              'success'
-            );
-          }
-        } catch (error) {
-          console.error('[Purchase] Failed:', error);
-          console.error('[Purchase] Error details:', error.response?.data || error.message);
-          
-          // If order creation failed but coins were deducted, we need to refund
-          // (In production, you might want to implement a refund mechanism)
-          if (error.response?.status === 400 && error.response?.data?.error === 'Insufficient coins') {
+
+          // Deduct coins FIRST before creating order (atomic operation)
+          let orderId = null;
+          try {
+            // Deduct coins with order reference
+            const deductResponse = await coinService.deductCoins(currentUser.id, totalCostInCoins, {
+              reason: `Purchase: ${quantity}m² of ${product.name}`,
+              refType: 'order',
+              refId: null // Will be updated after order creation
+            });
+
+            if (!deductResponse) {
+              throw new Error('Failed to deduct coins');
+            }
+
+            console.log('[Purchase] Coins deducted:', { userId: currentUser.id, amount: totalCostInCoins, response: deductResponse });
+
+            // Update user coins in UI immediately
+            const updatedCoins = await coinService.getUserCoins(currentUser.id);
+            setUserCoins(updatedCoins);
+            if (onCoinRefresh) onCoinRefresh();
+
+            // Create order via API
+            const orderResponse = await orderService.createOrder(apiOrderData);
+            orderId = orderResponse?.data?.id || orderResponse?.data?.order?.id || null;
+
+            console.log('[Purchase] Order created:', { orderId, orderData: apiOrderData });
+
+            // Create notification for the farmer
+            const farmerId = product.farmer_id || product.created_by;
+            if (farmerId) {
+              const notificationData = {
+                user_id: farmerId,
+                message: `New order received! ${currentUser.name || 'A buyer'} purchased ${quantity}m² of your field "${product.name}" for $${totalCostInDollars.toFixed(2)}`,
+                type: 'success'
+              };
+
+              try {
+                await notificationsService.create(notificationData);
+              } catch (notifError) {
+                console.error('Failed to create farmer notification:', notifError);
+              }
+            }
+
+            // Success notification for buyer
             if (onNotification) {
-              const shortfall = error.response?.data?.shortfall || 0;
               onNotification(
-                `Insufficient coins! You need ${totalCostInCoins} coins. Please add more coins to continue.`,
+                `Purchase successful! ${quantity}m² of ${product.name} purchased for ${totalCostInCoins} coins.`,
+                'success'
+              );
+            }
+          } catch (error) {
+            console.error('[Purchase] Failed:', error);
+            console.error('[Purchase] Error details:', error.response?.data || error.message);
+
+            // If order creation failed but coins were deducted, we need to refund
+            // (In production, you might want to implement a refund mechanism)
+            if (error.response?.status === 400 && error.response?.data?.error === 'Insufficient coins') {
+              if (onNotification) {
+                const shortfall = error.response?.data?.shortfall || 0;
+                onNotification(
+                  `Insufficient coins! You need ${totalCostInCoins} coins. Please add more coins to continue.`,
+                  'error'
+                );
+              }
+              setInsufficientFunds(true);
+              return;
+            }
+
+            // For other errors, show generic message
+            if (onNotification) {
+              onNotification(
+                `Purchase failed: ${error.response?.data?.error || error.message || 'Unknown error'}. Please try again.`,
                 'error'
               );
             }
-            setInsufficientFunds(true);
-            return;
+
+            // Fall back to mock service only if API completely fails
+            try {
+              await mockOrderService.createOrder(orderData);
+            } catch (mockError) {
+              console.error('Mock order creation also failed:', mockError);
+            }
+            return; // Don't proceed with UI updates if order creation failed
           }
-          
-          // For other errors, show generic message
-          if (onNotification) {
-            onNotification(
-              `Purchase failed: ${error.response?.data?.error || error.message || 'Unknown error'}. Please try again.`,
-              'error'
-            );
-          }
-          
-          // Fall back to mock service only if API completely fails
-          try {
-            await mockOrderService.createOrder(orderData);
-          } catch (mockError) {
-            console.error('Mock order creation also failed:', mockError);
-          }
-          return; // Don't proceed with UI updates if order creation failed
+        } else {
+          // Fall back to mock service if no user
+          await mockOrderService.createOrder(orderData);
         }
-      } else {
-        // Fall back to mock service if no user
-        await mockOrderService.createOrder(orderData);
-      }
 
-      // Note: Field purchase status managed via API
+        // Note: Field purchase status managed via API
 
-      // Update UI state
-      setPurchasedFarms(prev => new Set([...prev, product.id]));
+        // Update UI state
+        setPurchasedFarms(prev => new Set([...prev, product.id]));
 
-      const totalArea = product.total_area || 1;
-      const existing = purchasedProducts.find(p => p.id === product.id);
-      if (existing) {
-        const updated = purchasedProducts.map(p => p.id === product.id ? {
-          ...p,
-          purchased_area: (p.purchased_area || 0) + quantity,
-          selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : p.selected_harvest_date,
-          selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : p.selected_harvest_label,
-          selected_harvests: (() => {
-            const prev = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
-            const nextItem = selectedHarvestDate ? { date: selectedHarvestDate.date, label: selectedHarvestDate.label } : null;
-            const next = nextItem ? [...prev, nextItem] : prev;
-            const seen = new Set();
-            return next.filter(it => {
-              const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
-              const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
-              if (seen.has(k)) return false; seen.add(k); return true;
-            });
-          })()
-        } : p);
-        setPurchasedProducts(updated);
-      } else {
-        setPurchasedProducts(prev => [...prev, {
-          id: product.id,
-          name: product.name || product.product_name,
-          category: product.subcategory || product.category,
-          total_area: totalArea,
-          purchased_area: quantity,
-          coordinates: product.coordinates,
-          selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
-          selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
-          selected_harvests: (() => {
-            if (!selectedHarvestDate) return [];
-            const it = { date: selectedHarvestDate.date, label: selectedHarvestDate.label };
-            const d = (() => { try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
-            const s = new Set();
-            return [{ date: d || it.date, label: (it.label || '').trim() }].filter(x => { const kk = `${x.date || ''}|${(x.label || '').trim().toLowerCase()}`; if (s.has(kk)) return false; s.add(kk); return true; });
-          })(),
-          mode_of_shipping: selectedShipping || 'Delivery'
-        }]);
-      }
-      stablePurchasedIdsRef.current.add(product.id);
-      triggerBurst(product, quantity);
-      setSelectedProduct(null);
-      setQuantity(1);
-      setInsufficientFunds(false);
-      setSelectedHarvestDate(null);
+        const totalArea = product.total_area || 1;
+        const existing = purchasedProducts.find(p => p.id === product.id);
+        if (existing) {
+          const updated = purchasedProducts.map(p => p.id === product.id ? {
+            ...p,
+            purchased_area: (p.purchased_area || 0) + quantity,
+            selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : p.selected_harvest_date,
+            selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : p.selected_harvest_label,
+            selected_harvests: (() => {
+              const prev = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
+              const nextItem = selectedHarvestDate ? { date: selectedHarvestDate.date, label: selectedHarvestDate.label } : null;
+              const next = nextItem ? [...prev, nextItem] : prev;
+              const seen = new Set();
+              return next.filter(it => {
+                const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
+                const k = `${d}|${(it?.label || '').trim().toLowerCase()}`;
+                if (seen.has(k)) return false; seen.add(k); return true;
+              });
+            })()
+          } : p);
+          setPurchasedProducts(updated);
+        } else {
+          setPurchasedProducts(prev => [...prev, {
+            id: product.id,
+            name: product.name || product.product_name,
+            category: product.subcategory || product.category,
+            total_area: totalArea,
+            purchased_area: quantity,
+            coordinates: product.coordinates,
+            selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
+            selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null,
+            selected_harvests: (() => {
+              if (!selectedHarvestDate) return [];
+              const it = { date: selectedHarvestDate.date, label: selectedHarvestDate.label };
+              const d = (() => { try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })();
+              const s = new Set();
+              return [{ date: d || it.date, label: (it.label || '').trim() }].filter(x => { const kk = `${x.date || ''}|${(x.label || '').trim().toLowerCase()}`; if (s.has(kk)) return false; s.add(kk); return true; });
+            })(),
+            mode_of_shipping: selectedShipping || 'Delivery'
+          }]);
+        }
+        stablePurchasedIdsRef.current.add(product.id);
+        triggerBurst(product, quantity);
+        setSelectedProduct(null);
+        setQuantity(1);
+        setInsufficientFunds(false);
+        setSelectedHarvestDate(null);
 
-      const tasks = [];
-      tasks.push((async () => {
-        try {
-          const res = await orderService.getBuyerOrdersWithFields(currentUser.id);
-          const orders = Array.isArray(res?.data) ? res.data : (res?.data?.orders || []);
-          const byField = new Map();
-          for (const o of orders) {
-            const fid = o.field_id || o.fieldId || o.field?.id;
-            if (!fid) continue;
-            const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
-            const qtyRaw = o.quantity ?? o.area_rented ?? o.area ?? 0;
-            const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
-            const field = o.field || farms.find(f => f.id === fid) || {};
-            const name = field.name || o.product_name || o.name;
-            const category = field.subcategory || field.category || o.crop_type;
-            const total_area = field.total_area || 0;
-            const coordinates = field.coordinates;
-            const sh = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
-            const shs = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
-            const added = sh.date || sh.label ? [...shs, sh] : shs;
-            const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
-            const createdAt = o.created_at || o.createdAt || null;
-            const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
-            const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
-            const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
-            const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
-            byField.set(fid, {
-              id: fid,
-              name,
-              category,
-              total_area,
-              purchased_area: (prev.purchased_area || 0) + qty,
-              coordinates,
-              selected_harvests: uniq,
-              delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
-              last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
-              last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
-              last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
-              last_order_purchased: (curTs >= prevTs)
-                ? ((o.purchased === true)
-                  || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
-                  || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
-                : (prev.last_order_purchased === true)
-            });
-          }
-          const list = Array.from(byField.values());
-          setPurchasedProducts(prev => {
-            const map = new Map();
-            list.forEach(item => map.set(String(item.id ?? item.field_id), { ...item }));
-            prev.forEach(p => {
-              const key = String(p.id ?? p.field_id);
-              const existing = map.get(key);
-              if (existing) {
-                const ex = typeof existing.purchased_area === 'string' ? parseFloat(existing.purchased_area) : (existing.purchased_area || 0);
-                const pv = typeof p.purchased_area === 'string' ? parseFloat(p.purchased_area) : (p.purchased_area || 0);
-                existing.purchased_area = Math.max(ex, pv);
-                const shPrev = Array.isArray(existing.selected_harvests) ? existing.selected_harvests : [];
-                const shIncoming = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
-                const combined = [...shPrev, ...shIncoming];
-                const s = new Set();
-                existing.selected_harvests = combined.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; });
-                const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
-                const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
-                if (prevTs > curTs) {
-                  existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
-                  existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
-                  existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
-                  existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+        const tasks = [];
+        tasks.push((async () => {
+          try {
+            const res = await orderService.getBuyerOrdersWithFields(currentUser.id);
+            const orders = Array.isArray(res?.data) ? res.data : (res?.data?.orders || []);
+            const byField = new Map();
+            for (const o of orders) {
+              const fid = o.field_id || o.fieldId || o.field?.id;
+              if (!fid) continue;
+              const prev = byField.get(fid) || { purchased_area: 0, selected_harvests: [], last_order_selected_date: null, last_order_shipping_mode: null, last_order_created_at: null };
+              const qtyRaw = o.quantity ?? o.area_rented ?? o.area ?? 0;
+              const qty = typeof qtyRaw === 'string' ? parseFloat(qtyRaw) : qtyRaw;
+              const field = o.field || farms.find(f => f.id === fid) || {};
+              const name = field.name || o.product_name || o.name;
+              const category = field.subcategory || field.category || o.crop_type;
+              const total_area = field.total_area || 0;
+              const coordinates = field.coordinates;
+              const sh = { date: o.selected_harvest_date || null, label: o.selected_harvest_label || null };
+              const shs = Array.isArray(prev.selected_harvests) ? prev.selected_harvests : [];
+              const added = sh.date || sh.label ? [...shs, sh] : shs;
+              const uniq = (() => { const s = new Set(); return added.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; }); })();
+              const createdAt = o.created_at || o.createdAt || null;
+              const prevTs = prev.last_order_created_at ? new Date(prev.last_order_created_at).getTime() : -Infinity;
+              const curTs = createdAt ? new Date(createdAt).getTime() : -Infinity;
+              const mRaw = (o.mode_of_shipping || o.shipping_method || '').trim();
+              const mCanon = mRaw.toLowerCase() === 'pickup' ? 'Pickup' : (mRaw.toLowerCase() === 'delivery' ? 'Delivery' : (mRaw ? mRaw : null));
+              byField.set(fid, {
+                id: fid,
+                name,
+                category,
+                total_area,
+                purchased_area: (prev.purchased_area || 0) + qty,
+                coordinates,
+                selected_harvests: uniq,
+                delivery_address: (() => { const s = String(o.notes || ''); const m = s.match(/Address:\s*(.*)$/); if (m) return m[1].trim(); const m2 = s.match(/Deliver to:\s*(.*)$/); if (m2) return m2[1].trim(); return ''; })(),
+                last_order_selected_date: (curTs >= prevTs) ? (o.selected_harvest_date || null) : prev.last_order_selected_date || null,
+                last_order_shipping_mode: (curTs >= prevTs) ? mCanon : prev.last_order_shipping_mode || null,
+                last_order_created_at: (curTs >= prevTs) ? createdAt : prev.last_order_created_at || null,
+                last_order_purchased: (curTs >= prevTs)
+                  ? ((o.purchased === true)
+                    || (() => { const q = o.quantity ?? o.area_rented ?? o.area; const v = typeof q === 'string' ? parseFloat(q) : q; return Number.isFinite(v) && v > 0; })()
+                    || (() => { const s = String(o.status || '').toLowerCase(); return s === 'active' || s === 'pending'; })())
+                  : (prev.last_order_purchased === true)
+              });
+            }
+            const list = Array.from(byField.values());
+            setPurchasedProducts(prev => {
+              const map = new Map();
+              list.forEach(item => map.set(String(item.id ?? item.field_id), { ...item }));
+              prev.forEach(p => {
+                const key = String(p.id ?? p.field_id);
+                const existing = map.get(key);
+                if (existing) {
+                  const ex = typeof existing.purchased_area === 'string' ? parseFloat(existing.purchased_area) : (existing.purchased_area || 0);
+                  const pv = typeof p.purchased_area === 'string' ? parseFloat(p.purchased_area) : (p.purchased_area || 0);
+                  existing.purchased_area = Math.max(ex, pv);
+                  const shPrev = Array.isArray(existing.selected_harvests) ? existing.selected_harvests : [];
+                  const shIncoming = Array.isArray(p.selected_harvests) ? p.selected_harvests : [];
+                  const combined = [...shPrev, ...shIncoming];
+                  const s = new Set();
+                  existing.selected_harvests = combined.filter(it => { const d = (() => { if (!it?.date) return ''; try { const nd = new Date(it.date); if (!isNaN(nd.getTime())) return nd.toISOString().split('T')[0]; } catch { } return typeof it.date === 'string' ? it.date : ''; })(); const k = `${d}|${(it?.label || '').trim().toLowerCase()}`; if (s.has(k)) return false; s.add(k); return true; });
+                  const prevTs = p.last_order_created_at ? new Date(p.last_order_created_at).getTime() : -Infinity;
+                  const curTs = existing.last_order_created_at ? new Date(existing.last_order_created_at).getTime() : -Infinity;
+                  if (prevTs > curTs) {
+                    existing.last_order_selected_date = p.last_order_selected_date || existing.last_order_selected_date || null;
+                    existing.last_order_shipping_mode = p.last_order_shipping_mode || existing.last_order_shipping_mode || null;
+                    existing.last_order_created_at = p.last_order_created_at || existing.last_order_created_at || null;
+                    existing.last_order_purchased = (p.last_order_purchased === true) || existing.last_order_purchased === true;
+                  }
+                } else {
+                  map.set(key, { ...p });
                 }
-              } else {
-                map.set(key, { ...p });
-              }
+              });
+              return Array.from(map.values());
             });
-            return Array.from(map.values());
-          });
-          list.forEach(p => stablePurchasedIdsRef.current.add(p.id));
-          setRefreshTrigger(prev => prev + 1);
-        } catch { }
-      })());
-      if (onNotificationRefresh) onNotificationRefresh();
+            list.forEach(p => stablePurchasedIdsRef.current.add(p.id));
+            setRefreshTrigger(prev => prev + 1);
+          } catch { }
+        })());
+        if (onNotificationRefresh) onNotificationRefresh();
 
-      // Update UI to reflect purchase status (using API-based approach)
-      // The purchase status is now managed via the database, so we just update the local UI state
-      // In a full implementation, we would reload the fields from the API to get updated status
+        // Update UI to reflect purchase status (using API-based approach)
+        // The purchase status is now managed via the database, so we just update the local UI state
+        // In a full implementation, we would reload the fields from the API to get updated status
 
-      // If this is a farmer-created field, farm orders and notifications are managed via API above.
-      // (Order creation and farmer notification already handled; no hardcoded owner/buyer.)
-      if (product.isFarmerCreated) {
-        // Notification already sent above for product.farmer_id / product.owner_id
+        // If this is a farmer-created field, farm orders and notifications are managed via API above.
+        // (Order creation and farmer notification already handled; no hardcoded owner/buyer.)
+        if (product.isFarmerCreated) {
+          // Notification already sent above for product.farmer_id / product.owner_id
+        }
+
+      } catch (error) {
+        console.error('Failed to create order:', error);
+        if (onNotification) {
+          onNotification('Purchase failed. Please try again.', 'error');
+        }
+        setSelectedProduct(null);
+        setInsufficientFunds(false);
+        setQuantity(1);
       }
-
-    } catch (error) {
-      console.error('Failed to create order:', error);
-      if (onNotification) {
-        onNotification('Purchase failed. Please try again.', 'error');
-      }
-      setSelectedProduct(null);
-      setInsufficientFunds(false);
-      setQuantity(1);
-    }
     } finally {
       buyNowInProgressRef.current = false;
       setBuyNowInProgress(false);
@@ -3066,7 +3080,11 @@ const EnhancedFarmMap = forwardRef(({
           <MapboxMap
             ref={mapRef}
             {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
+            onMove={evt => {
+              if (!isMapAnimatingRef.current) {
+                setViewState(evt.viewState);
+              }
+            }}
             attributionControl={false}
             onClick={() => {
               setSelectedProduct(null);
@@ -3085,359 +3103,359 @@ const EnhancedFarmMap = forwardRef(({
             }}
           >
 
-        <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
-        <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
+            <NavigationControl position="top-right" style={{ marginTop: embedded ? '55px' : (isMobile ? '80px' : '110px'), marginRight: '10px' }} />
+            <FullscreenControl position="top-right" style={{ marginTop: embedded ? '10px' : (isMobile ? '30px' : '35px'), marginRight: '10px' }} />
 
-        {/* Current Location Marker with Pulsing Animation */}
-        {currentLocation && (
-          <Marker
-            longitude={currentLocation.longitude}
-            latitude={currentLocation.latitude}
-            anchor="center"
-          >
-            <div style={{ position: 'relative', width: '40px', height: '40px' }}>
-              {/* Pulsing circles */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(66, 133, 244, 0.3)',
-                  animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '30px',
-                  height: '30px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(66, 133, 244, 0.4)',
-                  animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.5s',
-                }}
-              />
-              {/* Blue location icon */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  backgroundColor: '#4285F4',
-                  border: '3px solid white',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                  zIndex: 10,
-                }}
-              />
-              {/* Inner dot */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: 'white',
-                  zIndex: 11,
-                }}
-              />
-            </div>
-          </Marker>
-        )}
-
-        <div
-          style={{
-            position: 'absolute',
-            top: embedded ? (isMobile ? '110px' : '120px') : (isMobile ? '220px' : '265px'),
-            right: '10px',
-            zIndex: 1
-          }}
-        >
-          <button
-            onClick={() => {
-              if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const { latitude, longitude } = pos.coords;
-                    setCurrentLocation({ latitude, longitude });
-                    if (mapRef.current) {
-                      mapRef.current.flyTo({ center: [longitude, latitude], zoom: 10, duration: 1000, essential: true });
-                    }
-                  },
-                  () => {
-                    setCurrentLocation(null);
-                    if (mapRef.current) {
-                      mapRef.current.flyTo({ center: [15, 45], zoom: 2, duration: 1000, essential: true });
-                    }
-                  }
-                );
-              }
-            }}
-            style={{
-              background: '#fff',
-              border: '2px solid rgba(0,0,0,.1)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              padding: '0',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              color: '#333',
-              boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
-              width: '29px',
-              height: '29px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Center on my location"
-          >
-            📍
-          </button>
-        </div>
-
-        {/* Home Control Button */}
-        <div
-          style={{
-            position: 'absolute',
-            top: isMobile ? '150px' : '200px',
-            right: '10px',
-            zIndex: 1
-          }}
-        >
-          <button
-            onClick={() => {
-              setSelectedProduct(null); // Close any open popup
-              setPopupPosition(null); // Also clear popup position
-              setInsufficientFunds(false);
-              if (mapRef.current) {
-                mapRef.current.flyTo({ center: [15, 45], zoom: 2, duration: 1000, essential: true });
-              }
-            }}
-            style={{
-              background: '#fff',
-              border: '2px solid rgba(0,0,0,.1)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              padding: '0',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              color: '#333',
-              boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
-              width: '29px',
-              height: '29px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Reset to home view"
-          >
-            <HomeWork style={{ fontSize: isMobile ? '18px' : '20px', color: '#2196F3' }} />
-          </button>
-        </div>
-
-
-
-        {/* Farm Markers */}
-        {(() => {
-
-          return filteredFarms.map((product) => {
-
-            // Handle coordinate format conversion and null checks
-            let longitude, latitude;
-
-            if (!product.coordinates) {
-              console.warn('⚠️ Skipping product with no coordinates:', product.name);
-              return null; // Skip rendering if no coordinates
-            }
-
-            if (Array.isArray(product.coordinates)) {
-              // Array format: [longitude, latitude]
-              longitude = product.coordinates[0];
-              latitude = product.coordinates[1];
-            } else if (typeof product.coordinates === 'object') {
-              // Object format: { lat: ..., lng: ... } or { latitude: ..., longitude: ... }
-              longitude = product.coordinates.lng || product.coordinates.longitude;
-              latitude = product.coordinates.lat || product.coordinates.latitude;
-            } else {
-              return null; // Skip if coordinates format is unknown
-            }
-
-            // Skip if coordinates are still null/undefined
-            if (longitude == null || latitude == null) {
-              return null;
-            }
-
-
-            return (
+            {/* Current Location Marker with Pulsing Animation */}
+            {currentLocation && (
               <Marker
-                key={product.id}
-                longitude={longitude}
-                latitude={latitude}
+                longitude={currentLocation.longitude}
+                latitude={currentLocation.latitude}
                 anchor="center"
               >
-                <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
-                  {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
-                    <img
-                      src={'/icons/effects/fric.gif'}
-                      alt="Harvest celebration effect"
-                      style={{
-                        position: 'absolute',
-                        left: '50%',
-                        top: '50%',
-                        width: `${harvestGifSize}px`,
-                        height: `${harvestGifSize}px`,
-                        transform: 'translate(-50%, -50%)',
-                        pointerEvents: 'none',
-                        zIndex: 9999,
-                        willChange: 'transform',
-                      }}
-                    />
-                  )}
-                  {isProductPurchased(product) && (() => {
-                    const size = isMobile ? 46 : 60;
-                    const strokeW = isMobile ? 4 : 5;
-                    const innerR = isMobile ? 18 : 22;
-                    const { progress } = getHarvestProgressInfo(product);
-                    const grad = getRingGradientByHarvest(product);
-                    const occ = getOccupiedArea(product);
-                    const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
-                    const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
-                    const r = (size / 2) - (strokeW / 2);
-                    const circumference = 2 * Math.PI * r;
-                    const dash = Math.max(0, Math.min(circumference, progress * circumference));
-                    const path = getPiePath(innerR, occRatio);
-                    const cx = size / 2;
-                    const cy = size / 2;
-                    const ringGradId = `ringGrad-${product.id}`;
-                    const glowId = `ringGlow-${product.id}`;
-                    const rentGradId = `rentGrad-${product.id}`;
-
-                    return (
-                      <svg
-                        width={size}
-                        height={size}
-                        style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1 }}
-                      >
-                        <defs>
-                          <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor={grad.start} stopOpacity="0.95" />
-                            <stop offset="100%" stopColor={grad.end} stopOpacity="0.95" />
-                          </linearGradient>
-                          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-                            <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#FFD8A8" floodOpacity="0.45" />
-                          </filter>
-                          <radialGradient id={rentGradId} cx="50%" cy="50%" r="50%">
-                            <stop offset="0%" stopColor="rgba(33,150,243,0.7)" />
-                            <stop offset="100%" stopColor="rgba(33,150,243,0.4)" />
-                          </radialGradient>
-                        </defs>
-                        <circle cx={cx} cy={cy} r={r} stroke={'rgba(255,255,255,0.30)'} strokeWidth={strokeW} fill="none" />
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={r}
-                          stroke={`url(#${ringGradId})`}
-                          strokeWidth={strokeW}
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeDasharray={`${dash} ${circumference}`}
-                          strokeDashoffset={0}
-                          transform={`rotate(-90 ${cx} ${cy})`}
-                          filter={`url(#${glowId})`}
-                        />
-                        <path d={path} fill={`url(#${rentGradId})`} stroke={'rgba(33,150,243,0.85)'} strokeWidth={1.1} transform={`translate(${cx - innerR}, ${cy - innerR})`} />
-                      </svg>
-                    );
-                  })()}
-                  {(isProductPurchased(product) && isHarvestWithinGrace(product, 4)) && (() => {
-                    const modes = getShippingModes(product).map(m => (m || '').toLowerCase());
-                    const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
-                    return mode ? addShippingOrbit(product, mode) : null;
-                  })()}
-                  <img
-                    src={getProductImageSrc(product)}
-                    alt={product.name || product.productName || 'Product'}
-                    onError={(e) => {
-                      // Debug: image failed, fallback to product icon
-                      // eslint-disable-next-line no-console
-                      console.warn('[Marker Image Error] Fallback to icon:', product.id, product.name, product.image);
-                      const fallback = getProductIcon(product.subcategory || product.category);
-                      if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
-                    }}
+                <div style={{ position: 'relative', width: '40px', height: '40px' }}>
+                  {/* Pulsing circles */}
+                  <div
                     style={{
-                      width: isMobile ? '20px' : '30px',
-                      height: isMobile ? '20px' : '30px',
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '40px',
+                      height: '40px',
                       borderRadius: '50%',
-                      objectFit: 'cover',
-                      display: 'block',
-                      position: 'relative',
-                      zIndex: 5,
-                      border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
-                      filter: isProductPurchased(product)
-                        ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
-                        : product.isFarmerCreated
-                          ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
-                          : 'none',
-                      backgroundColor: 'transparent',
-                      padding: '0',
-                      transition: 'all 0.3s ease',
-                      transformOrigin: 'center bottom',
-
-                      animation: isProductPurchased(product)
-                        ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite'
-                        : product.isFarmerCreated
-                          ? 'glow-farmer-created 3s infinite'
-                          : 'none',
-                      ...(harvestingIds.has(product.id) ? { animation: 'harvest-bounce 700ms ease-in-out infinite' } : {})
+                      backgroundColor: 'rgba(66, 133, 244, 0.3)',
+                      animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite',
                     }}
                   />
-                  {/* Farmer Created Badge */}
-                  {product.isFarmerCreated && (
-                    <div style={{
+                  <div
+                    style={{
                       position: 'absolute',
-                      top: isMobile ? '-5px' : '-8px',
-                      right: isMobile ? '-5px' : '-8px',
-                      width: isMobile ? '12px' : '16px',
-                      height: isMobile ? '12px' : '16px',
-                      backgroundColor: '#4CAF50',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '30px',
+                      height: '30px',
                       borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: isMobile ? '8px' : '10px',
-                      color: 'white',
-                      fontWeight: 'bold',
-                      border: '2px solid white',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      zIndex: 10
-                    }}>
-                      F
-                    </div>
-                  )}
+                      backgroundColor: 'rgba(66, 133, 244, 0.4)',
+                      animation: 'locationPulse 2s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.5s',
+                    }}
+                  />
+                  {/* Blue location icon */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      backgroundColor: '#4285F4',
+                      border: '3px solid white',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                      zIndex: 10,
+                    }}
+                  />
+                  {/* Inner dot */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: 'white',
+                      zIndex: 11,
+                    }}
+                  />
                 </div>
               </Marker>
-            );
-          }).filter(Boolean);
-        })()}
+            )}
+
+            <div
+              style={{
+                position: 'absolute',
+                top: embedded ? (isMobile ? '110px' : '120px') : (isMobile ? '220px' : '265px'),
+                right: '10px',
+                zIndex: 1
+              }}
+            >
+              <button
+                onClick={() => {
+                  if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => {
+                        const { latitude, longitude } = pos.coords;
+                        setCurrentLocation({ latitude, longitude });
+                        if (mapRef.current) {
+                          mapRef.current.flyTo({ center: [longitude, latitude], zoom: 10, duration: 1000, essential: true });
+                        }
+                      },
+                      () => {
+                        setCurrentLocation(null);
+                        if (mapRef.current) {
+                          mapRef.current.flyTo({ center: [15, 45], zoom: 2, duration: 1000, essential: true });
+                        }
+                      }
+                    );
+                  }
+                }}
+                style={{
+                  background: '#fff',
+                  border: '2px solid rgba(0,0,0,.1)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  padding: '0',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#333',
+                  boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
+                  width: '29px',
+                  height: '29px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Center on my location"
+              >
+                📍
+              </button>
+            </div>
+
+            {/* Home Control Button */}
+            <div
+              style={{
+                position: 'absolute',
+                top: isMobile ? '150px' : '200px',
+                right: '10px',
+                zIndex: 1
+              }}
+            >
+              <button
+                onClick={() => {
+                  setSelectedProduct(null); // Close any open popup
+                  setPopupPosition(null); // Also clear popup position
+                  setInsufficientFunds(false);
+                  if (mapRef.current) {
+                    mapRef.current.flyTo({ center: [15, 45], zoom: 2, duration: 1000, essential: true });
+                  }
+                }}
+                style={{
+                  background: '#fff',
+                  border: '2px solid rgba(0,0,0,.1)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  padding: '0',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#333',
+                  boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
+                  width: '29px',
+                  height: '29px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Reset to home view"
+              >
+                <HomeWork style={{ fontSize: isMobile ? '18px' : '20px', color: '#2196F3' }} />
+              </button>
+            </div>
 
 
-      </MapboxMap>
+
+            {/* Farm Markers */}
+            {(() => {
+
+              return filteredFarms.map((product) => {
+
+                // Handle coordinate format conversion and null checks
+                let longitude, latitude;
+
+                if (!product.coordinates) {
+                  console.warn('⚠️ Skipping product with no coordinates:', product.name);
+                  return null; // Skip rendering if no coordinates
+                }
+
+                if (Array.isArray(product.coordinates)) {
+                  // Array format: [longitude, latitude]
+                  longitude = product.coordinates[0];
+                  latitude = product.coordinates[1];
+                } else if (typeof product.coordinates === 'object') {
+                  // Object format: { lat: ..., lng: ... } or { latitude: ..., longitude: ... }
+                  longitude = product.coordinates.lng || product.coordinates.longitude;
+                  latitude = product.coordinates.lat || product.coordinates.latitude;
+                } else {
+                  return null; // Skip if coordinates format is unknown
+                }
+
+                // Skip if coordinates are still null/undefined
+                if (longitude == null || latitude == null) {
+                  return null;
+                }
+
+
+                return (
+                  <Marker
+                    key={product.id}
+                    longitude={longitude}
+                    latitude={latitude}
+                    anchor="center"
+                  >
+                    <div style={{ position: 'relative', cursor: 'pointer', transition: 'all 0.3s ease' }} onClick={(e) => handleProductClick(e, product)} >
+                      {(isProductPurchased(product) && showHarvestGifIds.has(product.id)) && (
+                        <img
+                          src={'/icons/effects/fric.gif'}
+                          alt="Harvest celebration effect"
+                          style={{
+                            position: 'absolute',
+                            left: '50%',
+                            top: '50%',
+                            width: `${harvestGifSize}px`,
+                            height: `${harvestGifSize}px`,
+                            transform: 'translate(-50%, -50%)',
+                            pointerEvents: 'none',
+                            zIndex: 9999,
+                            willChange: 'transform',
+                          }}
+                        />
+                      )}
+                      {isProductPurchased(product) && (() => {
+                        const size = isMobile ? 46 : 60;
+                        const strokeW = isMobile ? 4 : 5;
+                        const innerR = isMobile ? 18 : 22;
+                        const { progress } = getHarvestProgressInfo(product);
+                        const grad = getRingGradientByHarvest(product);
+                        const occ = getOccupiedArea(product);
+                        const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
+                        const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
+                        const r = (size / 2) - (strokeW / 2);
+                        const circumference = 2 * Math.PI * r;
+                        const dash = Math.max(0, Math.min(circumference, progress * circumference));
+                        const path = getPiePath(innerR, occRatio);
+                        const cx = size / 2;
+                        const cy = size / 2;
+                        const ringGradId = `ringGrad-${product.id}`;
+                        const glowId = `ringGlow-${product.id}`;
+                        const rentGradId = `rentGrad-${product.id}`;
+
+                        return (
+                          <svg
+                            width={size}
+                            height={size}
+                            style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1 }}
+                          >
+                            <defs>
+                              <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor={grad.start} stopOpacity="0.95" />
+                                <stop offset="100%" stopColor={grad.end} stopOpacity="0.95" />
+                              </linearGradient>
+                              <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+                                <feDropShadow dx="0" dy="0" stdDeviation="2.4" floodColor="#FFD8A8" floodOpacity="0.45" />
+                              </filter>
+                              <radialGradient id={rentGradId} cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stopColor="rgba(33,150,243,0.7)" />
+                                <stop offset="100%" stopColor="rgba(33,150,243,0.4)" />
+                              </radialGradient>
+                            </defs>
+                            <circle cx={cx} cy={cy} r={r} stroke={'rgba(255,255,255,0.30)'} strokeWidth={strokeW} fill="none" />
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={r}
+                              stroke={`url(#${ringGradId})`}
+                              strokeWidth={strokeW}
+                              fill="none"
+                              strokeLinecap="round"
+                              strokeDasharray={`${dash} ${circumference}`}
+                              strokeDashoffset={0}
+                              transform={`rotate(-90 ${cx} ${cy})`}
+                              filter={`url(#${glowId})`}
+                            />
+                            <path d={path} fill={`url(#${rentGradId})`} stroke={'rgba(33,150,243,0.85)'} strokeWidth={1.1} transform={`translate(${cx - innerR}, ${cy - innerR})`} />
+                          </svg>
+                        );
+                      })()}
+                      {(isProductPurchased(product) && isHarvestWithinGrace(product, 4)) && (() => {
+                        const modes = getShippingModes(product).map(m => (m || '').toLowerCase());
+                        const mode = modes.includes('pickup') ? 'pickup' : (modes.includes('delivery') ? 'delivery' : null);
+                        return mode ? addShippingOrbit(product, mode) : null;
+                      })()}
+                      <img
+                        src={getProductImageSrc(product)}
+                        alt={product.name || product.productName || 'Product'}
+                        onError={(e) => {
+                          // Debug: image failed, fallback to product icon
+                          // eslint-disable-next-line no-console
+                          console.warn('[Marker Image Error] Fallback to icon:', product.id, product.name, product.image);
+                          const fallback = getProductIcon(product.subcategory || product.category);
+                          if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                        }}
+                        style={{
+                          width: isMobile ? '20px' : '30px',
+                          height: isMobile ? '20px' : '30px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          display: 'block',
+                          position: 'relative',
+                          zIndex: 5,
+                          border: product.isFarmerCreated ? '3px solid #4CAF50' : 'none',
+                          filter: isProductPurchased(product)
+                            ? 'brightness(1) drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 25px rgba(255, 255, 255, 0.7))'
+                            : product.isFarmerCreated
+                              ? 'brightness(1.1) drop-shadow(0 0 8px rgba(76, 175, 80, 0.6)) drop-shadow(0 0 16px rgba(76, 175, 80, 0.4))'
+                              : 'none',
+                          backgroundColor: 'transparent',
+                          padding: '0',
+                          transition: 'all 0.3s ease',
+                          transformOrigin: 'center bottom',
+
+                          animation: isProductPurchased(product)
+                            ? 'glow-pulse-white 1.5s infinite, heartbeat 2s infinite'
+                            : product.isFarmerCreated
+                              ? 'glow-farmer-created 3s infinite'
+                              : 'none',
+                          ...(harvestingIds.has(product.id) ? { animation: 'harvest-bounce 700ms ease-in-out infinite' } : {})
+                        }}
+                      />
+                      {/* Farmer Created Badge */}
+                      {product.isFarmerCreated && (
+                        <div style={{
+                          position: 'absolute',
+                          top: isMobile ? '-5px' : '-8px',
+                          right: isMobile ? '-5px' : '-8px',
+                          width: isMobile ? '12px' : '16px',
+                          height: isMobile ? '12px' : '16px',
+                          backgroundColor: '#4CAF50',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: isMobile ? '8px' : '10px',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          border: '2px solid white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          zIndex: 10
+                        }}>
+                          F
+                        </div>
+                      )}
+                    </div>
+                  </Marker>
+                );
+              }).filter(Boolean);
+            })()}
+
+
+          </MapboxMap>
         </div>
       </div>
 
-    
+
 
       {/* Delivery Toggle Icon - top-left of map container */}
       <div
@@ -4734,21 +4752,21 @@ const EnhancedFarmMap = forwardRef(({
                         });
                       }}
                       style={{
-                      width: '100%',
-                      backgroundColor: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      padding: isMobile ? '8px 0' : '10px 0',
-                      fontSize: isMobile ? '11px' : '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      marginTop: '8px',
-                      boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
-                      transition: 'all 0.2s ease',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.025em'
-                    }}>
+                        width: '100%',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: isMobile ? '8px 0' : '10px 0',
+                        fontSize: isMobile ? '11px' : '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        marginTop: '8px',
+                        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+                        transition: 'all 0.2s ease',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.025em'
+                      }}>
                       Buy More Area
                     </button>
                   </div>

@@ -142,11 +142,11 @@ const FarmerView = () => {
     const fieldId = searchParams.get('field_id');
     if (fieldId && mapRef.current) {
       // Find the field in the loaded fields
-      const field = fields.find(f => f.id === fieldId);
+      const field = fields.find(f => String(f.id) === String(fieldId));
       if (field) {
-        const coordinates = field.coordinates || 
-          (field.longitude && field.latitude 
-            ? [field.longitude, field.latitude] 
+        const coordinates = field.coordinates ||
+          (field.longitude && field.latitude
+            ? [field.longitude, field.latitude]
             : null);
         if (coordinates) {
           // Small delay to ensure map is ready
@@ -170,9 +170,9 @@ const FarmerView = () => {
           .then(response => {
             const fetchedField = response.data;
             if (fetchedField && mapRef.current && mapRef.current.zoomToFarm) {
-              const coordinates = fetchedField.coordinates || 
-                (fetchedField.longitude && fetchedField.latitude 
-                  ? [fetchedField.longitude, fetchedField.latitude] 
+              const coordinates = fetchedField.coordinates ||
+                (fetchedField.longitude && fetchedField.latitude
+                  ? [fetchedField.longitude, fetchedField.latitude]
                   : null);
               if (coordinates) {
                 const farmData = {
