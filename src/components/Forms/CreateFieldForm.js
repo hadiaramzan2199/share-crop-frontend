@@ -1832,7 +1832,8 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                 </Grid>
               </FormSection>
 
-              {/* Availability: Rent is optional; buy is always on */}
+              {/* Rent disabled – only buy for now. Availability section (rent checkbox + rent price/duration) commented out. */}
+              {false && (
               <FormSection>
                 <SectionTitle sx={{ fontSize: isMobile ? '16px' : '1.5rem' }}>Availability</SectionTitle>
                 <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
@@ -1906,6 +1907,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                   )}
                 </Grid>
               </FormSection>
+              )}
 
               {/* Shipping & Delivery Section */}
               <FormSection>

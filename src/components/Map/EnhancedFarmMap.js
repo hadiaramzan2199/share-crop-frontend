@@ -241,21 +241,15 @@ const EnhancedFarmMap = forwardRef(({
     setSelectedHarvestDate(null);
     setPopupTab('details');
     const availBuy = product.available_for_buy !== false && product.available_for_buy !== 'false';
-    const availRent = product.available_for_rent === true || product.available_for_rent === 'true';
-    const hasRentPrice = product.rent_price_per_month != null && product.rent_price_per_month !== '' && !isNaN(parseFloat(product.rent_price_per_month));
-    const hasRentDuration = (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') ||
-      (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') ||
-      (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true');
-    const canRent = availRent && hasRentPrice && hasRentDuration;
-    if (availBuy) setPurchaseMode('buy');
-    else if (canRent) setPurchaseMode('rent');
-    else setPurchaseMode('buy');
-    if (canRent) {
-      if (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') setRentDuration('monthly');
-      else if (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') setRentDuration('quarterly');
-      else if (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true') setRentDuration('yearly');
-    }
-    setShowPurchaseUI(true);
+    // Rent disabled for now – only buy
+    // const availRent = product.available_for_rent === true || product.available_for_rent === 'true';
+    // const hasRentPrice = product.rent_price_per_month != null && product.rent_price_per_month !== '' && !isNaN(parseFloat(product.rent_price_per_month));
+    // const hasRentDuration = (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') || (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') || (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true');
+    // const canRent = availRent && hasRentPrice && hasRentDuration;
+    setPurchaseMode('buy');
+    // if (canRent) { if (product.rent_duration_monthly === true || product.rent_duration_monthly === 'true') setRentDuration('monthly'); else if (product.rent_duration_quarterly === true || product.rent_duration_quarterly === 'true') setRentDuration('quarterly'); else if (product.rent_duration_yearly === true || product.rent_duration_yearly === 'true') setRentDuration('yearly'); }
+    const alreadyPurchased = isProductPurchased(product);
+    setShowPurchaseUI(!alreadyPurchased);
 
 
     if (product.coordinates) {
@@ -291,7 +285,7 @@ const EnhancedFarmMap = forwardRef(({
     if (onProductSelect) {
       onProductSelect(product);
     }
-  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile]);
+  }, [onProductSelect, fetchLocationForProduct, fetchWeatherForProduct, isMobile, isProductPurchased]);
   const [selectedIcons, setSelectedIcons] = useState(new Set());
   const [showPurchaseUI, setShowPurchaseUI] = useState(true);
   const celebratedHarvestIdsRef = useRef(new Set());
@@ -315,6 +309,7 @@ const EnhancedFarmMap = forwardRef(({
   const [rentInProgress, setRentInProgress] = useState(false);
   const [webcamPopupOpen, setWebcamPopupOpen] = useState(false);
   const [selectedFarmForWebcam, setSelectedFarmForWebcam] = useState(null);
+  const popupContentScrollRef = useRef(null);
 
   const extractCityCountry = useCallback((s) => {
     const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -1680,28 +1675,38 @@ const EnhancedFarmMap = forwardRef(({
   /** Cache of icon URL -> data URL so Google 3D markers can embed images (avoids load/CORS in iframe). */
   const [iconDataUrlCache, setIconDataUrlCache] = useState({});
 
-  /** Build the same marker SVG as Mapbox for use on Google 3D globe. Tweak size here if markers feel too big/small on the globe. */
+  /** Build the same marker SVG as Mapbox for use on Google 3D globe. Circular bar (harvest ring + occupied pie) and pulsing only for purchased/rented, same as Mapbox. */
   const getMarkerSvgForGoogle = useCallback((product, isMobileMarker = false, dataUrlCache = {}) => {
     if (!product?.id) return '';
-    // Google globe marker size (desktop / mobile): decrease for smaller markers, increase for bigger
     const size = isMobileMarker ? 38 : 50;
     const strokeW = isMobileMarker ? 3 : 3;
     const innerR = isMobileMarker ? 13 : 17;
     const imgSize = isMobileMarker ? 18 : 26;
-    const { progress } = getHarvestProgressInfo(product);
-    const grad = getRingGradientByHarvest(product);
-    const occ = getOccupiedArea(product);
-    const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
-    const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
-    const r = (size / 2) - (strokeW / 2);
-    const circumference = 2 * Math.PI * r;
-    const dash = Math.max(0, Math.min(circumference, progress * circumference));
-    const path = getPiePath(innerR, occRatio);
     const cx = size / 2;
     const cy = size / 2;
-    const ringGradId = `g-ring-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
-    const glowId = `g-glow-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
-    const rentGradId = `g-rent-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const r = (size / 2) - (strokeW / 2);
+    const purchased = isProductPurchased(product);
+
+    let harvestRingSvg = '';
+    let rentPieSvg = '';
+    let extraRingSvg = '';
+    if (purchased) {
+      const { progress } = getHarvestProgressInfo(product);
+      const grad = getRingGradientByHarvest(product);
+      const occ = getOccupiedArea(product);
+      const total = typeof product.total_area === 'string' ? parseFloat(product.total_area) : (product.total_area || 0);
+      const occRatio = total > 0 ? Math.max(0, Math.min(1, occ / total)) : 0;
+      const circumference = 2 * Math.PI * r;
+      const dash = Math.max(0, Math.min(circumference, progress * circumference));
+      const path = getPiePath(innerR, occRatio);
+      const ringGradId = `g-ring-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+      const glowId = `g-glow-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+      const rentGradId = `g-rent-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
+      harvestRingSvg = `<linearGradient id="${ringGradId}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${grad.start}" stop-opacity="0.95"/><stop offset="100%" stop-color="${grad.end}" stop-opacity="0.95"/></linearGradient><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="2.4" flood-color="#FFD8A8" flood-opacity="0.45"/></filter><radialGradient id="${rentGradId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(33,150,243,0.7)"/><stop offset="100%" stop-color="rgba(33,150,243,0.4)"/></radialGradient>`;
+      rentPieSvg = `<circle cx="${cx}" cy="${cy}" r="${r}" stroke="rgba(255,255,255,0.30)" stroke-width="${strokeW}" fill="none"/><circle cx="${cx}" cy="${cy}" r="${r}" stroke="url(#${ringGradId})" stroke-width="${strokeW}" fill="none" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})" filter="url(#${glowId})"/><path d="${path}" fill="url(#${rentGradId})" stroke="rgba(33,150,243,0.85)" stroke-width="1.1" transform="translate(${cx - innerR}, ${cy - innerR})"/>`;
+      extraRingSvg = `<circle cx="${cx}" cy="${cy}" r="${r + 2}" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>`;
+    }
+
     const clipId = `g-clip-${String(product.id).replace(/[^a-z0-9_-]/gi, '_')}`;
     const urlKey = getProductImageSrc(product);
     let imgSrc = (dataUrlCache && dataUrlCache[urlKey]) || '';
@@ -1711,8 +1716,17 @@ const EnhancedFarmMap = forwardRef(({
     }
     const imgX = (size - imgSize) / 2;
     const imgY = (size - imgSize) / 2;
-    const purchased = isProductPurchased(product);
-    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><defs><linearGradient id="${ringGradId}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${grad.start}" stop-opacity="0.95"/><stop offset="100%" stop-color="${grad.end}" stop-opacity="0.95"/></linearGradient><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="2.4" flood-color="#FFD8A8" flood-opacity="0.45"/></filter><radialGradient id="${rentGradId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(33,150,243,0.7)"/><stop offset="100%" stop-color="rgba(33,150,243,0.4)"/></radialGradient><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${imgSize/2}"/></clipPath></defs><circle cx="${cx}" cy="${cy}" r="${r}" stroke="rgba(255,255,255,0.30)" stroke-width="${strokeW}" fill="none"/><circle cx="${cx}" cy="${cy}" r="${r}" stroke="url(#${ringGradId})" stroke-width="${strokeW}" fill="none" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})" filter="url(#${glowId})"/><path d="${path}" fill="url(#${rentGradId})" stroke="rgba(33,150,243,0.85)" stroke-width="1.1" transform="translate(${cx - innerR}, ${cy - innerR})"/><image href="${imgSrc || ''}" xlink:href="${imgSrc || ''}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>${purchased ? '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r + 2) + '" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>' : ''}</svg>`;
+
+    const keyframes = purchased
+      ? '<style>@keyframes g-glow-pulse{0%{filter:brightness(1) drop-shadow(0 0 12px rgba(255,255,255,0.9));transform:scale(1)}50%{filter:brightness(1.2) drop-shadow(0 0 20px rgba(255,255,255,1));transform:scale(1.05)}100%{filter:brightness(1) drop-shadow(0 0 12px rgba(255,255,255,0.9));transform:scale(1)}}@keyframes g-heartbeat{0%,50%,100%{transform:scale(1)}25%,75%{transform:scale(1.1)}}</style>'
+      : '';
+
+    const imageEl = `<image href="${imgSrc || ''}" xlink:href="${imgSrc || ''}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>`;
+    const imageWithPulse = purchased
+      ? `<g style="animation: g-glow-pulse 1.5s ease-in-out infinite, g-heartbeat 2s ease-in-out infinite; transform-origin: 50% 50%;"><image href="${imgSrc || ''}" xlink:href="${imgSrc || ''}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/></g>`
+      : imageEl;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><defs>${keyframes}${harvestRingSvg}<clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${imgSize / 2}"/></clipPath></defs>${purchased ? rentPieSvg : ''}${imageWithPulse}${extraRingSvg}</svg>`;
   }, [getHarvestProgressInfo, getRingGradientByHarvest, getPiePath, getProductImageSrc, getOccupiedArea, isProductPurchased]);
 
   // const isHarvestReached = useCallback((prod) => {
@@ -3704,14 +3718,17 @@ const EnhancedFarmMap = forwardRef(({
             </div>
 
             {/* Content */}
-            <div style={{
-              padding: isMobile ? '0 12px 12px' : '0 16px 16px',
-              position: 'relative',
-              maxHeight: '75vh',
-              overflowY: 'auto',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none'
-            }}>
+            <div
+              ref={popupContentScrollRef}
+              style={{
+                padding: isMobile ? '0 12px 12px' : '0 16px 16px',
+                position: 'relative',
+                maxHeight: '75vh',
+                overflowY: 'auto',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}
+            >
               <style>
                 {`@keyframes popupPulse { 0% { transform: scale(1); } 100% { transform: scale(1.07); } }`}
               </style>
@@ -4030,8 +4047,8 @@ const EnhancedFarmMap = forwardRef(({
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         {/* Left Side - Quantity, Price, Shipping */}
                         <div style={{ flex: 1 }}>
-                          {/* Buy vs Rent (farmers); show only modes allowed by field */}
-                          {showPurchaseUI && (currentUser?.user_type || '').toLowerCase() === 'farmer' && (() => {
+                          {/* Rent disabled: Buy vs Rent toggle and Rent duration commented out – only buy for now */}
+                          {/* {showPurchaseUI && (currentUser?.user_type || '').toLowerCase() === 'farmer' && (() => {
                             const availBuy = selectedProduct.available_for_buy !== false && selectedProduct.available_for_buy !== 'false';
                             const availRent = selectedProduct.available_for_rent === true || selectedProduct.available_for_rent === 'true';
                             const hasRentPrice = selectedProduct.rent_price_per_month != null && selectedProduct.rent_price_per_month !== '' && !isNaN(parseFloat(selectedProduct.rent_price_per_month));
@@ -4045,38 +4062,21 @@ const EnhancedFarmMap = forwardRef(({
                             if (modes.length === 0) return null;
                             return (
                               <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
-                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>
-                                  I want to:
-                                </div>
+                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>I want to:</div>
                                 <div style={{ display: 'flex', gap: '6px' }}>
                                   {modes.map((mode) => (
-                                    <div
-                                      key={mode}
-                                      role="button"
-                                      aria-pressed={purchaseMode === mode}
-                                      tabIndex={0}
-                                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setPurchaseMode(mode); } }}
+                                    <div key={mode} role="button" aria-pressed={purchaseMode === mode} tabIndex={0}
+                                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setPurchaseMode(mode); }}
                                       onClick={() => setPurchaseMode(mode)}
-                                      style={{
-                                        padding: '4px 10px',
-                                        backgroundColor: purchaseMode === mode ? '#007bff' : '#f8f9fa',
-                                        color: purchaseMode === mode ? 'white' : '#6c757d',
-                                        borderRadius: '4px',
-                                        fontSize: '11px',
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        border: purchaseMode === mode ? 'none' : '1px solid #e9ecef',
-                                        textTransform: 'capitalize',
-                                      }}
-                                    >
+                                      style={{ padding: '4px 10px', backgroundColor: purchaseMode === mode ? '#007bff' : '#f8f9fa', color: purchaseMode === mode ? 'white' : '#6c757d', borderRadius: '4px', fontSize: '11px', fontWeight: 500, cursor: 'pointer', border: purchaseMode === mode ? 'none' : '1px solid #e9ecef', textTransform: 'capitalize' }}>
                                       {mode === 'buy' ? 'Buy' : 'Rent'}
                                     </div>
                                   ))}
                                 </div>
                               </div>
                             );
-                          })()}
-                          {/* Rent duration (when Rent is selected and field offers rent) */}
+                          })()} */}
+                          {/* Rent duration – disabled
                           {showPurchaseUI && purchaseMode === 'rent' && (() => {
                             const monthly = selectedProduct.rent_duration_monthly === true || selectedProduct.rent_duration_monthly === 'true';
                             const quarterly = selectedProduct.rent_duration_quarterly === true || selectedProduct.rent_duration_quarterly === 'true';
@@ -4088,29 +4088,13 @@ const EnhancedFarmMap = forwardRef(({
                             if (options.length === 0) return null;
                             return (
                               <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
-                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>
-                                  Rent duration:
-                                </div>
+                                <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d', marginBottom: '4px', fontWeight: 500 }}>Rent duration:</div>
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                   {options.map((opt) => (
-                                    <div
-                                      key={opt.key}
-                                      role="button"
-                                      aria-pressed={rentDuration === opt.key}
-                                      tabIndex={0}
+                                    <div key={opt.key} role="button" aria-pressed={rentDuration === opt.key} tabIndex={0}
                                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setRentDuration(opt.key); }}
                                       onClick={() => setRentDuration(opt.key)}
-                                      style={{
-                                        padding: '4px 8px',
-                                        backgroundColor: rentDuration === opt.key ? '#059669' : '#f8f9fa',
-                                        color: rentDuration === opt.key ? 'white' : '#6c757d',
-                                        borderRadius: '4px',
-                                        fontSize: '11px',
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        border: rentDuration === opt.key ? 'none' : '1px solid #e9ecef',
-                                      }}
-                                    >
+                                      style={{ padding: '4px 8px', backgroundColor: rentDuration === opt.key ? '#059669' : '#f8f9fa', color: rentDuration === opt.key ? 'white' : '#6c757d', borderRadius: '4px', fontSize: '11px', fontWeight: 500, cursor: 'pointer', border: rentDuration === opt.key ? 'none' : '1px solid #e9ecef' }}>
                                       {opt.label}
                                     </div>
                                   ))}
@@ -4118,6 +4102,7 @@ const EnhancedFarmMap = forwardRef(({
                               </div>
                             );
                           })()}
+                          */}
                           {/* Quantity Selector */}
                           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -4177,17 +4162,11 @@ const EnhancedFarmMap = forwardRef(({
                             </div>
                           </div>
 
-                          {/* Price Info */}
+                          {/* Price Info – rent disabled, only buy */}
                           <div style={{ marginBottom: isMobile ? '6px' : '8px' }}>
-                            {purchaseMode === 'rent' ? (
-                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                                Rent {(parseFloat(selectedProduct.rent_price_per_month) || 0).toFixed(2)}$/m²/month
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
-                                Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
-                              </div>
-                            )}
+                            <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
+                              Price {(parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || parseFloat(selectedProduct.sellingPrice) || 0).toFixed(2)}$/m²
+                            </div>
                             <div style={{ fontSize: isMobile ? '10px' : '12px', color: '#6c757d' }}>
                               Exp Prod {selectedProduct.production_rate || selectedProduct.productionRate || 'N/A'} {selectedProduct.production_rate_unit || 'Kg'}
                             </div>
@@ -4372,28 +4351,14 @@ const EnhancedFarmMap = forwardRef(({
                           marginLeft: isMobile ? '8px' : '12px'
                         }}>
                           {showPurchaseUI && (
+                            /* Rent disabled – only BUY NOW
                             purchaseMode === 'rent' ? (
-                              <button
-                                onClick={() => handleRentNow(selectedProduct)}
-                                disabled={rentInProgress}
-                                style={{
-                                  width: '100%',
-                                  backgroundColor: rentInProgress ? '#6c757d' : '#059669',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: isMobile ? '4px' : '6px',
-                                  padding: isMobile ? '6px 0' : '8px 0',
-                                  fontSize: isMobile ? '10px' : '12px',
-                                  fontWeight: 600,
-                                  cursor: rentInProgress ? 'not-allowed' : 'pointer',
-                                  opacity: rentInProgress ? 0.7 : 1,
-                                  marginBottom: isMobile ? '6px' : '8px',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                              >
+                              <button onClick={() => handleRentNow(selectedProduct)} disabled={rentInProgress}
+                                style={{ width: '100%', backgroundColor: rentInProgress ? '#6c757d' : '#059669', color: 'white', border: 'none', borderRadius: isMobile ? '4px' : '6px', padding: isMobile ? '6px 0' : '8px 0', fontSize: isMobile ? '10px' : '12px', fontWeight: 600, cursor: rentInProgress ? 'not-allowed' : 'pointer', opacity: rentInProgress ? 0.7 : 1, marginBottom: isMobile ? '6px' : '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                                 {rentInProgress ? 'Renting…' : 'RENT'}
                               </button>
-                            ) : shippingError ? (
+                            ) : */
+                            shippingError ? (
                               <div style={{
                                 width: isMobile ? '92%' : '98%',
                                 margin: isMobile ? '0 0 6px 0' : '0 8px 8px 0',
@@ -4435,14 +4400,9 @@ const EnhancedFarmMap = forwardRef(({
                             )
                           )}
 
-                          {/* Total Price */}
+                          {/* Total Price – rent disabled, buy only */}
                           {(() => {
-                            const isRent = purchaseMode === 'rent';
-                            const rentPricePerMonth = parseFloat(selectedProduct.rent_price_per_month) || 0;
-                            const months = rentDuration === 'monthly' ? 1 : rentDuration === 'quarterly' ? 3 : 12;
-                            const totalCostInDollars = isRent && rentPricePerMonth > 0
-                              ? rentPricePerMonth * quantity * months
-                              : ((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity);
+                            const totalCostInDollars = (parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity;
                             const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
                             return (
                               <>
@@ -4670,11 +4630,10 @@ const EnhancedFarmMap = forwardRef(({
                   </div>
                   {(() => {
                     const availBuy = selectedProduct.available_for_buy !== false && selectedProduct.available_for_buy !== 'false';
-                    const availRent = selectedProduct.available_for_rent === true || selectedProduct.available_for_rent === 'true';
-                    if (!availBuy && !availRent) return null;
+                    if (!availBuy) return null;
                     return (
                       <div style={{ fontSize: isMobile ? '10px' : '11px', color: '#64748b', marginBottom: isMobile ? '8px' : '10px' }}>
-                        Your field. Listed for {availBuy && availRent ? 'buy and rent' : availRent ? 'rent' : 'buy'}.
+                        Your field. Listed for buy.
                       </div>
                     );
                   })()}
@@ -4716,7 +4675,7 @@ const EnhancedFarmMap = forwardRef(({
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '8px' : '10px' }}>
-                    <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Your rented: {formatAreaInt(((() => { const pidA = selectedProduct?.id ?? selectedProduct?.field_id; const byId = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(pidA)); if (byId) return byId.purchased_area || 0; const canonProd = canonicalizeCategory(selectedProduct?.subcategory || selectedProduct?.category || selectedProduct?.category_key || selectedProduct?.id); const matches = purchasedProducts.filter(p => { const kp = canonicalizeCategory(p?.subcategory || p?.category || p?.category_key || p?.id); return kp.key === canonProd.key; }); return matches.length === 1 ? (matches[0].purchased_area || 0) : 0; })()))}m²</div>
+                    <div style={{ color: '#6c757d', fontWeight: 500, fontSize: isMobile ? '10px' : '12px' }}>Your purchased: {formatAreaInt(((() => { const pidA = selectedProduct?.id ?? selectedProduct?.field_id; const byId = purchasedProducts.find(p => String(p.id ?? p.field_id) === String(pidA)); if (byId) return byId.purchased_area || 0; const canonProd = canonicalizeCategory(selectedProduct?.subcategory || selectedProduct?.category || selectedProduct?.category_key || selectedProduct?.id); const matches = purchasedProducts.filter(p => { const kp = canonicalizeCategory(p?.subcategory || p?.category || p?.category_key || p?.id); return kp.key === canonProd.key; }); return matches.length === 1 ? (matches[0].purchased_area || 0) : 0; })()))}m²</div>
                     <div style={{ fontWeight: 600, color: '#212529', fontSize: isMobile ? '11px' : '12px' }}>Available: {formatAreaInt(getAvailableArea(selectedProduct))}m²</div>
                   </div>
 
@@ -4731,7 +4690,17 @@ const EnhancedFarmMap = forwardRef(({
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: isMobile ? '10px' : '12px' }}>
-                    <button onClick={() => setShowPurchaseUI(true)} style={{
+                    <button
+                      onClick={() => {
+                        setShowPurchaseUI(true);
+                        setPopupTab('details');
+                        requestAnimationFrame(() => {
+                          if (popupContentScrollRef.current) {
+                            popupContentScrollRef.current.scrollTop = 0;
+                          }
+                        });
+                      }}
+                      style={{
                       width: '100%',
                       backgroundColor: '#3b82f6',
                       color: 'white',

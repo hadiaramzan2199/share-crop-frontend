@@ -1101,6 +1101,7 @@ const RentedFields = () => {
                         >
                           <EditIcon sx={{ fontSize: 18 }} />
                         </IconButton>
+                        {/* Rent disabled – only buy for now
                         <IconButton
                           size="small"
                           onClick={(e) => { e.stopPropagation(); openEditRent(field); }}
@@ -1115,6 +1116,7 @@ const RentedFields = () => {
                         >
                           <RentIcon sx={{ fontSize: 18 }} />
                         </IconButton>
+                        */}
                       </Stack>
                     )}
                   </Box>
@@ -1603,6 +1605,7 @@ const RentedFields = () => {
               >
                 Edit field
               </Button>
+              {/* Rent disabled – only buy for now
               <Button
                 onClick={() => { openEditRent(selectedField); handleCloseFieldDetail(); }}
                 variant="outlined"
@@ -1619,6 +1622,7 @@ const RentedFields = () => {
               >
                 Rent settings
               </Button>
+              */}
             </>
           )}
           <Button
