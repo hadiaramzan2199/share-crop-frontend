@@ -136,12 +136,12 @@ function loadGoogleMaps3D(apiKey) {
     const callbackName = c + '.maps.' + q;
     window.google = window.google || {};
     window.google.maps = window.google.maps || {};
+    // Note: Cannot use DEBUG_LOG here - bootstrap function is stringified and executed in different scope
     window.google.maps[q] = function() {
-      DEBUG_LOG('GoogleGlobeMap.js:bootstrap', 'Callback __ib__ fired', {
-        hasGoogleMaps: !!window.google?.maps,
-        hasImportLibrary: !!window.google?.maps?.importLibrary
-      });
       // Callback will resolve the promise
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[Google Maps Bootstrap] Callback __ib__ fired');
+      }
     };
     
     const u = () => {
@@ -152,52 +152,17 @@ function loadGoogleMaps3D(apiKey) {
         e.set('callback', callbackName);
         a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
         
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'Creating external Google Maps script', {
-          scriptSrc: a.src.substring(0, 100) + '...',
-          callbackName
-        });
-        // #endregion
-        
+        // Note: Cannot use DEBUG_LOG inside bootstrap - it's stringified
         d[q] = (result) => {
-          DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'External script callback fired', {
-            hasResult: !!result,
-            hasError: result instanceof Error,
-            hasImportLibrary: !!d[l]
-          });
           f(result);
         };
         
-        a.onload = () => {
-          DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'External script onload fired', {
-            hasGoogleMaps: !!window.google?.maps,
-            hasCallback: !!window.google?.maps?.[q]
-          });
-        };
-        
-        a.onerror = (err) => {
-          DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'External script onerror fired', {
-            error: err?.message || 'Unknown'
-          });
+        a.onerror = () => {
           h = n(new Error(p + ' could not load.'));
         };
         
         a.nonce = m.querySelector('script[nonce]')?.nonce || '';
-        
-        DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'Appending external script', {
-          hasNonce: !!a.nonce,
-          scriptSrc: a.src.substring(0, 80) + '...'
-        });
-        
         m.head.append(a);
-        
-        // Check if script was actually appended
-        setTimeout(() => {
-          DEBUG_LOG('GoogleGlobeMap.js:bootstrap:external', 'Post-append check', {
-            scriptInDOM: document.head.contains(a),
-            hasGoogleMaps: !!window.google?.maps
-          });
-        }, 500);
       });
       return h;
     };
@@ -636,32 +601,11 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
     
     if (!container) {
       // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ref not ready, will retry', { 
-        documentReady: document.readyState,
-        willRetry: true
+      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ref not ready', { 
+        documentReady: document.readyState
       });
       // #endregion
-      // Retry after container is ready - use requestAnimationFrame for DOM readiness
-      let retryCount = 0;
-      const maxRetries = 50; // 5 seconds max
-      const checkContainer = () => {
-        retryCount++;
-        const currentContainer = containerRef.current;
-        if (currentContainer && currentContainer.offsetWidth > 0 && currentContainer.offsetHeight > 0) {
-          // #region agent log
-          DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ready after retry', { retryCount });
-          // #endregion
-          // Force re-run effect by updating a state
-          setMapReady(false);
-        } else if (retryCount < maxRetries) {
-          requestAnimationFrame(checkContainer);
-        } else {
-          // #region agent log
-          DEBUG_LOG('GoogleGlobeMap.js:236', 'Container retry timeout', { retryCount });
-          // #endregion
-        }
-      };
-      requestAnimationFrame(checkContainer);
+      // Don't retry here - let useEffect re-run naturally when container becomes available
       return;
     }
     
@@ -673,7 +617,7 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
         height: container.offsetHeight
       });
       // #endregion
-      // Wait for container to get dimensions
+      // Wait for container to get dimensions - but don't trigger state updates that cause loops
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
@@ -684,8 +628,7 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
               height: entry.contentRect.height
             });
             // #endregion
-            // Force re-run
-            setMapReady(false);
+            // Don't call setMapReady here - it causes infinite loops. Let the effect re-run naturally.
             break;
           }
         }
