@@ -153,16 +153,49 @@ function loadGoogleMaps3D(apiKey) {
         a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
         
         // Note: Cannot use DEBUG_LOG inside bootstrap - it's stringified
+        // But we can use console.log which is available globally
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[Google Maps Bootstrap] Creating external script:', a.src.substring(0, 100));
+        }
+        
         d[q] = (result) => {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Google Maps Bootstrap] Callback __ib__ invoked', { hasResult: !!result, hasError: result instanceof Error });
+          }
           f(result);
         };
         
-        a.onerror = () => {
+        a.onload = () => {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Google Maps Bootstrap] External script onload fired');
+          }
+        };
+        
+        a.onerror = (err) => {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error('[Google Maps Bootstrap] External script onerror:', err);
+          }
           h = n(new Error(p + ' could not load.'));
         };
         
         a.nonce = m.querySelector('script[nonce]')?.nonce || '';
+        
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[Google Maps Bootstrap] Appending external script to head');
+        }
+        
         m.head.append(a);
+        
+        // Verify script was appended
+        setTimeout(() => {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Google Maps Bootstrap] Post-append check:', {
+              scriptInDOM: m.head.contains(a),
+              hasGoogleMaps: !!window.google?.maps,
+              hasImportLibrary: !!window.google?.maps?.importLibrary
+            });
+          }
+        }, 500);
       });
       return h;
     };
@@ -221,19 +254,7 @@ function loadGoogleMaps3D(apiKey) {
       const script = document.createElement('script');
       script.id = SCRIPT_ID;
       
-      // Wrap bootstrap in try-catch for better error handling
-      const bootstrapCode = `try {
-        (${bootstrap.toString()})({key:"${apiKey.replace(/"/g, '\\"')}",v:"beta"});
-      } catch(e) {
-        console.error('[Google Maps Bootstrap Error]', e);
-        if (window.google && window.google.maps && window.google.maps.__ib__) {
-          window.google.maps.__ib__(e);
-        }
-      }`;
-      
-      script.textContent = bootstrapCode;
-      
-      // Monitor for callback execution
+      // Set up callback wrapper BEFORE creating script (critical for timing)
       const originalCallback = window.google?.maps?.__ib__;
       let callbackFired = false;
       
@@ -253,6 +274,18 @@ function loadGoogleMaps3D(apiKey) {
       };
       window.google.maps.__ib__ = callbackWrapper;
       
+      // Wrap bootstrap in try-catch for better error handling
+      const bootstrapCode = `try {
+        (${bootstrap.toString()})({key:"${apiKey.replace(/"/g, '\\"')}",v:"beta"});
+      } catch(e) {
+        console.error('[Google Maps Bootstrap Error]', e);
+        if (window.google && window.google.maps && window.google.maps.__ib__) {
+          window.google.maps.__ib__(e);
+        }
+      }`;
+      
+      script.textContent = bootstrapCode;
+      
       // Check for CSP violations
       const checkCSP = () => {
         const cspReport = window.performance?.getEntriesByType?.('navigation')?.[0];
@@ -265,6 +298,7 @@ function loadGoogleMaps3D(apiKey) {
         });
       };
       
+      // Set onload handler BEFORE appending (critical for inline scripts)
       script.onload = () => {
         checkCSP();
         // #region agent log
@@ -272,67 +306,97 @@ function loadGoogleMaps3D(apiKey) {
           hasGoogleMaps: !!window.google?.maps,
           hasImportLibrary: !!window.google?.maps?.importLibrary,
           hasCallback: !!window.google?.maps?.__ib__,
-          callbackFired,
-          scriptExecuted: true
+          callbackFired
         });
         // #endregion
         
-        // Script loaded, wait for callback to fire
-        let attempts = 0;
-        const maxAttempts = 100; // 10 seconds max wait
-        const checkCallback = () => {
-          attempts++;
+        // Inline scripts execute synchronously, so onload may fire immediately
+        // But we need to wait for the external script that bootstrap creates to load
+        // Give bootstrap a moment to execute and create external script
+        setTimeout(() => {
+          const externalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
+          DEBUG_LOG('GoogleGlobeMap.js:127', 'Checking for external Google Maps scripts', {
+            externalScriptCount: externalScripts.length,
+            externalScripts: externalScripts.map(s => s.src.substring(0, 80)),
+            hasGoogleMaps: !!window.google?.maps,
+            hasImportLibrary: !!window.google?.maps?.importLibrary
+          });
           
+          // If importLibrary is already available, resolve immediately
           if (window.google?.maps?.importLibrary) {
-            // #region agent log
-            DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary available after callback', { attempts });
-            // #endregion
+            DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary already available', {});
             resolve();
-          } else if (callbackFired) {
-            // Callback fired but importLibrary not ready yet - wait a bit more
-            if (attempts < maxAttempts) {
-              setTimeout(checkCallback, 100);
-            } else {
-              // #region agent log
-              DEBUG_LOG('GoogleGlobeMap.js:128', 'Callback fired but importLibrary timeout', { attempts });
-              // #endregion
-              reject(new Error('Google Maps callback fired but importLibrary not available'));
-            }
-          } else if (attempts >= maxAttempts) {
-            // #region agent log
-            DEBUG_LOG('GoogleGlobeMap.js:128', 'Timeout waiting for callback - trying fallback', { attempts, hasGoogleMaps: !!window.google?.maps });
-            // #endregion
-            
-            // Log detailed error info
-            console.error('[Google Maps] Bootstrap timeout - script may be blocked by CSP or failed to execute');
-            console.error('[Google Maps] Debug info:', {
-              scriptInDOM: !!document.getElementById(SCRIPT_ID),
-              hasGoogleMaps: !!window.google?.maps,
-              scriptOnloadFired: false,
-              callbackFired: callbackFired
-            });
-            
-            DEBUG_LOG('GoogleGlobeMap.js:fallback', 'Bootstrap timeout - final state', {
-              scriptInDOM: !!document.getElementById(SCRIPT_ID),
-              hasGoogleMaps: !!window.google?.maps,
-              callbackFired,
-              scriptExecuted: false
-            });
-            
-            // Provide helpful error message
-            const errorMsg = 'Google Maps bootstrap timeout. ' +
-              'The inline bootstrap script executed but the external Google Maps script may have failed to load. ' +
-              'Check: 1) Browser console for CSP violations, 2) Network tab for failed requests to maps.googleapis.com, ' +
-              '3) API key validity. Script in DOM: ' + !!document.getElementById(SCRIPT_ID);
-            console.error('[Google Maps Error]', errorMsg);
-            reject(new Error(errorMsg));
-          } else {
-            setTimeout(checkCallback, 100);
+            return;
           }
-        };
-        
-        // Start checking after a short delay
-        setTimeout(checkCallback, 200);
+          
+          // Otherwise, wait for callback to fire
+          let attempts = 0;
+          const maxAttempts = 100; // 10 seconds max wait
+          const checkCallback = () => {
+            attempts++;
+            
+            // Check for external script loading
+            const currentExternalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
+            const hasExternalScript = currentExternalScripts.length > 0;
+            
+            if (window.google?.maps?.importLibrary) {
+              // #region agent log
+              DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary available after callback', { attempts, hasExternalScript });
+              // #endregion
+              resolve();
+            } else if (callbackFired) {
+              // Callback fired but importLibrary not ready yet - wait a bit more
+              if (attempts < maxAttempts) {
+                setTimeout(checkCallback, 100);
+              } else {
+                // #region agent log
+                DEBUG_LOG('GoogleGlobeMap.js:128', 'Callback fired but importLibrary timeout', { attempts, hasExternalScript });
+                // #endregion
+                reject(new Error('Google Maps callback fired but importLibrary not available'));
+              }
+            } else if (attempts >= maxAttempts) {
+              // #region agent log
+              DEBUG_LOG('GoogleGlobeMap.js:128', 'Timeout waiting for callback', { 
+                attempts, 
+                hasGoogleMaps: !!window.google?.maps,
+                hasExternalScript: hasExternalScript,
+                callbackFired
+              });
+              // #endregion
+              
+              // Log detailed error info
+              console.error('[Google Maps] Bootstrap timeout - external script may not have loaded');
+              console.error('[Google Maps] Debug info:', {
+                scriptInDOM: !!document.getElementById(SCRIPT_ID),
+                hasGoogleMaps: !!window.google?.maps,
+                hasImportLibrary: !!window.google?.maps?.importLibrary,
+                externalScriptCount: currentExternalScripts.length,
+                callbackFired: callbackFired
+              });
+              
+              DEBUG_LOG('GoogleGlobeMap.js:fallback', 'Bootstrap timeout - final state', {
+                scriptInDOM: !!document.getElementById(SCRIPT_ID),
+                hasGoogleMaps: !!window.google?.maps,
+                hasImportLibrary: !!window.google?.maps?.importLibrary,
+                externalScriptCount: currentExternalScripts.length,
+                callbackFired
+              });
+              
+              // Provide helpful error message
+              const errorMsg = 'Google Maps bootstrap timeout. ' +
+                'The bootstrap script executed but the external Google Maps script may have failed to load. ' +
+                'Check: 1) Browser console for CSP violations, 2) Network tab for failed requests to maps.googleapis.com, ' +
+                '3) API key validity. External scripts found: ' + currentExternalScripts.length;
+              console.error('[Google Maps Error]', errorMsg);
+              reject(new Error(errorMsg));
+            } else {
+              setTimeout(checkCallback, 100);
+            }
+          };
+          
+          // Start checking immediately (bootstrap may have already executed)
+          checkCallback();
+        }, 100); // Small delay to let bootstrap execute
       };
       
       script.onerror = (err) => {
@@ -363,17 +427,26 @@ function loadGoogleMaps3D(apiKey) {
         });
       }
       
-      // Monitor script execution
+      // Monitor script execution and external script creation
       let scriptExecuted = false;
-      const originalAppendChild = document.head.appendChild.bind(document.head);
+      let externalScriptCreated = false;
       const checkExecution = setInterval(() => {
         // Check if bootstrap function executed by looking for google.maps
-        if (window.google?.maps) {
+        if (window.google?.maps && !scriptExecuted) {
           scriptExecuted = true;
-          clearInterval(checkExecution);
           DEBUG_LOG('GoogleGlobeMap.js:execution', 'Bootstrap function executed', {
             hasGoogleMaps: !!window.google?.maps,
             hasImportLibrary: !!window.google?.maps?.importLibrary
+          });
+        }
+        
+        // Check if external script was created
+        const externalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
+        if (externalScripts.length > 0 && !externalScriptCreated) {
+          externalScriptCreated = true;
+          DEBUG_LOG('GoogleGlobeMap.js:execution', 'External script created by bootstrap', {
+            externalScriptCount: externalScripts.length,
+            externalScriptSrc: externalScripts[0]?.src?.substring(0, 100)
           });
         }
       }, 100);
@@ -384,6 +457,11 @@ function loadGoogleMaps3D(apiKey) {
         if (!scriptExecuted) {
           DEBUG_LOG('GoogleGlobeMap.js:execution', 'Bootstrap function did not execute (possible CSP block)', {
             scriptInDOM: !!document.getElementById(SCRIPT_ID)
+          });
+        }
+        if (!externalScriptCreated) {
+          DEBUG_LOG('GoogleGlobeMap.js:execution', 'External script not created by bootstrap', {
+            hasGoogleMaps: !!window.google?.maps
           });
         }
       }, 5000);
@@ -408,14 +486,23 @@ function loadGoogleMaps3D(apiKey) {
       });
       // #endregion
       
-      // Also check immediately after append
+      // Inline scripts execute synchronously, so check immediately if importLibrary is available
+      // This handles the case where bootstrap executes instantly and external script loads quickly
       setTimeout(() => {
         DEBUG_LOG('GoogleGlobeMap.js:129', 'Post-append check', {
           scriptInDOM: !!document.getElementById(SCRIPT_ID),
           hasGoogleMaps: !!window.google?.maps,
-          scriptExecuted
+          hasImportLibrary: !!window.google?.maps?.importLibrary,
+          scriptExecuted,
+          externalScriptCount: Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]')).length
         });
-      }, 500);
+        
+        // If importLibrary is already available, resolve immediately
+        if (window.google?.maps?.importLibrary) {
+          DEBUG_LOG('GoogleGlobeMap.js:129', 'importLibrary available immediately after append - resolving', {});
+          resolve();
+        }
+      }, 50); // Very short delay to let inline script execute
     });
   };
 
