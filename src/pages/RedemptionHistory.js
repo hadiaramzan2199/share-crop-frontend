@@ -144,10 +144,10 @@ const RedemptionHistory = () => {
           How Redemption Works:
         </Typography>
         <Typography variant="body2" component="div">
-          <strong>1. Submit Request:</strong> Your coins are locked and cannot be spent<br/>
-          <strong>2. Admin Review:</strong> We review your request (usually within 24-48 hours)<br/>
-          <strong>3. Transfer Initiated:</strong> Once approved, payment is sent immediately via Stripe<br/>
-          <strong>4. Funds Arrive:</strong> Money appears in your bank account within <strong>1-2 business days</strong> (Stripe processing time)<br/>
+          <strong>1. Submit Request:</strong> Your coins are locked and cannot be spent<br />
+          <strong>2. Admin Review:</strong> We review your request (usually within 24-48 hours)<br />
+          <strong>3. Transfer Initiated:</strong> Once approved, payment is sent immediately via Stripe<br />
+          <strong>4. Funds Arrive:</strong> Money appears in your bank account within <strong>1-2 business days</strong> (Stripe processing time)<br />
           <strong>Note:</strong> If rejected or failed, your coins are automatically returned to your account
         </Typography>
       </Alert>
@@ -249,7 +249,12 @@ const RedemptionHistory = () => {
                         label={redemption.status}
                         color={getStatusColor(redemption.status)}
                         size="small"
-                        sx={{ mb: 0.5 }}
+                        sx={{
+                          mb: 0.5,
+                          ...(redemption.status === 'paid' && {
+                            color: '#ffffff'
+                          })
+                        }}
                       />
                       {redemption.status === 'pending' && (
                         <Typography variant="caption" color="text.secondary" display="block">

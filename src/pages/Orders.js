@@ -202,19 +202,7 @@ const Orders = () => {
               Track and manage your agricultural orders and purchases
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<Receipt />}
-            sx={{
-              backgroundColor: '#4caf50',
-              '&:hover': { backgroundColor: '#a1eda4' },
-              borderRadius: 2,
-              px: 2.5,
-              py: 1
-            }}
-          >
-            Export Orders
-          </Button>
+
         </Stack>
 
         {/* Stats Overview */}
@@ -412,7 +400,7 @@ const Orders = () => {
                   py: 1,
                   ...(filter === status.key && {
                     backgroundColor: '#4caf50',
-                    '&:hover': { backgroundColor: '#a1eda4' }
+                    color: 'white',
                   })
                 }}
               >
@@ -537,7 +525,10 @@ const Orders = () => {
                             fontWeight: 500,
                             borderRadius: 1.5,
                             fontSize: '0.7rem',
-                            height: 24
+                            height: 24,
+                            ...(['completed', 'active', 'confirmed'].includes(order.status) && {
+                              color: '#ffffff'
+                            })
                           }}
                         />
                       </TableCell>
@@ -737,7 +728,13 @@ const Orders = () => {
                           label={selectedOrder.status}
                           color={getStatusColor(selectedOrder.status)}
                           size="small"
-                          sx={{ fontWeight: 500, borderRadius: 2 }}
+                          sx={{
+                            fontWeight: 500,
+                            borderRadius: 2,
+                            ...(['completed', 'active', 'confirmed'].includes(selectedOrder.status) && {
+                              color: '#ffffff'
+                            })
+                          }}
                         />
                       </Box>
                     </Box>

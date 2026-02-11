@@ -160,9 +160,9 @@ const AdminRedemptions = () => {
           Redemption Process Timeline:
         </Typography>
         <Typography variant="body2" component="div">
-          <strong>1. Request Created:</strong> User submits redemption → Coins locked<br/>
-          <strong>2. Admin Review:</strong> Approve or reject the request<br/>
-          <strong>3. Transfer Initiated:</strong> When approved, Stripe transfer is created immediately<br/>
+          <strong>1. Request Created:</strong> User submits redemption → Coins locked<br />
+          <strong>2. Admin Review:</strong> Approve or reject the request<br />
+          <strong>3. Transfer Initiated:</strong> When approved, Stripe transfer is created immediately<br />
           <strong>4. User Receives Funds:</strong> Money arrives in user's bank account within <strong>1-2 business days</strong> (Stripe processing time)
         </Typography>
       </Alert>
@@ -257,7 +257,12 @@ const AdminRedemptions = () => {
                         label={redemption.status}
                         color={getStatusColor(redemption.status)}
                         size="small"
-                        sx={{ mb: 0.5 }}
+                        sx={{
+                          mb: 0.5,
+                          ...(redemption.status === 'paid' && {
+                            color: '#ffffff'
+                          })
+                        }}
                       />
                       {redemption.reviewed_at && (
                         <Typography variant="caption" color="text.secondary" display="block">

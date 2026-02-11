@@ -203,7 +203,7 @@ const FarmOrders = () => {
             startIcon={<Assessment />}
             sx={{
               backgroundColor: '#4caf50',
-              '&:hover': { backgroundColor: '#a1eda4' },
+              color: 'white',
               borderRadius: 2,
               px: 2.5,
               py: 1,
@@ -377,6 +377,7 @@ const FarmOrders = () => {
                   ...(filter === key && {
                     backgroundColor: '#4caf50',
                     '&:hover': { backgroundColor: '#a1eda4' },
+                    color: 'white',
                   }),
                 }}
               >
@@ -508,7 +509,15 @@ const FarmOrders = () => {
                           label={order.status}
                           color={getStatusColor(order.status)}
                           size="small"
-                          sx={{ fontWeight: 500, borderRadius: 1.5, fontSize: '0.7rem', height: 24 }}
+                          sx={{
+                            fontWeight: 500,
+                            borderRadius: 1.5,
+                            fontSize: '0.7rem',
+                            height: 24,
+                            ...(order.status === 'completed' && {
+                              color: '#ffffff'
+                            })
+                          }}
                         />
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
@@ -720,7 +729,13 @@ const FarmOrders = () => {
                           label={selectedOrder.status}
                           color={getStatusColor(selectedOrder.status)}
                           size="small"
-                          sx={{ fontWeight: 500, borderRadius: 2 }}
+                          sx={{
+                            fontWeight: 500,
+                            borderRadius: 2,
+                            ...(selectedOrder.status === 'completed' && {
+                              color: '#ffffff'
+                            })
+                          }}
                         />
                       </Box>
                     </Box>

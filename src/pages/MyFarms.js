@@ -284,7 +284,7 @@ const MyFarms = () => {
   // Load my farms data
   useEffect(() => {
     fetchFarms();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user.id is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user.id is set
   }, [user?.id]);
 
   const getStatusColor = (status) => {
@@ -530,6 +530,7 @@ const MyFarms = () => {
               onClick={handleReportClick}
               sx={{
                 backgroundColor: '#4caf50',
+                color: '#ffffff',
                 '&:hover': { backgroundColor: '#059669' },
                 borderRadius: 2,
                 px: 2.5,
@@ -878,9 +879,11 @@ const MyFarms = () => {
                       fontWeight: 600,
                       fontSize: '0.75rem',
                       bgcolor: '#4caf50',
+                      color: 'white',
                       py: 1,
                       '&:hover': {
                         bgcolor: '#059669'
+
                       }
                     }}
                   >
@@ -1064,7 +1067,12 @@ const MyFarms = () => {
                             label={selectedFarm.status}
                             color={getStatusColor(selectedFarm.status)}
                             size="small"
-                            sx={{ fontWeight: 600 }}
+                            sx={{
+                              fontWeight: 600,
+                              ...(selectedFarm.status === 'Active' && {
+                                color: '#ffffff'
+                              })
+                            }}
                           />
                         </Stack>
                       </Stack>
@@ -1423,7 +1431,12 @@ const MyFarms = () => {
                               label={farm.status}
                               color={getStatusColor(farm.status)}
                               size="small"
-                              sx={{ fontWeight: 600 }}
+                              sx={{
+                                fontWeight: 600,
+                                ...(farm.status === 'Active' && {
+                                  color: '#ffffff'
+                                })
+                              }}
                             />
                           </TableCell>
                         </TableRow>
@@ -1455,7 +1468,7 @@ const MyFarms = () => {
             >
               Download PDF
             </Button>
-            <Button onClick={handleCloseReport} variant="contained" sx={{ borderRadius: 1.5, bgcolor: '#4caf50', '&:hover': { bgcolor: '#059669' } }}>
+            <Button onClick={handleCloseReport} variant="contained" sx={{ borderRadius: 1.5, bgcolor: '#4caf50', color: '#ffffff', '&:hover': { bgcolor: '#059669' } }}>
               Close
             </Button>
           </DialogActions>

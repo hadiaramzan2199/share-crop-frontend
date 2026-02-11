@@ -260,6 +260,7 @@ const Complaints = () => {
               borderRadius: 2,
               width: isMobile ? '100%' : 'auto',
               background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
+              color: 'white',
               boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
               '&:hover': {
                 background: 'linear-gradient(135deg, #2E7D32 0%, #4CAF50 100%)',
@@ -361,6 +362,11 @@ const Complaints = () => {
                         label={complaint.status}
                         color={getStatusColor(complaint.status)}
                         size="small"
+                        sx={{
+                          ...(complaint.status?.toLowerCase() === 'resolved' && {
+                            color: '#ffffff'
+                          })
+                        }}
                       />
                     </Box>
                     <Typography
@@ -461,6 +467,11 @@ const Complaints = () => {
                           label={complaint.status}
                           color={getStatusColor(complaint.status)}
                           size="small"
+                          sx={{
+                            ...(complaint.status?.toLowerCase() === 'resolved' && {
+                              color: '#ffffff'
+                            })
+                          }}
                         />
                       </TableCell>
                       <TableCell>{formatDate(complaint.created_at)}</TableCell>
@@ -538,6 +549,11 @@ const Complaints = () => {
                     label={selectedComplaint.status}
                     color={getStatusColor(selectedComplaint.status)}
                     size="small"
+                    sx={{
+                      ...(selectedComplaint.status?.toLowerCase() === 'resolved' && {
+                        color: '#ffffff'
+                      })
+                    }}
                   />
                 </Box>
               </Box>
@@ -611,7 +627,7 @@ const Complaints = () => {
                         Conversation
                       </Typography>
                       <Stack spacing={1} sx={{ mt: 0.5 }}>
-{selectedComplaint.admin_remarks && (!selectedComplaint.remarks || selectedComplaint.remarks.length === 0) && (
+                        {selectedComplaint.admin_remarks && (!selectedComplaint.remarks || selectedComplaint.remarks.length === 0) && (
                           <Alert severity="info" sx={{ borderRadius: 2 }}>
                             <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
                               <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />
@@ -619,15 +635,15 @@ const Complaints = () => {
                             </Stack>
                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{selectedComplaint.admin_remarks}</Typography>
                           </Alert>
-                    )}
-                    {(selectedComplaint.remarks || []).map((r) => (
-                      <Paper key={r.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: r.author_type === 'admin' ? 'rgba(76, 175, 80, 0.06)' : 'grey.50' }}>
-                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-                          {r.author_type === 'admin' && <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />}
-                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                            {r.author_type === 'admin' ? 'Share-Crop' : (r.author_name || 'User')}
-                          </Typography>
-                        </Stack>
+                        )}
+                        {(selectedComplaint.remarks || []).map((r) => (
+                          <Paper key={r.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: r.author_type === 'admin' ? 'rgba(76, 175, 80, 0.06)' : 'grey.50' }}>
+                            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                              {r.author_type === 'admin' && <VerifiedUser sx={{ fontSize: 16, color: '#0d9488' }} />}
+                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                {r.author_type === 'admin' ? 'Share-Crop' : (r.author_name || 'User')}
+                              </Typography>
+                            </Stack>
                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>{r.message}</Typography>
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                               {formatDate(r.created_at)}

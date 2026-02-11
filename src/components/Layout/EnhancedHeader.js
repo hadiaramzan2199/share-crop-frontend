@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  alpha,
 } from '@mui/material';
 import {
   Search,
@@ -1026,6 +1027,70 @@ const EnhancedHeader = forwardRef(({
               </Tooltip>
             )}
 
+
+
+            {/* Notifications Bell */}
+            {!isAdmin && (
+              <>
+                <IconButton
+                  color="inherit"
+                  onClick={(e) => {
+                    setNotifAnchorEl(e.currentTarget);
+                    if (typeof onRefreshNotifications === 'function') onRefreshNotifications();
+                  }}
+                  sx={(theme) => ({
+                    mr: 1,
+                    backgroundColor: notifAnchorEl ? alpha(theme.palette.secondary.main, 0.2) : alpha(theme.palette.secondary.main, 0.1),
+                    color: theme.palette.secondary.main,
+                    border: `1px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.secondary.main, 0.2),
+                      transform: 'scale(1.05)'
+                    },
+                    transition: 'all 0.2s ease-in-out',
+                    '& .MuiSvgIcon-root': {
+                      fontSize: isMobile ? '18px' : '24px'
+                    }
+                  })}
+                >
+                  <Badge
+                    badgeContent={(backendNotifications ?? []).filter(n => !n.read).length}
+                    color="error"
+                    invisible={(backendNotifications ?? []).filter(n => !n.read).length === 0}
+                  >
+                    <Notifications sx={{ fontSize: isMobile ? 20 : 24 }} />
+                  </Badge>
+                </IconButton>
+                {/* Messages - badge shows new messages count, click opens messages dropdown */}
+                <Tooltip title="Messages">
+                  <IconButton
+                    color="inherit"
+                    onClick={(e) => {
+                      setMessagesAnchorEl(e.currentTarget);
+                      fetchUnreadStats();
+                    }}
+                    sx={(theme) => ({
+                      mr: 1,
+                      backgroundColor: messagesAnchorEl ? alpha(theme.palette.primary.main, 0.2) : alpha(theme.palette.primary.main, 0.1),
+                      color: theme.palette.primary.main,
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                      '&:hover': {
+                        backgroundColor: alpha(theme.palette.primary.main, 0.2),
+                        transform: 'scale(1.05)'
+                      },
+                      transition: 'all 0.2s ease-in-out',
+                      '& .MuiSvgIcon-root': {
+                        fontSize: isMobile ? '18px' : '24px'
+                      }
+                    })}
+                  >
+                    <Badge badgeContent={unreadCount} color="error" invisible={!unreadCount}>
+                      <Message sx={{ fontSize: isMobile ? 20 : 24 }} />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
             {/* Farmer Coins – click opens menu (like profile) */}
             {!isAdmin && (
               <>
@@ -1141,57 +1206,6 @@ const EnhancedHeader = forwardRef(({
                 </Menu>
               </>
             )}
-
-            {/* Notifications Bell */}
-            {!isAdmin && (
-              <>
-              <IconButton
-                color="inherit"
-                onClick={(e) => {
-                  setNotifAnchorEl(e.currentTarget);
-                  if (typeof onRefreshNotifications === 'function') onRefreshNotifications();
-                }}
-                sx={{
-                  mr: 1,
-                  backgroundColor: 'rgba(0,0,0,0.04)',
-                  '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
-                  ...(notifAnchorEl && {
-                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                    color: 'primary.main'
-                  })
-                }}
-              >
-                <Badge
-                  badgeContent={(backendNotifications ?? []).filter(n => !n.read).length}
-                  color="error"
-                  invisible={(backendNotifications ?? []).filter(n => !n.read).length === 0}
-                >
-                  <Notifications sx={{ fontSize: isMobile ? 20 : 24 }} />
-                </Badge>
-              </IconButton>
-            {/* Messages - badge shows new messages count, click opens messages dropdown */}
-              <Tooltip title="Messages">
-                <IconButton
-                  color="inherit"
-                  onClick={(e) => {
-                    setMessagesAnchorEl(e.currentTarget);
-                    fetchUnreadStats();
-                  }}
-                  sx={{
-                    mr: 1,
-                    backgroundColor: 'rgba(0,0,0,0.04)',
-                    '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' },
-                    ...(messagesAnchorEl && { backgroundColor: 'rgba(76, 175, 80, 0.1)', color: 'primary.main' })
-                  }}
-                >
-                  <Badge badgeContent={unreadCount} color="error" invisible={!unreadCount}>
-                    <Message sx={{ fontSize: isMobile ? 20 : 24 }} />
-                  </Badge>
-                </IconButton>
-              </Tooltip>
-              </>
-            )}
-
             {/* Profile - Clickable Avatar with Menu (visible on mobile and desktop) */}
             <>
               <Box
@@ -1234,61 +1248,61 @@ const EnhancedHeader = forwardRef(({
               </Box>
 
               <Menu
-                  anchorEl={userMenuAnchorEl}
-                  open={Boolean(userMenuAnchorEl)}
-                  onClose={() => setUserMenuAnchorEl(null)}
-                  anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'right',
-                  }}
-                  transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                  }}
-                  PaperProps={{
-                    sx: {
-                      mt: 1,
-                      minWidth: 200,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      borderRadius: 2,
-                    }
+                anchorEl={userMenuAnchorEl}
+                open={Boolean(userMenuAnchorEl)}
+                onClose={() => setUserMenuAnchorEl(null)}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+                PaperProps={{
+                  sx: {
+                    mt: 1,
+                    minWidth: 200,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    borderRadius: 2,
+                  }
+                }}
+              >
+                <MenuItem disabled>
+                  <ListItemIcon>
+                    <Person fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {user?.name || 'User'}
+                  </Typography>
+                </MenuItem>
+                <Divider />
+                <MenuItem
+                  onClick={() => {
+                    setUserMenuAnchorEl(null);
+                    navigate(userType === 'farmer' ? '/farmer/profile' : userType === 'admin' ? '/admin/profile' : '/buyer/profile');
                   }}
                 >
-                  <MenuItem disabled>
-                    <ListItemIcon>
-                      <Person fontSize="small" />
-                    </ListItemIcon>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {user?.name || 'User'}
-                    </Typography>
-                  </MenuItem>
-                  <Divider />
-                  <MenuItem
-                    onClick={() => {
-                      setUserMenuAnchorEl(null);
-                      navigate(userType === 'farmer' ? '/farmer/profile' : userType === 'admin' ? '/admin/profile' : '/buyer/profile');
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Person fontSize="small" />
-                    </ListItemIcon>
-                    View Profile
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      setUserMenuAnchorEl(null);
-                      if (onLogout) {
-                        onLogout();
-                      }
-                    }}
-                    sx={{ color: 'error.main' }}
-                  >
-                    <ListItemIcon>
-                      <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
-                    </ListItemIcon>
-                    Logout
-                  </MenuItem>
-                </Menu>
+                  <ListItemIcon>
+                    <Person fontSize="small" />
+                  </ListItemIcon>
+                  View Profile
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setUserMenuAnchorEl(null);
+                    if (onLogout) {
+                      onLogout();
+                    }
+                  }}
+                  sx={{ color: 'error.main' }}
+                >
+                  <ListItemIcon>
+                    <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              </Menu>
             </>
 
             {/* Activity Dropdown: backend notifications only */}
@@ -1618,83 +1632,84 @@ const EnhancedHeader = forwardRef(({
           <Box sx={{ py: isMobile ? 0.5 : 1 }}>
             {menuSections.map((section, idx) => (
               <React.Fragment key={section.id}>
-              <Box sx={{ mb: isMobile ? 0.5 : 1 }}>
-                {section.title && (
-                  <Box sx={{ 
-                    px: isMobile ? 1.5 : 2, 
-                    py: isMobile ? 0.25 : 0.5,
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}>
-                    <ListItemText
-                      primary={section.title}
-                      primaryTypographyProps={{
-                        fontSize: isMobile ? '0.7rem' : '0.75rem',
-                        fontWeight: 600,
-                        color: '#2E7D32',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}
-                    />
-                  </Box>
-                )}
-                {/* Section Items - Clean and spaced */}
-                <List component="div" disablePadding>
-                  {section.items.map((item) => {
-                    const prominent = isFarmerProminent(item.text);
-                    return (
-                    <ListItem
-                      button
-                      key={item.path}
-                      onClick={() => handleNavigation(item.path)}
-                      selected={location.pathname === item.path}
-                      sx={{
-                        py: isMobile ? 0.5 : 0.75,
-                        px: isMobile ? 2 : 2.5,
-                        minHeight: isMobile ? 32 : 40,
-                        borderRadius: '4px',
-                        mx: isMobile ? 0.5 : 1,
-                        mb: 0.25,
-                        transition: 'all 0.2s ease',
-                        ...(prominent && {
-                          color: '#2E7D32',
-                          '& .MuiListItemIcon-root': { color: '#2E7D32' },
-                          '& .MuiListItemText-primary': { fontWeight: 700 },
-                        }),
-                        '&.Mui-selected': {
-                          backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                          color: '#2E7D32',
-                          '& .MuiListItemIcon-root': {
-                            color: '#2E7D32',
-                          },
-                        },
-                        '&:hover': {
-                          backgroundColor: prominent ? 'rgba(76, 175, 80, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                          transform: 'translateX(2px)',
-                        },
-                      }}
-                    >
-                      <ListItemIcon sx={{
-                        color: prominent ? '#2E7D32' : 'inherit',
-                        minWidth: isMobile ? 24 : 32,
-                        '& svg': {
-                          fontSize: isMobile ? (prominent ? '1rem' : '0.9rem') : (prominent ? '1.1rem' : '1rem')
-                        }
-                      }}>
-                        {item.icon}
-                      </ListItemIcon>
+                <Box sx={{ mb: isMobile ? 0.5 : 1 }}>
+                  {section.title && (
+                    <Box sx={{
+                      px: isMobile ? 1.5 : 2,
+                      py: isMobile ? 0.25 : 0.5,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
                       <ListItemText
-                        primary={item.text}
+                        primary={section.title}
                         primaryTypographyProps={{
-                          fontSize: isMobile ? '0.8rem' : '0.85rem',
-                          fontWeight: prominent ? 700 : (location.pathname === item.path ? 500 : 400)
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
+                          fontWeight: 600,
+                          color: '#2E7D32',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
                         }}
                       />
-                    </ListItem>
-                  );})}
-                </List>
-              </Box>
-              {idx < menuSections.length - 1 && <Divider sx={{ my: 1, borderStyle: 'dashed', borderColor: '#2E7D32' }} />}
+                    </Box>
+                  )}
+                  {/* Section Items - Clean and spaced */}
+                  <List component="div" disablePadding>
+                    {section.items.map((item) => {
+                      const prominent = isFarmerProminent(item.text);
+                      return (
+                        <ListItem
+                          button
+                          key={item.path}
+                          onClick={() => handleNavigation(item.path)}
+                          selected={location.pathname === item.path}
+                          sx={{
+                            py: isMobile ? 0.5 : 0.75,
+                            px: isMobile ? 2 : 2.5,
+                            minHeight: isMobile ? 32 : 40,
+                            borderRadius: '4px',
+                            mx: isMobile ? 0.5 : 1,
+                            mb: 0.25,
+                            transition: 'all 0.2s ease',
+                            ...(prominent && {
+                              color: '#2E7D32',
+                              '& .MuiListItemIcon-root': { color: '#2E7D32' },
+                              '& .MuiListItemText-primary': { fontWeight: 700 },
+                            }),
+                            '&.Mui-selected': {
+                              backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                              color: '#2E7D32',
+                              '& .MuiListItemIcon-root': {
+                                color: '#2E7D32',
+                              },
+                            },
+                            '&:hover': {
+                              backgroundColor: prominent ? 'rgba(76, 175, 80, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                              transform: 'translateX(2px)',
+                            },
+                          }}
+                        >
+                          <ListItemIcon sx={{
+                            color: prominent ? '#2E7D32' : 'inherit',
+                            minWidth: isMobile ? 24 : 32,
+                            '& svg': {
+                              fontSize: isMobile ? (prominent ? '1rem' : '0.9rem') : (prominent ? '1.1rem' : '1rem')
+                            }
+                          }}>
+                            {item.icon}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={item.text}
+                            primaryTypographyProps={{
+                              fontSize: isMobile ? '0.8rem' : '0.85rem',
+                              fontWeight: prominent ? 700 : (location.pathname === item.path ? 500 : 400)
+                            }}
+                          />
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                </Box>
+                {idx < menuSections.length - 1 && <Divider sx={{ my: 1, borderStyle: 'dashed', borderColor: '#2E7D32' }} />}
               </React.Fragment>
             ))}
           </Box>

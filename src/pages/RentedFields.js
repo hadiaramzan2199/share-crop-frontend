@@ -798,7 +798,8 @@ const RentedFields = () => {
             onClick={handleReportClick}
             sx={{
               backgroundColor: '#4caf50',
-              '&:hover': { backgroundColor: '#059669' },
+              color: '#ffffff',
+
               borderRadius: 2,
               px: 2.5,
               py: 1
@@ -1142,7 +1143,10 @@ const RentedFields = () => {
                         fontWeight: 600,
                         fontSize: '0.7rem',
                         height: 24,
-                        borderRadius: 1.5
+                        borderRadius: 1.5,
+                        ...(field.status === 'Active' && {
+                          color: '#ffffff'
+                        })
                       }}
                     />
                   </Stack>
@@ -1285,6 +1289,7 @@ const RentedFields = () => {
                       fontWeight: 600,
                       fontSize: '0.75rem',
                       bgcolor: '#4caf50',
+                      color: '#ffffff',
                       py: 0.75,
                       '&:hover': {
                         bgcolor: '#059669'
@@ -1399,7 +1404,10 @@ const RentedFields = () => {
                   sx={{
                     fontWeight: 600,
                     height: 24,
-                    fontSize: '0.7rem'
+                    fontSize: '0.7rem',
+                    ...(selectedField.status === 'Active' && {
+                      color: '#ffffff'
+                    })
                   }}
                 />
               )}
@@ -1861,7 +1869,12 @@ const RentedFields = () => {
                             label={field.status}
                             color={getStatusColor(field.status)}
                             size="small"
-                            sx={{ fontWeight: 600 }}
+                            sx={{
+                              fontWeight: 600,
+                              ...(field.status === 'Active' && {
+                                color: '#ffffff'
+                              })
+                            }}
                           />
                         </TableCell>
                       </TableRow>
@@ -1893,7 +1906,7 @@ const RentedFields = () => {
           >
             Download PDF
           </Button>
-          <Button onClick={handleCloseReport} variant="contained" sx={{ borderRadius: 1.5, bgcolor: '#4caf50', '&:hover': { bgcolor: '#059669' } }}>
+          <Button onClick={handleCloseReport} variant="contained" sx={{ borderRadius: 1.5, bgcolor: '#4caf50', color: '#ffffff', '&:hover': { bgcolor: '#059669' } }}>
             Close
           </Button>
         </DialogActions>

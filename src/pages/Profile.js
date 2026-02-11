@@ -81,7 +81,7 @@ const Profile = () => {
     if (user?.id) {
       loadUserDocuments();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadUserDocuments = async () => {
@@ -101,7 +101,7 @@ const Profile = () => {
     if (user) {
       loadProfile();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadProfile = async () => {

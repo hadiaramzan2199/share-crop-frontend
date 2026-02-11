@@ -318,6 +318,30 @@ const EnhancedFarmMap = forwardRef(({
   const [selectedFarmForWebcam, setSelectedFarmForWebcam] = useState(null);
   const popupContentScrollRef = useRef(null);
 
+  // Add state for currency conversion
+  const [coinsPerUnit, setCoinsPerUnit] = useState(10); // Default to 10 based on current logic
+
+  // Fetch currency rates on mount
+  useEffect(() => {
+    let mounted = true;
+    const fetchRates = async () => {
+      try {
+        const data = await coinService.getCurrencyRates();
+        if (mounted && data.rates) {
+          // Find USD rate or fallback to first rate
+          const usdRate = data.rates.find(r => r.currency === 'USD') || data.rates[0];
+          if (usdRate && usdRate.coins_per_unit) {
+            setCoinsPerUnit(parseFloat(usdRate.coins_per_unit));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load currency rates:', err);
+      }
+    };
+    fetchRates();
+    return () => { mounted = false; };
+  }, []);
+
   const extractCityCountry = useCallback((s) => {
     const parts = String(s || '').split(',').map(x => x.trim()).filter(Boolean);
     const city = (parts[0] || '').toLowerCase();
@@ -3697,54 +3721,7 @@ const EnhancedFarmMap = forwardRef(({
                 </div>
               )}
 
-              {/* Webcam button - professional design */}
-              <button
-                style={{
-                  position: 'absolute',
-                  top: isMobile ? '45px' : '55px',
-                  right: isMobile ? '8px' : '12px',
-                  backgroundColor: '#007bff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: isMobile ? '4px 8px' : '6px 12px',
-                  color: 'white',
-                  fontSize: isMobile ? '11px' : '12px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  boxShadow: '0 2px 4px rgba(0, 123, 255, 0.3)',
-                  transition: 'all 0.2s ease',
-                  zIndex: 5,
-                  fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-                  maxWidth: 'calc(100% - 20px)'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#0056b3';
-                  e.target.style.boxShadow = '0 4px 8px rgba(0, 123, 255, 0.4)';
-                  e.target.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#007bff';
-                  e.target.style.boxShadow = '0 2px 4px rgba(0, 123, 255, 0.3)';
-                  e.target.style.transform = 'translateY(0)';
-                }}
-                onClick={() => {
-                  setSelectedFarmForWebcam({
-                    name: selectedProduct?.farm_name || selectedProduct?.name || 'Farm',
-                    webcamUrl: selectedProduct?.webcam_url || 'https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1'
-                  });
-                  setWebcamPopupOpen(true);
-                }}
-                title="View Live Camera Feed"
-              >
-                <svg width={isMobile ? "12" : "14"} height={isMobile ? "12" : "14"} viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7-3.5c0-1-.3-2-.8-2.8l2.4-2.4c.8 1.3 1.3 2.8 1.3 4.4s-.5 3.1-1.3 4.4l-2.4-2.4c.5-.8.8-1.8.8-2.8M4.3 19.3l2.4-2.4c.8.5 1.8.8 2.8.8s2-.3 2.8-.8l2.4 2.4c-1.3.8-2.8 1.3-4.4 1.3s-3.1-.5-4.4-1.3M19.7 4.7l-2.4 2.4c-.8-.5-1.8-.8-2.8-.8s-2 .3-2.8.8L9.3 4.7C10.6 3.9 12.2 3.4 13.8 3.4s3.1.5 4.4 1.3z" />
-                  <circle cx="12" cy="12" r="3" fill="currentColor" />
-                </svg>
-                {isMobile ? '' : 'Webcam'}
-              </button>
+
 
 
 
@@ -3829,52 +3806,103 @@ const EnhancedFarmMap = forwardRef(({
                         })()})
                       </div>
 
-                      {/* Chat to owner - only for non-owner, when owner id exists */}
-                      {(() => {
-                        const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
-                        const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
-                        if (!ownerId || isOwner) return null;
-                        const messagesPath = userType === 'farmer' ? '/farmer/messages' : '/buyer/messages';
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedProduct(null);
-                              setPopupPosition(null);
-                              navigate(messagesPath, { state: { openWithUserId: ownerId, openWithUserName: selectedProduct.farmer_name || 'Field owner' } });
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              marginBottom: isMobile ? '8px' : '10px',
-                              padding: isMobile ? '6px 10px' : '8px 12px',
-                              backgroundColor: '#4caf50',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontSize: isMobile ? '11px' : '12px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#43a047';
-                              e.currentTarget.style.transform = 'scale(1.02)';
-                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = '#4caf50';
-                              e.currentTarget.style.transform = 'scale(1)';
-                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.3)';
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
-                            Chat to owner
-                          </button>
-                        );
-                      })()}
+                      {/* Action Buttons: Chat & Webcam */}
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: isMobile ? '8px' : '10px' }}>
+                        {/* Chat to owner */}
+                        {(() => {
+                          const ownerId = selectedProduct.farmer_id || selectedProduct.owner_id || selectedProduct.created_by;
+                          const isOwner = currentUser?.id && ownerId && String(ownerId) === String(currentUser.id);
+                          if (!ownerId || isOwner) return null;
+                          const messagesPath = userType === 'farmer' ? '/farmer/messages' : '/buyer/messages';
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedProduct(null);
+                                setPopupPosition(null);
+                                navigate(messagesPath, { state: { openWithUserId: ownerId, openWithUserName: selectedProduct.farmer_name || 'Field owner' } });
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: isMobile ? '4px 8px' : '6px 10px',
+                                backgroundColor: '#4caf50',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: isMobile ? '10px' : '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(76, 175, 80, 0.25)',
+                                transition: 'all 0.2s ease',
+                                flex: 1,
+                                justifyContent: 'center'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#43a047';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(76, 175, 80, 0.35)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#4caf50';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 2px 6px rgba(76, 175, 80, 0.25)';
+                              }}
+                              title="Chat with owner"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                              Chat
+                            </button>
+                          );
+                        })()}
+
+                        {/* Webcam button */}
+                        <button
+                          type="button"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: isMobile ? '4px 8px' : '6px 10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: isMobile ? '10px' : '11px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(0, 123, 255, 0.25)',
+                            transition: 'all 0.2s ease',
+                            flex: 1,
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#0056b3';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 123, 255, 0.35)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#007bff';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 123, 255, 0.25)';
+                          }}
+                          onClick={() => {
+                            setSelectedFarmForWebcam({
+                              name: selectedProduct?.farm_name || selectedProduct?.name || 'Farm',
+                              webcamUrl: selectedProduct?.webcam_url || 'https://g0.ipcamlive.com/player/player.php?alias=630e3bc12d3f9&autoplay=1'
+                            });
+                            setWebcamPopupOpen(true);
+                          }}
+                          title="View Live Camera Feed"
+                        >
+                          <svg width={isMobile ? "12" : "14"} height={isMobile ? "12" : "14"} viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7-3.5c0-1-.3-2-.8-2.8l2.4-2.4c.8 1.3 1.3 2.8 1.3 4.4s-.5 3.1-1.3 4.4l-2.4-2.4c.5-.8.8-1.8.8-2.8M4.3 19.3l2.4-2.4c.8.5 1.8.8 2.8.8s2-.3 2.8-.8l2.4 2.4c-1.3.8-2.8 1.3-4.4 1.3s-3.1-.5-4.4-1.3M19.7 4.7l-2.4 2.4c-.8-.5-1.8-.8-2.8-.8s-2 .3-2.8.8L9.3 4.7C10.6 3.9 12.2 3.4 13.8 3.4s3.1.5 4.4 1.3z" />
+                            <circle cx="12" cy="12" r="3" fill="currentColor" />
+                          </svg>
+                          Cam
+                        </button>
+                      </div>
 
                       {/* Rating */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '2px' }}>
@@ -4454,7 +4482,7 @@ const EnhancedFarmMap = forwardRef(({
                           {/* Total Price – rent disabled, buy only */}
                           {(() => {
                             const totalCostInDollars = (parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity;
-                            const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
+                            const totalCostInCoins = Math.ceil(totalCostInDollars * coinsPerUnit);
                             return (
                               <>
                                 <div style={{
@@ -4496,7 +4524,7 @@ const EnhancedFarmMap = forwardRef(({
                             const totalCostInDollars = isRent && rentPricePerMonth > 0
                               ? rentPricePerMonth * quantity * months
                               : ((parseFloat(selectedProduct.price_per_m2) || parseFloat(selectedProduct.price) || 0) * quantity);
-                            const totalCostInCoins = Math.ceil(totalCostInDollars * 10);
+                            const totalCostInCoins = Math.ceil(totalCostInDollars * coinsPerUnit);
                             const shortfall = totalCostInCoins - userCoins;
                             return (
                               <div style={{

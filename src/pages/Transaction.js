@@ -80,7 +80,7 @@ const Transaction = () => {
     } else {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
   }, [user]);
 
   const loadTransactions = async () => {
@@ -557,6 +557,11 @@ const Transaction = () => {
                         label={transaction.status}
                         color={getStatusColor(transaction.status)}
                         size="small"
+                        sx={{
+                          ...(transaction.status === 'Completed' && {
+                            color: '#ffffff'
+                          })
+                        }}
                       />
                     </TableCell>
                     <TableCell>
