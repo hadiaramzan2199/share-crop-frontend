@@ -27,6 +27,29 @@ class CoinService {
   }
 
   /**
+   * Get user's coin balance including locked coins
+   * @param {string} userId - User ID
+   * @returns {Promise<{ coins: number, locked_coins: number, total_coins: number }>}
+   */
+  async getUserBalance(userId) {
+    if (!userId) {
+      return { coins: DEFAULT_COINS, locked_coins: 0, total_coins: DEFAULT_COINS };
+    }
+
+    try {
+      const response = await api.get(`/api/coins/${userId}`);
+      return {
+        coins: response.data?.coins || 0,
+        locked_coins: response.data?.locked_coins || 0,
+        total_coins: (response.data?.coins || 0) + (response.data?.locked_coins || 0)
+      };
+    } catch (error) {
+      console.error('Error getting user balance:', error);
+      return { coins: DEFAULT_COINS, locked_coins: 0, total_coins: DEFAULT_COINS };
+    }
+  }
+
+  /**
    * Set coins for a specific user
    * @param {string} userId - User ID
    * @param {number} coins - New coin balance

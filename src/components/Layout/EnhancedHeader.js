@@ -58,6 +58,8 @@ import {
   Info,
   Warning,
   Error as ErrorIcon,
+  AccountBalanceWallet,
+  CreditCard,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import coinService from '../../services/coinService';
@@ -593,6 +595,15 @@ const EnhancedHeader = forwardRef(({
           { text: 'Settings', icon: <Settings />, path: isFarmer ? '/farmer/settings' : '/buyer/settings' },
           { text: 'Complaints', icon: <ReportProblem />, path: isFarmer ? '/farmer/complaints' : '/buyer/complaints' },
         ]
+      },
+      {
+        id: 'wallet',
+        title: 'Wallet',
+        items: [
+          { text: 'Redeem Coins', icon: <AccountBalanceWallet />, path: isFarmer ? '/farmer/redeem-coins' : '/buyer/redeem-coins' },
+          { text: 'Redemption History', icon: <History />, path: isFarmer ? '/farmer/redemption-history' : '/buyer/redemption-history' },
+          { text: 'Payout Methods', icon: <CreditCard />, path: isFarmer ? '/farmer/payout-methods' : '/buyer/payout-methods' },
+        ]
       }
     ];
 
@@ -1084,6 +1095,40 @@ const EnhancedHeader = forwardRef(({
                       <MonetizationOn fontSize="small" />
                     </ListItemIcon>
                     Add coins
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem
+                    onClick={() => {
+                      setCoinsMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/redeem-coins' : '/buyer/redeem-coins');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <AccountBalanceWallet fontSize="small" />
+                    </ListItemIcon>
+                    Redeem coins for cash
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setCoinsMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/redemption-history' : '/buyer/redemption-history');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <History fontSize="small" />
+                    </ListItemIcon>
+                    Redemption history
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setCoinsMenuAnchorEl(null);
+                      navigate(userType === 'farmer' ? '/farmer/payout-methods' : '/buyer/payout-methods');
+                    }}
+                  >
+                    <ListItemIcon>
+                      <CreditCard fontSize="small" />
+                    </ListItemIcon>
+                    Payout methods
                   </MenuItem>
                 </Menu>
               </>

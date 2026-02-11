@@ -9,6 +9,21 @@ import { GLOBAL_VIEW_MAX_ZOOM } from '../../utils/mapConfig';
 const SCRIPT_ID = 'google-maps-globe-script';
 const GLOBAL_ZOOM_THRESHOLD = 6;
 
+// Debug logging helper - logs to both console (for production) and debug endpoint (for local)
+const DEBUG_LOG = (location, message, data = {}) => {
+  const logData = { location, message, data, timestamp: Date.now() };
+  // Always log to console for production debugging
+  console.log(`[GoogleMaps Debug] ${location}: ${message}`, data);
+  // Also try to send to debug endpoint (only works locally)
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    fetch('http://127.0.0.1:7243/ingest/6b2fc03d-78d6-4a3f-ab92-f6736631c098', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logData)
+    }).catch(() => {});
+  }
+};
+
 /** Max camera range in meters (Earth radius × 10) = full globe view. */
 const MAX_RANGE_M = 63170000;
 /** When range is at or above this, we're at "full zoom out" - don't notify parent to avoid event storm and update loops. */
@@ -85,9 +100,24 @@ function rangeToZoom(rangeM) {
  * Returns the maps3d library { Map3DElement, MapMode }.
  */
 function loadGoogleMaps3D(apiKey) {
+  // #region agent log
+  DEBUG_LOG('GoogleGlobeMap.js:87', 'loadGoogleMaps3D called', { 
+    hasWindow: typeof window !== 'undefined', 
+    hasApiKey: !!apiKey,
+    cached: !!window.__shareCropMaps3D,
+    hasGoogleMaps: !!window.google?.maps,
+    hasImportLibrary: !!window.google?.maps?.importLibrary
+  });
+  // #endregion
+  
   if (typeof window === 'undefined' || !apiKey) return Promise.reject(new Error('No API key'));
 
-  if (window.__shareCropMaps3D) return Promise.resolve(window.__shareCropMaps3D);
+  if (window.__shareCropMaps3D) {
+    // #region agent log
+    DEBUG_LOG('GoogleGlobeMap.js:90', 'Returning cached maps3d', {});
+    // #endregion
+    return Promise.resolve(window.__shareCropMaps3D);
+  }
 
   const bootstrap = (g) => {
     const p = 'The Google Maps JavaScript API';
@@ -119,25 +149,154 @@ function loadGoogleMaps3D(apiKey) {
   };
 
   const ensureBootstrap = () => {
-    if (window.google?.maps?.importLibrary) return Promise.resolve();
+    if (window.google?.maps?.importLibrary) {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:122', 'importLibrary already available', {});
+      // #endregion
+      return Promise.resolve();
+    }
+    
+    // Check if script already exists (from previous attempt)
+    const existingScript = document.getElementById(SCRIPT_ID);
+    if (existingScript) {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:123', 'Bootstrap script already exists, waiting for callback', { 
+        scriptId: SCRIPT_ID
+      });
+      // #endregion
+      
+      // Wait for the callback to fire (Google Maps uses callback pattern)
+      return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        const checkInterval = setInterval(() => {
+          attempts++;
+          if (window.google?.maps?.importLibrary) {
+            clearInterval(checkInterval);
+            // #region agent log
+            DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary became available after waiting', { attempts });
+            // #endregion
+            resolve();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            // #region agent log
+            DEBUG_LOG('GoogleGlobeMap.js:128', 'Timeout waiting for importLibrary', { attempts });
+            // #endregion
+            reject(new Error('Google Maps importLibrary timeout'));
+          }
+        }, 100);
+      });
+    }
+    
+    // #region agent log
+    DEBUG_LOG('GoogleGlobeMap.js:123', 'Creating bootstrap script', { 
+      scriptId: SCRIPT_ID,
+      apiKeyLength: apiKey?.length || 0,
+      apiKeyPrefix: apiKey?.substring(0, 10) || 'none'
+    });
+    // #endregion
+    
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.id = SCRIPT_ID;
       script.textContent = `(${bootstrap.toString()})({key:"${apiKey.replace(/"/g, '\\"')}",v:"beta"});`;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Google Maps bootstrap failed'));
+      
+      // Set up callback handler before appending script
+      const callbackName = 'google.maps.__ib__';
+      const originalCallback = window.google?.maps?.__ib__;
+      
+      script.onload = () => {
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:127', 'Bootstrap script onload fired', { 
+          hasGoogleMaps: !!window.google?.maps,
+          hasImportLibrary: !!window.google?.maps?.importLibrary,
+          hasCallback: !!window.google?.maps?.__ib__
+        });
+        // #endregion
+        
+        // Script loaded, but callback might not have fired yet
+        // Wait a bit for the callback to execute
+        setTimeout(() => {
+          if (window.google?.maps?.importLibrary) {
+            resolve();
+          } else {
+            // Callback might be delayed, wait a bit more
+            let attempts = 0;
+            const checkInterval = setInterval(() => {
+              attempts++;
+              if (window.google?.maps?.importLibrary) {
+                clearInterval(checkInterval);
+                resolve();
+              } else if (attempts >= 20) {
+                clearInterval(checkInterval);
+                // #region agent log
+                DEBUG_LOG('GoogleGlobeMap.js:128', 'importLibrary not available after script load', { attempts });
+                // #endregion
+                reject(new Error('Google Maps importLibrary not available after script load'));
+              }
+            }, 100);
+          }
+        }, 100);
+      };
+      
+      script.onerror = () => {
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:128', 'Bootstrap script onerror fired', {});
+        // #endregion
+        reject(new Error('Google Maps bootstrap failed'));
+      };
+      
       document.head.appendChild(script);
+      
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:129', 'Bootstrap script appended to head', { 
+        scriptInHead: !!document.head.querySelector(`#${SCRIPT_ID}`),
+        headChildren: document.head.children.length
+      });
+      // #endregion
     });
   };
 
   return ensureBootstrap()
     .then(() => {
-      if (!window.google?.maps?.importLibrary) return Promise.reject(new Error('Google Maps importLibrary not available'));
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:134', 'After ensureBootstrap', { 
+        hasGoogleMaps: !!window.google?.maps,
+        hasImportLibrary: !!window.google?.maps?.importLibrary
+      });
+      // #endregion
+      
+      if (!window.google?.maps?.importLibrary) {
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:135', 'importLibrary not available after bootstrap', {});
+        // #endregion
+        return Promise.reject(new Error('Google Maps importLibrary not available'));
+      }
+      
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:136', 'Calling importLibrary(maps3d)', {});
+      // #endregion
+      
       return window.google.maps.importLibrary('maps3d');
     })
     .then((maps3d) => {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:138', 'importLibrary(maps3d) succeeded', { 
+        hasMap3DElement: !!maps3d?.Map3DElement,
+        hasMapMode: !!maps3d?.MapMode
+      });
+      // #endregion
       window.__shareCropMaps3D = maps3d;
       return maps3d;
+    })
+    .catch((err) => {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:141', 'loadGoogleMaps3D error', { 
+        error: err.message,
+        stack: err.stack
+      });
+      // #endregion
+      throw err;
     });
 }
 
@@ -195,6 +354,24 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
 
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
+  // #region agent log
+  useEffect(() => {
+    DEBUG_LOG('GoogleGlobeMap.js:196', 'Component mounted/updated', { 
+      hasApiKey: !!apiKey,
+      apiKeyValue: apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING',
+      visible,
+      containerRefReady: !!containerRef.current,
+      containerWidth: containerRef.current?.offsetWidth || 0,
+      containerHeight: containerRef.current?.offsetHeight || 0,
+      isProduction: window.location.hostname !== 'localhost',
+      envVars: {
+        REACT_APP_GOOGLE_MAPS_API_KEY: process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? 'SET' : 'MISSING',
+        NODE_ENV: process.env.NODE_ENV
+      }
+    });
+  }, [apiKey, visible]);
+  // #endregion
+
   // Debounced and only notify when view changed meaningfully to avoid update loops.
   // When zoom goes above GLOBAL_VIEW_MAX_ZOOM we always notify so parent can switch to Mapbox (markers).
   const notifyView = useCallback(() => {
@@ -233,7 +410,93 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
   // Destroy only on unmount so zoom-out-again doesn't re-create (avoids stuck state + extra billable loads).
   useEffect(() => {
     const container = containerRef.current;
-    if (!apiKey || !container) return;
+    
+    // #region agent log
+    DEBUG_LOG('GoogleGlobeMap.js:234', 'Map initialization useEffect', { 
+      hasApiKey: !!apiKey,
+      apiKeyValue: apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING',
+      hasContainer: !!container,
+      visible,
+      hasExistingMap: !!mapRef.current,
+      containerWidth: container?.offsetWidth || 0,
+      containerHeight: container?.offsetHeight || 0,
+      containerInDOM: container ? document.contains(container) : false,
+      documentReady: document.readyState,
+      isProduction: window.location.hostname !== 'localhost'
+    });
+    // #endregion
+    
+    if (!apiKey) {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:236', 'CRITICAL: API key missing', { 
+        envVarExists: typeof process.env.REACT_APP_GOOGLE_MAPS_API_KEY !== 'undefined',
+        envVarValue: process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? 'SET' : 'MISSING'
+      });
+      // #endregion
+      console.error('[Google Maps] REACT_APP_GOOGLE_MAPS_API_KEY is missing! Set it in your production environment variables.');
+      return;
+    }
+    
+    if (!container) {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ref not ready, will retry', { 
+        documentReady: document.readyState,
+        willRetry: true
+      });
+      // #endregion
+      // Retry after container is ready - use requestAnimationFrame for DOM readiness
+      let retryCount = 0;
+      const maxRetries = 50; // 5 seconds max
+      const checkContainer = () => {
+        retryCount++;
+        const currentContainer = containerRef.current;
+        if (currentContainer && currentContainer.offsetWidth > 0 && currentContainer.offsetHeight > 0) {
+          // #region agent log
+          DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ready after retry', { retryCount });
+          // #endregion
+          // Force re-run effect by updating a state
+          setMapReady(false);
+        } else if (retryCount < maxRetries) {
+          requestAnimationFrame(checkContainer);
+        } else {
+          // #region agent log
+          DEBUG_LOG('GoogleGlobeMap.js:236', 'Container retry timeout', { retryCount });
+          // #endregion
+        }
+      };
+      requestAnimationFrame(checkContainer);
+      return;
+    }
+    
+    // Ensure container has dimensions before proceeding
+    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+      // #region agent log
+      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container has zero dimensions, waiting', { 
+        width: container.offsetWidth,
+        height: container.offsetHeight
+      });
+      // #endregion
+      // Wait for container to get dimensions
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            resizeObserver.disconnect();
+            // #region agent log
+            DEBUG_LOG('GoogleGlobeMap.js:236', 'Container got dimensions via ResizeObserver', {
+              width: entry.contentRect.width,
+              height: entry.contentRect.height
+            });
+            // #endregion
+            // Force re-run
+            setMapReady(false);
+            break;
+          }
+        }
+      });
+      resizeObserver.observe(container);
+      return () => resizeObserver.disconnect();
+    }
+    
     if (!visible && mapRef.current) return; // keep existing map when hidden
     if (mapRef.current) return; // already have a map
 
@@ -241,11 +504,43 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
     let mapInstance = null;
     setMapReady(false);
 
+    // #region agent log
+    DEBUG_LOG('GoogleGlobeMap.js:244', 'Starting loadGoogleMaps3D', {
+      containerReady: !!container,
+      containerDimensions: { w: container.offsetWidth, h: container.offsetHeight }
+    });
+    // #endregion
+    
     loadGoogleMaps3D(apiKey)
       .then((lib) => {
-        if (cancelled || !container) return;
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:245', 'loadGoogleMaps3D promise resolved', { 
+          cancelled,
+          hasContainer: !!container,
+          hasLib: !!lib,
+          hasMap3DElement: !!lib?.Map3DElement,
+          hasMapMode: !!lib?.MapMode
+        });
+        // #endregion
+        
+        if (cancelled || !container) {
+          // #region agent log
+          DEBUG_LOG('GoogleGlobeMap.js:246', 'Early return - cancelled or no container', { cancelled, hasContainer: !!container });
+          // #endregion
+          return;
+        }
         const { Map3DElement, MapMode } = lib;
         const MarkerClass = lib.Marker3DInteractiveElement || lib.Marker3DElement;
+
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:250', 'Creating Map3DElement', { 
+          latitude,
+          longitude,
+          zoom,
+          containerWidth: container.offsetWidth,
+          containerHeight: container.offsetHeight
+        });
+        // #endregion
 
         mapInstance = new Map3DElement({
           center: { lat: latitude, lng: longitude, altitude: 0 },
@@ -269,8 +564,24 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
         mapInstance.addEventListener('gmp-centerchange', notifyView);
         mapInstance.addEventListener('gmp-rangechange', notifyView);
         setMapReady(true);
+        
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:271', 'Map created successfully', { 
+          mapInstanceExists: !!mapInstance,
+          mapInContainer: container.contains(mapInstance)
+        });
+        // #endregion
       })
-      .catch((err) => console.warn('Google 3D Globe failed to load:', err));
+      .catch((err) => {
+        // #region agent log
+        DEBUG_LOG('GoogleGlobeMap.js:273', 'Map creation failed', { 
+          error: err.message,
+          stack: err.stack,
+          cancelled
+        });
+        // #endregion
+        console.warn('Google 3D Globe failed to load:', err);
+      });
 
     return () => {
       cancelled = true;

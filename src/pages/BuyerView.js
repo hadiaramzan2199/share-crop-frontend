@@ -11,6 +11,9 @@ import RentedFields from './RentedFields';
 import Orders from './Orders';
 import Transaction from './Transaction';
 import BuyCoins from './BuyCoins';
+import RedeemCoins from './RedeemCoins';
+import RedemptionHistory from './RedemptionHistory';
+import PayoutMethods from './PayoutMethods';
 import Profile from './Profile';
 import Messages from './Messages';
 import ChangeCurrency from './ChangeCurrency';
@@ -177,6 +180,9 @@ const BuyerView = () => {
           <Route path="/orders" element={<Orders />} />
           <Route path="/transaction" element={<Transaction />} />
           <Route path="/buy-coins" element={<BuyCoins />} />
+          <Route path="/redeem-coins" element={<RedeemCoins />} />
+          <Route path="/redemption-history" element={<RedemptionHistory />} />
+          <Route path="/payout-methods" element={<PayoutMethods />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/currency" element={<ChangeCurrency />} />
