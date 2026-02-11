@@ -9,21 +9,6 @@ import { GLOBAL_VIEW_MAX_ZOOM } from '../../utils/mapConfig';
 const SCRIPT_ID = 'google-maps-globe-script';
 const GLOBAL_ZOOM_THRESHOLD = 6;
 
-// Debug logging helper - logs to both console (for production) and debug endpoint (for local)
-const DEBUG_LOG = (location, message, data = {}) => {
-  const logData = { location, message, data, timestamp: Date.now() };
-  // Always log to console for production debugging
-  console.log(`[GoogleMaps Debug] ${location}: ${message}`, data);
-  // Also try to send to debug endpoint (only works locally)
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    fetch('http://127.0.0.1:7243/ingest/6b2fc03d-78d6-4a3f-ab92-f6736631c098', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logData)
-    }).catch(() => {});
-  }
-};
-
 /** Max camera range in meters (Earth radius × 10) = full globe view. */
 const MAX_RANGE_M = 63170000;
 /** When range is at or above this, we're at "full zoom out" - don't notify parent to avoid event storm and update loops. */
@@ -100,22 +85,9 @@ function rangeToZoom(rangeM) {
  * Returns the maps3d library { Map3DElement, MapMode }.
  */
 function loadGoogleMaps3D(apiKey) {
-  // #region agent log
-  DEBUG_LOG('GoogleGlobeMap.js:87', 'loadGoogleMaps3D called', { 
-    hasWindow: typeof window !== 'undefined', 
-    hasApiKey: !!apiKey,
-    cached: !!window.__shareCropMaps3D,
-    hasGoogleMaps: !!window.google?.maps,
-    hasImportLibrary: !!window.google?.maps?.importLibrary
-  });
-  // #endregion
-  
   if (typeof window === 'undefined' || !apiKey) return Promise.reject(new Error('No API key'));
 
   if (window.__shareCropMaps3D) {
-    // #region agent log
-    DEBUG_LOG('GoogleGlobeMap.js:90', 'Returning cached maps3d', {});
-    // #endregion
     return Promise.resolve(window.__shareCropMaps3D);
   }
 
@@ -136,12 +108,8 @@ function loadGoogleMaps3D(apiKey) {
     const callbackName = c + '.maps.' + q;
     window.google = window.google || {};
     window.google.maps = window.google.maps || {};
-    // Note: Cannot use DEBUG_LOG here - bootstrap function is stringified and executed in different scope
     window.google.maps[q] = function() {
       // Callback will resolve the promise
-      if (typeof console !== 'undefined' && console.log) {
-        console.log('[Google Maps Bootstrap] Callback __ib__ fired');
-      }
     };
     
     const u = () => {
@@ -152,50 +120,16 @@ function loadGoogleMaps3D(apiKey) {
         e.set('callback', callbackName);
         a.src = `https://maps.${c}apis.com/maps/api/js?` + e;
         
-        // Note: Cannot use DEBUG_LOG inside bootstrap - it's stringified
-        // But we can use console.log which is available globally
-        if (typeof console !== 'undefined' && console.log) {
-          console.log('[Google Maps Bootstrap] Creating external script:', a.src.substring(0, 100));
-        }
-        
         d[q] = (result) => {
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[Google Maps Bootstrap] Callback __ib__ invoked', { hasResult: !!result, hasError: result instanceof Error });
-          }
           f(result);
         };
         
-        a.onload = () => {
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[Google Maps Bootstrap] External script onload fired');
-          }
-        };
-        
-        a.onerror = (err) => {
-          if (typeof console !== 'undefined' && console.error) {
-            console.error('[Google Maps Bootstrap] External script onerror:', err);
-          }
+        a.onerror = () => {
           h = n(new Error(p + ' could not load.'));
         };
         
         a.nonce = m.querySelector('script[nonce]')?.nonce || '';
-        
-        if (typeof console !== 'undefined' && console.log) {
-          console.log('[Google Maps Bootstrap] Appending external script to head');
-        }
-        
         m.head.append(a);
-        
-        // Verify script was appended
-        setTimeout(() => {
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[Google Maps Bootstrap] Post-append check:', {
-              scriptInDOM: m.head.contains(a),
-              hasGoogleMaps: !!window.google?.maps,
-              hasImportLibrary: !!window.google?.maps?.importLibrary
-            });
-          }
-        }, 500);
       });
       return h;
     };
@@ -204,21 +138,12 @@ function loadGoogleMaps3D(apiKey) {
 
   const ensureBootstrap = () => {
     if (window.google?.maps?.importLibrary) {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:122', 'importLibrary already available', {});
-      // #endregion
       return Promise.resolve();
     }
     
     // Check if script already exists (from previous attempt)
     const existingScript = document.getElementById(SCRIPT_ID);
     if (existingScript) {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:123', 'Bootstrap script already exists, waiting for callback', { 
-        scriptId: SCRIPT_ID
-      });
-      // #endregion
-      
       // Wait for the callback to fire (Google Maps uses callback pattern)
       return new Promise((resolve, reject) => {
         let attempts = 0;
@@ -227,28 +152,14 @@ function loadGoogleMaps3D(apiKey) {
           attempts++;
           if (window.google?.maps?.importLibrary) {
             clearInterval(checkInterval);
-            // #region agent log
-            DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary became available after waiting', { attempts });
-            // #endregion
             resolve();
           } else if (attempts >= maxAttempts) {
             clearInterval(checkInterval);
-            // #region agent log
-            DEBUG_LOG('GoogleGlobeMap.js:128', 'Timeout waiting for importLibrary', { attempts });
-            // #endregion
             reject(new Error('Google Maps importLibrary timeout'));
           }
         }, 100);
       });
     }
-    
-    // #region agent log
-    DEBUG_LOG('GoogleGlobeMap.js:123', 'Creating bootstrap script', { 
-      scriptId: SCRIPT_ID,
-      apiKeyLength: apiKey?.length || 0,
-      apiKeyPrefix: apiKey?.substring(0, 10) || 'none'
-    });
-    // #endregion
     
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -263,11 +174,6 @@ function loadGoogleMaps3D(apiKey) {
       if (!window.google.maps) window.google.maps = {};
       const callbackWrapper = function(...args) {
         callbackFired = true;
-        DEBUG_LOG('GoogleGlobeMap.js:callback', 'Callback wrapper invoked', {
-          argsLength: args.length,
-          hasError: args[0] instanceof Error,
-          hasImportLibrary: !!window.google?.maps?.importLibrary
-        });
         if (originalCallback) {
           return originalCallback.apply(this, args);
         }
@@ -286,45 +192,14 @@ function loadGoogleMaps3D(apiKey) {
       
       script.textContent = bootstrapCode;
       
-      // Check for CSP violations
-      const checkCSP = () => {
-        const cspReport = window.performance?.getEntriesByType?.('navigation')?.[0];
-        const hasCSPError = document.querySelector('script[nonce]') === null && 
-                           !document.querySelector('meta[http-equiv="Content-Security-Policy"]');
-        DEBUG_LOG('GoogleGlobeMap.js:CSP', 'CSP check', {
-          hasNonce: !!document.querySelector('script[nonce]'),
-          hasCSPMeta: !!document.querySelector('meta[http-equiv="Content-Security-Policy"]'),
-          scriptExecuted: script.textContent.length > 0
-        });
-      };
-      
       // Set onload handler BEFORE appending (critical for inline scripts)
       script.onload = () => {
-        checkCSP();
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:127', 'Bootstrap script onload fired', { 
-          hasGoogleMaps: !!window.google?.maps,
-          hasImportLibrary: !!window.google?.maps?.importLibrary,
-          hasCallback: !!window.google?.maps?.__ib__,
-          callbackFired
-        });
-        // #endregion
-        
         // Inline scripts execute synchronously, so onload may fire immediately
         // But we need to wait for the external script that bootstrap creates to load
         // Give bootstrap a moment to execute and create external script
         setTimeout(() => {
-          const externalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
-          DEBUG_LOG('GoogleGlobeMap.js:127', 'Checking for external Google Maps scripts', {
-            externalScriptCount: externalScripts.length,
-            externalScripts: externalScripts.map(s => s.src.substring(0, 80)),
-            hasGoogleMaps: !!window.google?.maps,
-            hasImportLibrary: !!window.google?.maps?.importLibrary
-          });
-          
           // If importLibrary is already available, resolve immediately
           if (window.google?.maps?.importLibrary) {
-            DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary already available', {});
             resolve();
             return;
           }
@@ -335,58 +210,30 @@ function loadGoogleMaps3D(apiKey) {
           const checkCallback = () => {
             attempts++;
             
-            // Check for external script loading
-            const currentExternalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
-            const hasExternalScript = currentExternalScripts.length > 0;
-            
             if (window.google?.maps?.importLibrary) {
-              // #region agent log
-              DEBUG_LOG('GoogleGlobeMap.js:127', 'importLibrary available after callback', { attempts, hasExternalScript });
-              // #endregion
               resolve();
             } else if (callbackFired) {
               // Callback fired but importLibrary not ready yet - wait a bit more
               if (attempts < maxAttempts) {
                 setTimeout(checkCallback, 100);
               } else {
-                // #region agent log
-                DEBUG_LOG('GoogleGlobeMap.js:128', 'Callback fired but importLibrary timeout', { attempts, hasExternalScript });
-                // #endregion
                 reject(new Error('Google Maps callback fired but importLibrary not available'));
               }
             } else if (attempts >= maxAttempts) {
-              // #region agent log
-              DEBUG_LOG('GoogleGlobeMap.js:128', 'Timeout waiting for callback', { 
-                attempts, 
-                hasGoogleMaps: !!window.google?.maps,
-                hasExternalScript: hasExternalScript,
-                callbackFired
-              });
-              // #endregion
-              
               // Log detailed error info
               console.error('[Google Maps] Bootstrap timeout - external script may not have loaded');
               console.error('[Google Maps] Debug info:', {
                 scriptInDOM: !!document.getElementById(SCRIPT_ID),
                 hasGoogleMaps: !!window.google?.maps,
                 hasImportLibrary: !!window.google?.maps?.importLibrary,
-                externalScriptCount: currentExternalScripts.length,
+                externalScriptCount: Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]')).length,
                 callbackFired: callbackFired
               });
               
-              DEBUG_LOG('GoogleGlobeMap.js:fallback', 'Bootstrap timeout - final state', {
-                scriptInDOM: !!document.getElementById(SCRIPT_ID),
-                hasGoogleMaps: !!window.google?.maps,
-                hasImportLibrary: !!window.google?.maps?.importLibrary,
-                externalScriptCount: currentExternalScripts.length,
-                callbackFired
-              });
-              
-              // Provide helpful error message
               const errorMsg = 'Google Maps bootstrap timeout. ' +
                 'The bootstrap script executed but the external Google Maps script may have failed to load. ' +
                 'Check: 1) Browser console for CSP violations, 2) Network tab for failed requests to maps.googleapis.com, ' +
-                '3) API key validity. External scripts found: ' + currentExternalScripts.length;
+                '3) API key validity.';
               console.error('[Google Maps Error]', errorMsg);
               reject(new Error(errorMsg));
             } else {
@@ -399,107 +246,28 @@ function loadGoogleMaps3D(apiKey) {
         }, 100); // Small delay to let bootstrap execute
       };
       
-      script.onerror = (err) => {
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:128', 'Bootstrap script onerror fired', {
-          error: err?.message || 'Unknown error',
-          errorType: err?.type
-        });
-        // #endregion
+      script.onerror = () => {
         reject(new Error('Google Maps bootstrap script failed to load - check CSP headers'));
       };
-      
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:129', 'Appending bootstrap script', { 
-        scriptLength: script.textContent.length,
-        scriptPreview: script.textContent.substring(0, 100) + '...',
-        hasNonce: !!script.nonce,
-        scriptType: script.type || 'text/javascript'
-      });
-      // #endregion
       
       // Try to get nonce from existing script if CSP requires it
       const existingScriptWithNonce = document.querySelector('script[nonce]');
       if (existingScriptWithNonce?.nonce) {
         script.nonce = existingScriptWithNonce.nonce;
-        DEBUG_LOG('GoogleGlobeMap.js:nonce', 'Using nonce from existing script', {
-          hasNonce: !!script.nonce
-        });
       }
-      
-      // Monitor script execution and external script creation
-      let scriptExecuted = false;
-      let externalScriptCreated = false;
-      const checkExecution = setInterval(() => {
-        // Check if bootstrap function executed by looking for google.maps
-        if (window.google?.maps && !scriptExecuted) {
-          scriptExecuted = true;
-          DEBUG_LOG('GoogleGlobeMap.js:execution', 'Bootstrap function executed', {
-            hasGoogleMaps: !!window.google?.maps,
-            hasImportLibrary: !!window.google?.maps?.importLibrary
-          });
-        }
-        
-        // Check if external script was created
-        const externalScripts = Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]'));
-        if (externalScripts.length > 0 && !externalScriptCreated) {
-          externalScriptCreated = true;
-          DEBUG_LOG('GoogleGlobeMap.js:execution', 'External script created by bootstrap', {
-            externalScriptCount: externalScripts.length,
-            externalScriptSrc: externalScripts[0]?.src?.substring(0, 100)
-          });
-        }
-      }, 100);
-      
-      // Clear check after 5 seconds
-      setTimeout(() => {
-        clearInterval(checkExecution);
-        if (!scriptExecuted) {
-          DEBUG_LOG('GoogleGlobeMap.js:execution', 'Bootstrap function did not execute (possible CSP block)', {
-            scriptInDOM: !!document.getElementById(SCRIPT_ID)
-          });
-        }
-        if (!externalScriptCreated) {
-          DEBUG_LOG('GoogleGlobeMap.js:execution', 'External script not created by bootstrap', {
-            hasGoogleMaps: !!window.google?.maps
-          });
-        }
-      }, 5000);
       
       try {
         document.head.appendChild(script);
       } catch (err) {
-        DEBUG_LOG('GoogleGlobeMap.js:error', 'Failed to append script', {
-          error: err.message,
-          errorName: err.name
-        });
         reject(err);
         return;
       }
       
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:129', 'Bootstrap script appended to head', { 
-        scriptInHead: !!document.head.querySelector(`#${SCRIPT_ID}`),
-        headChildren: document.head.children.length,
-        scriptExists: !!document.getElementById(SCRIPT_ID),
-        scriptHasNonce: !!script.nonce
-      });
-      // #endregion
-      
       // Inline scripts execute synchronously, so check immediately if importLibrary is available
       // This handles the case where bootstrap executes instantly and external script loads quickly
       setTimeout(() => {
-        DEBUG_LOG('GoogleGlobeMap.js:129', 'Post-append check', {
-          scriptInDOM: !!document.getElementById(SCRIPT_ID),
-          hasGoogleMaps: !!window.google?.maps,
-          hasImportLibrary: !!window.google?.maps?.importLibrary,
-          scriptExecuted,
-          externalScriptCount: Array.from(document.head.querySelectorAll('script[src*="maps.googleapis.com"]')).length
-        });
-        
         // If importLibrary is already available, resolve immediately
         if (window.google?.maps?.importLibrary) {
-          DEBUG_LOG('GoogleGlobeMap.js:129', 'importLibrary available immediately after append - resolving', {});
           resolve();
         }
       }, 50); // Very short delay to let inline script execute
@@ -508,44 +276,14 @@ function loadGoogleMaps3D(apiKey) {
 
   return ensureBootstrap()
     .then(() => {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:134', 'After ensureBootstrap', { 
-        hasGoogleMaps: !!window.google?.maps,
-        hasImportLibrary: !!window.google?.maps?.importLibrary
-      });
-      // #endregion
-      
       if (!window.google?.maps?.importLibrary) {
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:135', 'importLibrary not available after bootstrap', {});
-        // #endregion
         return Promise.reject(new Error('Google Maps importLibrary not available'));
       }
-      
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:136', 'Calling importLibrary(maps3d)', {});
-      // #endregion
-      
       return window.google.maps.importLibrary('maps3d');
     })
     .then((maps3d) => {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:138', 'importLibrary(maps3d) succeeded', { 
-        hasMap3DElement: !!maps3d?.Map3DElement,
-        hasMapMode: !!maps3d?.MapMode
-      });
-      // #endregion
       window.__shareCropMaps3D = maps3d;
       return maps3d;
-    })
-    .catch((err) => {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:141', 'loadGoogleMaps3D error', { 
-        error: err.message,
-        stack: err.stack
-      });
-      // #endregion
-      throw err;
     });
 }
 
@@ -603,24 +341,6 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
 
   const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-  // #region agent log
-  useEffect(() => {
-    DEBUG_LOG('GoogleGlobeMap.js:196', 'Component mounted/updated', { 
-      hasApiKey: !!apiKey,
-      apiKeyValue: apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING',
-      visible,
-      containerRefReady: !!containerRef.current,
-      containerWidth: containerRef.current?.offsetWidth || 0,
-      containerHeight: containerRef.current?.offsetHeight || 0,
-      isProduction: window.location.hostname !== 'localhost',
-      envVars: {
-        REACT_APP_GOOGLE_MAPS_API_KEY: process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? 'SET' : 'MISSING',
-        NODE_ENV: process.env.NODE_ENV
-      }
-    });
-  }, [apiKey, visible]);
-  // #endregion
-
   // Debounced and only notify when view changed meaningfully to avoid update loops.
   // When zoom goes above GLOBAL_VIEW_MAX_ZOOM we always notify so parent can switch to Mapbox (markers).
   const notifyView = useCallback(() => {
@@ -660,61 +380,23 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
   useEffect(() => {
     const container = containerRef.current;
     
-    // #region agent log
-    DEBUG_LOG('GoogleGlobeMap.js:234', 'Map initialization useEffect', { 
-      hasApiKey: !!apiKey,
-      apiKeyValue: apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING',
-      hasContainer: !!container,
-      visible,
-      hasExistingMap: !!mapRef.current,
-      containerWidth: container?.offsetWidth || 0,
-      containerHeight: container?.offsetHeight || 0,
-      containerInDOM: container ? document.contains(container) : false,
-      documentReady: document.readyState,
-      isProduction: window.location.hostname !== 'localhost'
-    });
-    // #endregion
-    
     if (!apiKey) {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:236', 'CRITICAL: API key missing', { 
-        envVarExists: typeof process.env.REACT_APP_GOOGLE_MAPS_API_KEY !== 'undefined',
-        envVarValue: process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? 'SET' : 'MISSING'
-      });
-      // #endregion
       console.error('[Google Maps] REACT_APP_GOOGLE_MAPS_API_KEY is missing! Set it in your production environment variables.');
       return;
     }
     
     if (!container) {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container ref not ready', { 
-        documentReady: document.readyState
-      });
-      // #endregion
       // Don't retry here - let useEffect re-run naturally when container becomes available
       return;
     }
     
     // Ensure container has dimensions before proceeding
     if (container.offsetWidth === 0 || container.offsetHeight === 0) {
-      // #region agent log
-      DEBUG_LOG('GoogleGlobeMap.js:236', 'Container has zero dimensions, waiting', { 
-        width: container.offsetWidth,
-        height: container.offsetHeight
-      });
-      // #endregion
       // Wait for container to get dimensions - but don't trigger state updates that cause loops
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
             resizeObserver.disconnect();
-            // #region agent log
-            DEBUG_LOG('GoogleGlobeMap.js:236', 'Container got dimensions via ResizeObserver', {
-              width: entry.contentRect.width,
-              height: entry.contentRect.height
-            });
-            // #endregion
             // Don't call setMapReady here - it causes infinite loops. Let the effect re-run naturally.
             break;
           }
@@ -730,44 +412,14 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
     let cancelled = false;
     let mapInstance = null;
     setMapReady(false);
-
-    // #region agent log
-    DEBUG_LOG('GoogleGlobeMap.js:244', 'Starting loadGoogleMaps3D', {
-      containerReady: !!container,
-      containerDimensions: { w: container.offsetWidth, h: container.offsetHeight }
-    });
-    // #endregion
     
     loadGoogleMaps3D(apiKey)
       .then((lib) => {
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:245', 'loadGoogleMaps3D promise resolved', { 
-          cancelled,
-          hasContainer: !!container,
-          hasLib: !!lib,
-          hasMap3DElement: !!lib?.Map3DElement,
-          hasMapMode: !!lib?.MapMode
-        });
-        // #endregion
-        
         if (cancelled || !container) {
-          // #region agent log
-          DEBUG_LOG('GoogleGlobeMap.js:246', 'Early return - cancelled or no container', { cancelled, hasContainer: !!container });
-          // #endregion
           return;
         }
         const { Map3DElement, MapMode } = lib;
         const MarkerClass = lib.Marker3DInteractiveElement || lib.Marker3DElement;
-
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:250', 'Creating Map3DElement', { 
-          latitude,
-          longitude,
-          zoom,
-          containerWidth: container.offsetWidth,
-          containerHeight: container.offsetHeight
-        });
-        // #endregion
 
         mapInstance = new Map3DElement({
           center: { lat: latitude, lng: longitude, altitude: 0 },
@@ -791,22 +443,8 @@ const GoogleGlobeMap = forwardRef(function GoogleGlobeMap({
         mapInstance.addEventListener('gmp-centerchange', notifyView);
         mapInstance.addEventListener('gmp-rangechange', notifyView);
         setMapReady(true);
-        
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:271', 'Map created successfully', { 
-          mapInstanceExists: !!mapInstance,
-          mapInContainer: container.contains(mapInstance)
-        });
-        // #endregion
       })
       .catch((err) => {
-        // #region agent log
-        DEBUG_LOG('GoogleGlobeMap.js:273', 'Map creation failed', { 
-          error: err.message,
-          stack: err.stack,
-          cancelled
-        });
-        // #endregion
         console.warn('Google 3D Globe failed to load:', err);
       });
 
