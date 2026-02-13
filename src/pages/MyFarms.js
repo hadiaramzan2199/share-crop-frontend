@@ -116,12 +116,17 @@ const MyFarms = () => {
     try {
       if (isEdit) {
         const payload = {
-          farmName: farmData.farmName,
-          farmIcon: farmData.farmIcon,
-          location: farmData.location,
-          coordinates: farmData.coordinates,
-          webcamUrl: farmData.webcamUrl,
-          description: farmData.description
+          ...farmData,
+          name: farmData.farmName,
+          cropType: farmData.cropType,
+          irrigationType: farmData.irrigationType,
+          soilType: farmData.soilType,
+          areaValue: farmData.areaValue,
+          areaUnit: farmData.areaUnit,
+          progress: farmData.progress,
+          plantingDate: farmData.plantingDate,
+          harvestDate: farmData.harvestDate,
+          status: farmData.status
         };
         await farmsService.update(farmData.id, payload);
         await fetchFarms();
@@ -134,7 +139,7 @@ const MyFarms = () => {
         name: farmData.farmName, // key mapping for backend
         owner_id: user.id
       };
-      await farmsService.create(newFarm);
+      await farmsService.create(newFarm).then(() => fetchFarms());
 
       // Handle License Upload
       if (farmData.licenseFile) {
@@ -175,18 +180,19 @@ const MyFarms = () => {
       setMyFarms(prev => [{
         id: farmData.id || Date.now(),
         name: farmData.farmName,
-        location: farmData.location || 'Not specified',
-        cropType: 'Mixed',
-        plantingDate: new Date().toISOString(),
-        harvestDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-        progress: 0,
-        area: 'Not specified',
-        soilType: 'Loamy',
-        irrigationType: 'Drip Irrigation',
+        location: farmData.location,
+        cropType: farmData.cropType,
+        plantingDate: farmData.plantingDate,
+        harvestDate: farmData.harvestDate,
+        progress: farmData.progress || 0,
+        areaValue: farmData.areaValue,
+        areaUnit: farmData.areaUnit,
+        soilType: farmData.soilType,
+        irrigationType: farmData.irrigationType,
         monthlyRevenue: 0,
-        status: 'Active',
-        image: '/api/placeholder/400/200',
-        description: farmData.description || '',
+        status: farmData.status || 'Active',
+        image: null,
+        description: farmData.description,
         fields: []
       }, ...prev]);
     }
@@ -218,27 +224,7 @@ const MyFarms = () => {
       const farmsResponse = await farmsService.getAll(user.id);
       const rawFarms = farmsResponse.data || [];
 
-      // Transform database farms to match the card display format
-      const transformedFarms = rawFarms.map(farm => ({
-        id: farm.id,
-        name: farm.farm_name || farm.name,
-        location: farm.location || 'Not specified',
-        cropType: farm.crop_type || 'Mixed',
-        plantingDate: farm.planting_date || new Date().toISOString(),
-        harvestDate: farm.harvest_date || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-        progress: farm.progress || Math.floor(Math.random() * 100),
-        area: farm.area || '25 acres',
-        soilType: farm.soil_type || 'Loamy',
-        irrigationType: farm.irrigation_type || 'Drip Irrigation',
-        monthlyRevenue: farm.monthly_revenue || Math.floor(Math.random() * 10000) + 5000,
-        status: farm.status || 'Active',
-        image: farm.image || '/api/placeholder/400/200',
-        description: farm.description || '',
-        fields: farm.fields || []
-      }));
-
-      setMyFarms(transformedFarms);
-
+      let transformedFields = [];
       // Fetch farmer-created fields if user is available
       if (user && user.id) {
         try {
@@ -249,22 +235,21 @@ const MyFarms = () => {
           ) || [];
 
           // Transform fields data to match the expected format for display
-          const transformedFields = farmerFields.map(field => ({
+          transformedFields = farmerFields.map(field => ({
             id: field.id,
             name: field.name,
-            location: field.location || 'Not specified',
-            cropType: field.category || field.product_type || 'Unknown',
-            plantingDate: field.planting_date || new Date().toISOString(),
+            location: field.location,
+            cropType: field.category || field.product_type,
+            plantingDate: field.planting_date,
             harvestDate: field.harvest_dates ?
-              (Array.isArray(field.harvest_dates) ? field.harvest_dates[0] : field.harvest_dates) :
-              new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-            progress: field.progress || Math.floor(Math.random() * 100),
-            area: field.area_m2 ? `${field.area_m2} m²` : field.field_size || 'Not specified',
-            soilType: field.soil_type || 'Loamy',
-            irrigationType: field.irrigation_type || 'Drip Irrigation',
-            monthlyRevenue: (field.production_rate && !isNaN(field.production_rate)) ? field.production_rate * 10 : Math.floor(Math.random() * 5000),
-            status: field.status || 'Active',
-            image: field.image || '/api/placeholder/400/200',
+              (Array.isArray(field.harvest_dates) ? field.harvest_dates[0] : field.harvest_dates) : null,
+            progress: field.progress,
+            area: field.area_m2 ? `${field.area_m2} m²` : field.field_size,
+            soilType: field.soil_type,
+            irrigationType: field.irrigation_type,
+            monthlyRevenue: field.production_rate && !isNaN(field.production_rate) ? field.production_rate * 10 : 0,
+            status: field.status,
+            image: field.image,
             farm_id: field.farm_id, // Include farm_id for proper association
             isFarmerCreated: true
           }));
@@ -275,6 +260,49 @@ const MyFarms = () => {
           setMyFields([]);
         }
       }
+
+      // Transform database farms and calculate revenue and progress from fields
+      const transformedFarms = rawFarms.map(farm => {
+        // Calculate revenue from fields belonging to this farm
+        const farmFields = transformedFields.filter(f => f.farm_id === farm.id);
+        const calculatedRevenue = farmFields.reduce((sum, f) => sum + (f.monthlyRevenue || 0), 0);
+
+        // Calculate occupied area (progress)
+        // Note: We assume fields created for this farm use the same unit as the farm
+        // based on the new restriction being implemented.
+        const farmTotalArea = parseFloat(farm.area_value) || 0;
+        const occupiedArea = farmFields.reduce((sum, f) => {
+          // Extract numeric value from field size if it's a string like "100 m²"
+          const fieldSize = typeof f.fieldSize === 'string' ? parseFloat(f.fieldSize) : (parseFloat(f.fieldSize) || 0);
+          return sum + fieldSize;
+        }, 0);
+
+        const calculatedProgress = farmTotalArea > 0 ? Math.min(100, Math.round((occupiedArea / farmTotalArea) * 100)) : 0;
+
+        return {
+          id: farm.id,
+          name: farm.farm_name || farm.name,
+          location: farm.location,
+          cropType: farm.crop_type,
+          plantingDate: farm.planting_date,
+          harvestDate: farm.harvest_date,
+          progress: calculatedProgress,
+          areaValue: farm.area_value,
+          areaUnit: farm.area_unit,
+          soilType: farm.soil_type,
+          irrigationType: farm.irrigation_type,
+          monthlyRevenue: calculatedRevenue > 0 ? calculatedRevenue : (farm.monthly_revenue || 0),
+          status: farm.status,
+          image: farm.image,
+          description: farm.description,
+          farmIcon: farm.farm_icon,
+          coordinates: farm.coordinates,
+          webcamUrl: farm.webcam_url,
+          fields: farm.fields || []
+        };
+      });
+
+      setMyFarms(transformedFarms);
     } catch (error) {
       console.error('Error fetching farms:', error);
       setMyFarms([]);
@@ -802,7 +830,7 @@ const MyFarms = () => {
                         Area
                       </Typography>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: '#111827', ml: 'auto' }}>
-                        {farm.area}
+                        {farm.areaValue} {farm.areaUnit}
                       </Typography>
                     </Stack>
 
@@ -880,11 +908,8 @@ const MyFarms = () => {
                       fontSize: '0.75rem',
                       bgcolor: '#4caf50',
                       color: 'white',
-                      py: 1,
-                      '&:hover': {
-                        bgcolor: '#059669'
+                      py: 1
 
-                      }
                     }}
                   >
                     View Details
@@ -1021,7 +1046,7 @@ const MyFarms = () => {
                         </Stack>
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Terrain sx={{ fontSize: 18, color: '#8b5cf6' }} />
-                          <Typography variant="body2">{selectedFarm.area} • {selectedFarm.soilType}</Typography>
+                          <Typography variant="body2">{selectedFarm.areaValue} {selectedFarm.areaUnit} • {selectedFarm.soilType}</Typography>
                         </Stack>
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <WaterDrop sx={{ fontSize: 18, color: '#06b6d4' }} />
@@ -1186,96 +1211,97 @@ const MyFarms = () => {
                           </Grid>
                         ))
                     ) : (
-                      // Show mock fields if no real fields are associated
-                      selectedFarm?.fields?.map((field) => (
-                        <Grid item xs={12} sm={6} md={4} key={field.id}>
-                          <Card
-                            sx={{
-                              height: 280,
-                              minHeight: 280,
-                              maxHeight: 280,
-                              width: '100%',
-                              borderRadius: 2,
-                              border: '1px solid #e5e7eb',
-                              backgroundColor: '#ffffff',
-                              transition: 'all 0.2s ease-in-out',
-                              '&:hover': {
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                transform: 'translateY(-2px)'
-                              }
-                            }}
-                          >
-                            <CardContent sx={{
-                              p: 2,
-                              height: '100%',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justifyContent: 'space-between'
-                            }}>
-                              <Box sx={{ flex: 1 }}>
-                                {/* Field Header */}
-                                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                                  <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#111827', fontSize: '0.9rem' }}>
-                                    {field.name}
-                                  </Typography>
-                                  <Chip
-                                    label={field.status}
-                                    size="small"
-                                    sx={{
-                                      backgroundColor: '#dcfce7',
-                                      color: '#166534',
-                                      fontSize: '0.7rem',
-                                      height: 20,
-                                      fontWeight: 600
-                                    }}
-                                  />
-                                </Stack>
-
-                                {/* Field Details */}
-                                <Stack spacing={0.5} mb={1.5}>
-                                  <Stack direction="row" alignItems="center" spacing={1}>
-                                    <Park sx={{ fontSize: 14, color: '#10b981' }} />
-                                    <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                      {field.crop}
+                      selectedFarm?.fields?.length > 0 ? (
+                        selectedFarm.fields.map((field) => (
+                          <Grid item xs={12} sm={6} md={4} key={field.id}>
+                            <Card
+                              sx={{
+                                height: 280,
+                                minHeight: 280,
+                                maxHeight: 280,
+                                width: '100%',
+                                borderRadius: 2,
+                                border: '1px solid #e5e7eb',
+                                backgroundColor: '#ffffff',
+                                transition: 'all 0.2s ease-in-out',
+                                '&:hover': {
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                  transform: 'translateY(-2px)'
+                                }
+                              }}
+                            >
+                              <CardContent sx={{
+                                p: 2,
+                                height: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between'
+                              }}>
+                                <Box sx={{ flex: 1 }}>
+                                  {/* Field Header */}
+                                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#111827', fontSize: '0.9rem' }}>
+                                      {field.name}
                                     </Typography>
+                                    <Chip
+                                      label={field.status || 'Active'}
+                                      size="small"
+                                      sx={{
+                                        backgroundColor: '#dcfce7',
+                                        color: '#166534',
+                                        fontSize: '0.7rem',
+                                        height: 20,
+                                        fontWeight: 600
+                                      }}
+                                    />
                                   </Stack>
-                                  <Stack direction="row" alignItems="center" spacing={1}>
-                                    <Terrain sx={{ fontSize: 14, color: '#8b5cf6' }} />
-                                    <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                      {field.area}
-                                    </Typography>
-                                  </Stack>
-                                </Stack>
 
-                                {/* Field Occupied Area */}
-                                <Box sx={{ mb: 1 }}>
-                                  <LinearProgress
-                                    variant="determinate"
-                                    value={75}
-                                    sx={{
-                                      height: 6,
-                                      borderRadius: 3,
-                                      backgroundColor: '#e5e7eb',
-                                      '& .MuiLinearProgress-bar': {
-                                        backgroundColor: '#3b82f6',
-                                        borderRadius: 3
-                                      }
-                                    }}
-                                  />
-                                  <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
-                                    75% Occupied
-                                  </Typography>
+                                  {/* Field Details */}
+                                  <Stack spacing={0.5} mb={1.5}>
+                                    <Stack direction="row" alignItems="center" spacing={1}>
+                                      <Park sx={{ fontSize: 14, color: '#10b981' }} />
+                                      <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                                        {field.crop || field.cropType}
+                                      </Typography>
+                                    </Stack>
+                                    <Stack direction="row" alignItems="center" spacing={1}>
+                                      <Terrain sx={{ fontSize: 14, color: '#8b5cf6' }} />
+                                      <Typography variant="body2" sx={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                                        {field.area}
+                                      </Typography>
+                                    </Stack>
+                                  </Stack>
+
+                                  {/* Field Occupied Area */}
+                                  <Box sx={{ mb: 1 }}>
+                                    <LinearProgress
+                                      variant="determinate"
+                                      value={field.progress || 0}
+                                      sx={{
+                                        height: 6,
+                                        borderRadius: 3,
+                                        backgroundColor: '#e5e7eb',
+                                        '& .MuiLinearProgress-bar': {
+                                          backgroundColor: '#3b82f6',
+                                          borderRadius: 3
+                                        }
+                                      }}
+                                    />
+                                    <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
+                                      {field.progress || 0}% Occupied
+                                    </Typography>
+                                  </Box>
                                 </Box>
-                              </Box>
 
-                              {/* Field Revenue */}
-                              <Typography variant="body2" sx={{ fontWeight: 600, color: '#10b981', fontSize: '0.85rem' }}>
-                                {formatCurrency(Math.floor(Math.random() * 3000) + 1000)}/month
-                              </Typography>
-                            </CardContent>
-                          </Card>
-                        </Grid>
-                      )) || (
+                                {/* Field Revenue */}
+                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#10b981', fontSize: '0.85rem' }}>
+                                  {formatCurrency(field.monthlyRevenue || 0)}/month
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        ))
+                      ) : (
                         <Grid item xs={12}>
                           <Paper sx={{ p: 3, textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: 2 }}>
                             <Typography variant="body2" color="text.secondary">

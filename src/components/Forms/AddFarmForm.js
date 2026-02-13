@@ -187,6 +187,16 @@ const apiFarmToFormInitial = (farm) => {
     coordinates: coords,
     webcamUrl: farm.webcam_url || farm.webcamUrl || '',
     description: farm.description || '',
+    status: farm.status || 'Active',
+    cropType: farm.crop_type || farm.cropType || '',
+    irrigationType: farm.irrigation_type || farm.irrigationType || '',
+    soilType: farm.soil_type || farm.soilType || '',
+    areaValue: farm.area_value || farm.areaValue || '',
+    areaUnit: farm.area_unit || farm.areaUnit || 'acres',
+    monthlyRevenue: farm.monthly_revenue || farm.monthlyRevenue || '',
+    progress: farm.progress || 0,
+    plantingDate: farm.planting_date || farm.plantingDate ? new Date(farm.planting_date || farm.plantingDate).toISOString().split('T')[0] : '',
+    harvestDate: farm.harvest_date || farm.harvestDate ? new Date(farm.harvest_date || farm.harvestDate).toISOString().split('T')[0] : '',
     licenseFile: null
   };
 };
@@ -200,6 +210,16 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
     coordinates: { lat: null, lng: null },
     webcamUrl: '',
     description: '',
+    status: 'Active',
+    cropType: '',
+    irrigationType: '',
+    soilType: '',
+    areaValue: '',
+    areaUnit: 'acres',
+    monthlyRevenue: '',
+    progress: 0,
+    plantingDate: '',
+    harvestDate: '',
     licenseFile: null
   });
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -219,13 +239,22 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
         coordinates: { lat: null, lng: null },
         webcamUrl: '',
         description: '',
+        status: 'Active',
+        cropType: '',
+        irrigationType: '',
+        soilType: '',
+        areaValue: '',
+        areaUnit: 'acres',
+        monthlyRevenue: '',
+        progress: 0,
+        plantingDate: '',
+        harvestDate: '',
         licenseFile: null
       });
     }
   }, [open, editMode, initialData]);
 
   const handleInputChange = (field, value) => {
-
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -260,15 +289,8 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
       newErrors.farmName = 'Farm name is required';
     }
 
-    // Strengthen farm icon validation
     if (!formData.farmIcon || formData.farmIcon.trim() === '') {
       newErrors.farmIcon = 'Please select a farm icon';
-    } else {
-      // Validate that the selected icon is one of the valid options
-      const validIcons = farmIcons.map(icon => icon.value);
-      if (!validIcons.includes(formData.farmIcon)) {
-        newErrors.farmIcon = 'Please select a valid farm icon';
-      }
     }
 
     if (!formData.location.trim()) {
@@ -279,7 +301,6 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
       newErrors.description = 'Description is required';
     }
 
-    // Validate webcam URL if provided
     if (formData.webcamUrl.trim()) {
       try {
         new URL(formData.webcamUrl);
@@ -293,22 +314,10 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
   };
 
   const handleSubmit = () => {
-
-    // Extra validation check before submission
-    if (!formData.farmIcon || formData.farmIcon.trim() === '') {
-      setErrors(prev => ({ ...prev, farmIcon: 'Please select a farm icon' }));
-      return;
-    }
-
     if (validateForm()) {
       const farmData = {
-        farmName: formData.farmName,
-        farmIcon: formData.farmIcon,
-        location: formData.location,
-        coordinates: formData.coordinates,
-        webcamUrl: formData.webcamUrl,
-        description: formData.description,
-        licenseFile: formData.licenseFile
+        ...formData,
+        name: formData.farmName,
       };
       if (editMode && initialData && initialData.id) {
         farmData.id = initialData.id;
@@ -329,13 +338,21 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
       coordinates: { lat: null, lng: null },
       webcamUrl: '',
       description: '',
+      status: 'Active',
+      cropType: '',
+      irrigationType: '',
+      soilType: '',
+      areaValue: '',
+      areaUnit: 'acres',
+      monthlyRevenue: '',
+      progress: 0,
+      plantingDate: '',
+      harvestDate: '',
       licenseFile: null
     });
     setErrors({});
     onClose();
   };
-
-  // const selectedIcon = farmIcons.find(icon => icon.value === formData.farmIcon);
 
   return (
     <>
@@ -365,9 +382,9 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
         </StyledDialogTitle>
 
         <StyledDialogContent isMobile={isMobile}>
-          <Grid container spacing={isMobile ? 2 : 4}>
-            {/* Farm Name */}
-            <Grid item xs={12}>
+          <Grid container spacing={isMobile ? 2 : 3} sx={{ mt: 1 }}>
+            {/* Basic Info */}
+            <Grid item xs={12} md={6}>
               <StyledTextField
                 fullWidth
                 label="Farm Name"
@@ -376,101 +393,172 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
                 error={!!errors.farmName}
                 helperText={errors.farmName}
                 variant="outlined"
-                placeholder="Enter farm's name"
+                placeholder="Enter farm name"
                 isMobile={isMobile}
               />
             </Grid>
 
-            {/* Farm Icon */}
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <StyledFormControl fullWidth error={!!errors.farmIcon} isMobile={isMobile}>
                 <InputLabel>Select Farm Icon</InputLabel>
                 <Select
                   value={formData.farmIcon}
                   onChange={(e) => handleInputChange('farmIcon', e.target.value)}
-
-                  displayEmpty
                   renderValue={(selected) => {
-                    if (!selected) {
-                      return <Typography color="textSecondary" sx={{ fontSize: isMobile ? '14px' : '16px' }}></Typography>;
-                    }
-                    const selectedIcon = farmIcons.find(icon => icon.value === selected);
-                    return selectedIcon ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', pl: 1 }}>
-                        {selectedIcon.icon}
+                    const selectedItem = farmIcons.find(icon => icon.value === selected);
+                    return selectedItem ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {selectedItem.icon}
+                        <Typography sx={{ ml: 1 }}>{selectedItem.label}</Typography>
                       </Box>
-                    ) : '';
+                    ) : null;
                   }}
                 >
                   {farmIcons.map((icon) => (
                     <MenuItem key={icon.value} value={icon.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', py: isMobile ? 0.5 : 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         {icon.icon}
+                        <Typography sx={{ ml: 1 }}>{icon.label}</Typography>
                       </Box>
                     </MenuItem>
                   ))}
                 </Select>
-                {errors.farmIcon ? (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5, fontSize: isMobile ? '11px' : '12px' }}>
-                    {errors.farmIcon}
-                  </Typography>
-                ) : (
-                  <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, ml: 1.5, fontSize: isMobile ? '11px' : '12px' }}>
-                    Select an icon to represent your farm
-                  </Typography>
-                )}
+                {errors.farmIcon && <Typography variant="caption" color="error">{errors.farmIcon}</Typography>}
               </StyledFormControl>
             </Grid>
 
-            {/* Location and Webcam URL in two columns */}
-            <Grid item xs={12} md={isMobile ? 12 : 6}>
+            {/* Farm Properties */}
+            <Grid item xs={12} md={6}>
               <StyledTextField
                 fullWidth
-                label="Farm Location"
+                label="Crop Type"
+                value={formData.cropType}
+                onChange={(e) => handleInputChange('cropType', e.target.value)}
+                placeholder="e.g. Wheat, Mixed, Rice"
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Farm Status"
+                select
+                value={formData.status}
+                onChange={(e) => handleInputChange('status', e.target.value)}
+                isMobile={isMobile}
+              >
+                <MenuItem value="Active">Active</MenuItem>
+                <MenuItem value="Growing">Growing</MenuItem>
+                <MenuItem value="Harvesting">Harvesting</MenuItem>
+                <MenuItem value="Planning">Planning</MenuItem>
+              </StyledTextField>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Irrigation Type"
+                value={formData.irrigationType}
+                onChange={(e) => handleInputChange('irrigationType', e.target.value)}
+                placeholder="e.g. Drip, Sprinkler"
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Soil Type"
+                value={formData.soilType}
+                onChange={(e) => handleInputChange('soilType', e.target.value)}
+                placeholder="e.g. Loamy, Clayey"
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <StyledTextField
+                fullWidth
+                label="Area Value"
+                type="number"
+                value={formData.areaValue}
+                onChange={(e) => handleInputChange('areaValue', e.target.value)}
+                placeholder="e.g. 25"
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <StyledFormControl fullWidth isMobile={isMobile}>
+                <InputLabel>Area Unit</InputLabel>
+                <Select
+                  value={formData.areaUnit}
+                  onChange={(e) => handleInputChange('areaUnit', e.target.value)}
+                  label="Area Unit"
+                >
+                  <MenuItem value="acres">Acres</MenuItem>
+                  <MenuItem value="hectares">Hectares</MenuItem>
+                  <MenuItem value="sqm">m²</MenuItem>
+                </Select>
+              </StyledFormControl>
+            </Grid>
+
+            {/* Dates */}
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Planting Date"
+                type="date"
+                InputLabelProps={{ shrink: true }}
+                value={formData.plantingDate}
+                onChange={(e) => handleInputChange('plantingDate', e.target.value)}
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Harvest Date"
+                type="date"
+                InputLabelProps={{ shrink: true }}
+                value={formData.harvestDate}
+                onChange={(e) => handleInputChange('harvestDate', e.target.value)}
+                isMobile={isMobile}
+              />
+            </Grid>
+
+            {/* Location & Webcam */}
+            <Grid item xs={12} md={6}>
+              <StyledTextField
+                fullWidth
+                label="Location"
                 value={formData.location}
                 error={!!errors.location}
-                helperText={errors.location || 'Click the location icon to select on map'}
-                variant="outlined"
-                isMobile={isMobile}
+                helperText={errors.location}
                 InputProps={{
                   readOnly: true,
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => setLocationPickerOpen(true)}
-                        edge="end"
-                        size={isMobile ? "small" : "medium"}
-                        sx={{
-                          color: '#4caf50',
-                          '&:hover': { backgroundColor: 'rgba(76, 175, 80, 0.1)' },
-                          '& .MuiSvgIcon-root': {
-                            fontSize: isMobile ? '20px' : '24px'
-                          }
-                        }}
-                      >
-                        <LocationOn />
+                      <IconButton onClick={() => setLocationPickerOpen(true)}>
+                        <LocationOn sx={{ color: '#4caf50' }} />
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
+                isMobile={isMobile}
               />
-              {formData.coordinates.lat && formData.coordinates.lng && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', fontSize: isMobile ? '10px' : '12px' }}>
-                  Coordinates: {formData.coordinates.lat.toFixed(6)}, {formData.coordinates.lng.toFixed(6)}
-                </Typography>
-              )}
             </Grid>
 
-            <Grid item xs={12} md={isMobile ? 12 : 6}>
+            <Grid item xs={12} md={6}>
               <StyledTextField
                 fullWidth
                 label="Webcam URL (Optional)"
                 value={formData.webcamUrl}
                 onChange={(e) => handleInputChange('webcamUrl', e.target.value)}
                 error={!!errors.webcamUrl}
-                helperText={errors.webcamUrl || 'Enter webcam URL for live farm monitoring'}
-                variant="outlined"
-                placeholder="https://example.com/webcam-feed"
+                helperText={errors.webcamUrl}
                 isMobile={isMobile}
               />
             </Grid>
@@ -479,102 +567,52 @@ const AddFarmForm = ({ open, onClose, onSubmit, editMode = false, initialData = 
             <Grid item xs={12}>
               <StyledTextField
                 fullWidth
-                label="Farm Description"
+                multiline
+                rows={3}
+                label="Description"
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
                 error={!!errors.description}
                 helperText={errors.description}
-                variant="outlined"
-                multiline
-                rows={isMobile ? 3 : 4}
-                placeholder="Describe your farm, crops, farming methods, etc."
                 isMobile={isMobile}
               />
             </Grid>
 
             {/* License Upload */}
             <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600, color: '#4a5568', fontSize: isMobile ? '14px' : '0.875rem' }}>
-                Farming License
-              </Typography>
-              <StyledButton
-                variant="outlined"
-                component="label"
-                fullWidth={false}
-                startIcon={<CloudUpload />}
-                sx={{
-                  color: '#059669',
-                  borderColor: '#059669',
-                  width: isMobile ? '100%' : 'auto',
-                  '&:hover': {
-                    borderColor: '#047857',
-                    backgroundColor: 'rgba(5, 150, 105, 0.04)'
-                  }
-                }}
-              >
-                Upload License
-                <input
-                  type="file"
-                  hidden
-                  onChange={(e) => handleInputChange('licenseFile', e.target.files[0])}
-                  accept=".pdf,.jpg,.jpeg,.png"
-                />
-              </StyledButton>
-              {formData.licenseFile && (
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Description color="action" fontSize="small" />
-                  <Typography variant="body2" sx={{ color: '#4a5568' }}>
-                    {formData.licenseFile.name}
-                  </Typography>
-                  <IconButton size="small" onClick={() => handleInputChange('licenseFile', null)} color="error">
-                    <Close fontSize="small" />
-                  </IconButton>
-                </Box>
-              )}
+              <Box sx={{ border: '2px dashed #c8e6c9', p: 2, borderRadius: '12px', textAlign: 'center' }}>
+                <StyledButton
+                  variant="outlined"
+                  component="label"
+                  startIcon={<CloudUpload />}
+                  sx={{ color: '#4caf50', borderColor: '#4caf50' }}
+                >
+                  Upload License
+                  <input
+                    type="file"
+                    hidden
+                    onChange={(e) => handleInputChange('licenseFile', e.target.files[0])}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                  />
+                </StyledButton>
+                {formData.licenseFile && (
+                  <Typography variant="body2" sx={{ mt: 1 }}>{formData.licenseFile.name}</Typography>
+                )}
+              </Box>
             </Grid>
           </Grid>
         </StyledDialogContent>
 
-        <DialogActions sx={{
-          p: isMobile ? 2 : 3,
-          pt: isMobile ? 1.5 : 2,
-          background: 'linear-gradient(135deg, #f8fffe 0%, #f1f8e9 100%)',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? 1 : 0
-        }}>
-          <StyledButton
-            onClick={handleClose}
-            variant="outlined"
-            fullWidth={isMobile}
-            isMobile={isMobile}
-            sx={{
-              color: '#666',
-              borderColor: '#ddd',
-              '&:hover': {
-                backgroundColor: 'rgba(0,0,0,0.04)',
-                borderColor: '#bbb'
-              }
-            }}
-          >
+        <DialogActions sx={{ p: 3, background: 'linear-gradient(135deg, #f8fffe 0%, #f1f8e9 100%)' }}>
+          <StyledButton onClick={handleClose} variant="outlined" sx={{ color: '#666' }}>
             Cancel
           </StyledButton>
-          <StyledButton
-            onClick={handleSubmit}
-            variant="contained"
-            fullWidth={isMobile}
-            isMobile={isMobile}
-            sx={{
-              bgcolor: '#4caf50',
-              '&:hover': { bgcolor: '#45a049' },
-              px: isMobile ? 2 : 3
-            }}
-          >
+          <StyledButton onClick={handleSubmit} variant="contained" sx={{ bgcolor: '#4caf50' }}>
             {editMode ? 'Update Farm' : 'Save Farm'}
           </StyledButton>
         </DialogActions>
       </StyledDialog>
 
-      {/* Location Picker Dialog */}
       <LocationPicker
         open={locationPickerOpen}
         onClose={() => setLocationPickerOpen(false)}

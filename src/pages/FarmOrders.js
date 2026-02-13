@@ -45,7 +45,11 @@ import {
   Landscape,
   CalendarToday,
   LocationOn,
+  Description,
+  Close,
+  Info,
 } from '@mui/icons-material';
+import { Alert, AlertTitle } from '@mui/material';
 import { orderService } from '../services/orders';
 import { useAuth } from '../contexts/AuthContext';
 import Loader from '../components/Common/Loader';
@@ -61,6 +65,7 @@ const FarmOrders = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const loadOrders = useCallback(async () => {
     if (!user?.id) {
@@ -156,6 +161,139 @@ const FarmOrders = () => {
     }
   };
 
+  const handleReportClick = () => {
+    setReportOpen(true);
+  };
+
+  const handleCloseReport = () => {
+    setReportOpen(false);
+  };
+
+  const handleDownloadReport = (format = 'pdf') => {
+    const reportData = {
+      generatedAt: new Date().toLocaleString(),
+      totalOrders: filteredOrders.length,
+      revenue: filteredOrders.reduce((sum, o) => sum + (Number(o.total_cost) || 0), 0),
+      orders: filteredOrders.map(order => ({
+        id: order.id,
+        field: order.field_name,
+        buyer: order.buyer_name,
+        area: order.area_rented,
+        cost: order.total_cost,
+        status: order.status,
+        date: new Date(order.created_at).toLocaleDateString()
+      }))
+    };
+
+    if (format === 'csv') {
+      const headers = ['Order ID', 'Field Name', 'Buyer Name', 'Area', 'Total Cost', 'Status', 'Date'];
+      const rows = reportData.orders.map(o => [
+        o.id,
+        o.field,
+        o.buyer,
+        o.area,
+        `$${Number(o.cost).toFixed(2)}`,
+        o.status,
+        o.date
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `orders-report-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const printWindow = window.open('', '_blank');
+      const reportHTML = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Orders Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+              h1 { color: #1e293b; border-bottom: 2px solid #4caf50; padding-bottom: 10px; }
+              h2 { color: #059669; margin-top: 30px; }
+              .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
+              .summary-card { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e2e8f0; }
+              .summary-value { font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 5px; }
+              .summary-label { font-size: 12px; color: #64748b; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th { background-color: #4caf50; color: white; padding: 12px; text-align: left; font-weight: bold; }
+              td { padding: 10px; border-bottom: 1px solid #e2e8f0; }
+              tr:nth-child(even) { background-color: #f8fafc; }
+              .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; }
+              @media print { body { margin: 0; padding: 15px; } .no-print { display: none; } }
+            </style>
+          </head>
+          <body>
+            <h1>Orders Report</h1>
+            <p><strong>Generated:</strong> ${reportData.generatedAt}</p>
+            <div class="summary">
+              <div class="summary-card">
+                <div class="summary-value">${reportData.totalOrders}</div>
+                <div class="summary-label">Total Orders</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-value">$${reportData.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div class="summary-label">Total Revenue</div>
+              </div>
+            </div>
+            <h2>Order Details</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Field</th>
+                  <th>Buyer</th>
+                  <th>Area</th>
+                  <th>Cost</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reportData.orders.map(order => `
+                  <tr>
+                    <td>#${order.id}</td>
+                    <td>${order.field}</td>
+                    <td>${order.buyer}</td>
+                    <td>${order.area}</td>
+                    <td>$${Number(order.cost).toFixed(2)}</td>
+                    <td>${order.status}</td>
+                    <td>${order.date}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div class="footer">
+              <p>This report was generated on ${reportData.generatedAt}</p>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                window.onafterprint = function() {
+                  window.close();
+                };
+              };
+            </script>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(reportHTML);
+      printWindow.document.close();
+    }
+  };
+
   const filteredOrders = orders.filter((order) => {
     if (filter === 'all') return true;
     return order.status === filter;
@@ -198,20 +336,29 @@ const FarmOrders = () => {
               Orders placed by buyers on your fields — manage and update status
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<Assessment />}
-            sx={{
-              backgroundColor: '#4caf50',
-              color: 'white',
-              borderRadius: 2,
-              px: 2.5,
-              py: 1,
-            }}
-          >
-            Order Report
-          </Button>
+
         </Stack>
+
+        {/* Payment Logic Info Alert */}
+        <Alert
+          severity="info"
+          variant="outlined"
+          icon={<Info fontSize="large" />}
+          sx={{
+            mb: 3,
+            borderRadius: 2,
+            backgroundColor: '#f0f9ff',
+            borderColor: '#bae6fd',
+            '& .MuiAlert-icon': { color: '#0284c7' },
+            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+          }}
+        >
+          <AlertTitle sx={{ fontWeight: 700, color: '#0369a1' }}>Confirm Orders to Receive Payments</AlertTitle>
+          When a buyer places an order, the coins are held in escrow. <strong>Change the status from "Pending" to "Active"</strong> to confirm the order and instantly receive the coins in your wallet.
+          <Box sx={{ mt: 1, color: '#b91c1c' }}>
+            <strong>Warning:</strong> If you cancel an <em>Active</em> or <em>Completed</em> order, the coins will be automatically deducted from your wallet and refunded to the buyer.
+          </Box>
+        </Alert>
 
         {/* Stats */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -376,7 +523,7 @@ const FarmOrders = () => {
                   py: 1,
                   ...(filter === key && {
                     backgroundColor: '#4caf50',
-                    '&:hover': { backgroundColor: '#a1eda4' },
+
                     color: 'white',
                   }),
                 }}
@@ -409,6 +556,7 @@ const FarmOrders = () => {
               </Box>
               <Button
                 variant="outlined"
+                onClick={handleReportClick}
                 startIcon={<Download sx={{ fontSize: 18 }} />}
                 sx={{ borderRadius: 2, px: 2, py: 1, fontSize: '0.8rem' }}
               >
@@ -432,7 +580,7 @@ const FarmOrders = () => {
               <Table>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: '#f8fafc' }}>
-                    <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem', py: 1.5 }}>Order ID</TableCell>
+
                     <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem', py: 1.5 }}>Field / Product</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem', py: 1.5 }}>Buyer</TableCell>
                     <TableCell sx={{ fontWeight: 600, color: '#475569', fontSize: '0.8rem', py: 1.5 }}>Area</TableCell>
@@ -453,11 +601,7 @@ const FarmOrders = () => {
                         borderBottom: index === filteredOrders.length - 1 ? 'none' : '1px solid #e2e8f0',
                       }}
                     >
-                      <TableCell sx={{ py: 1.5 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8rem' }}>
-                          #{order.id}
-                        </Typography>
-                      </TableCell>
+
                       <TableCell sx={{ py: 1.5 }}>
                         <Stack direction="row" alignItems="center" spacing={1.5}>
                           {order.image_url ? (
@@ -504,21 +648,32 @@ const FarmOrders = () => {
                           ${Number(order.total_cost).toFixed(2)}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ py: 1.5 }}>
-                        <Chip
-                          label={order.status}
-                          color={getStatusColor(order.status)}
-                          size="small"
-                          sx={{
-                            fontWeight: 500,
-                            borderRadius: 1.5,
-                            fontSize: '0.7rem',
-                            height: 24,
-                            ...(order.status === 'completed' && {
-                              color: '#ffffff'
-                            })
-                          }}
-                        />
+                      <TableCell sx={{ py: 1, minWidth: 150 }}>
+                        <FormControl size="small" fullWidth onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            value={order.status}
+                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                            disabled={updatingStatus}
+                            sx={{
+                              borderRadius: 1.5,
+                              fontSize: '0.75rem',
+                              height: 32,
+                              backgroundColor: order.status === 'pending' ? '#fffbeb' : 'white',
+                              '& .MuiSelect-select': {
+                                py: 0.5,
+                                fontWeight: 600,
+                                color: getStatusColor(order.status) === 'primary' ? '#1d4ed8' :
+                                  getStatusColor(order.status) === 'success' ? '#059669' :
+                                    getStatusColor(order.status) === 'warning' ? '#d97706' : '#ef4444'
+                              }
+                            }}
+                          >
+                            <MenuItem value="pending" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#d97706' }}>Pending</MenuItem>
+                            <MenuItem value="active" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1d4ed8' }}>Active</MenuItem>
+                            <MenuItem value="completed" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>Completed</MenuItem>
+                            <MenuItem value="cancelled" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>Cancelled</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                       <TableCell sx={{ py: 1.5 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
@@ -554,7 +709,7 @@ const FarmOrders = () => {
                               }}
                               sx={{
                                 color: '#059669',
-                                '&:hover': { backgroundColor: '#dcfce7' },
+
                                 p: 0.5,
                               }}
                             >
@@ -741,21 +896,25 @@ const FarmOrders = () => {
                     </Box>
                     <Box>
                       <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
-                        Update status
+                        Order Status
                       </Typography>
-                      <FormControl size="small" fullWidth sx={{ mt: 1, minWidth: 160 }}>
-                        <Select
-                          value={selectedOrder.status}
-                          onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
-                          disabled={updatingStatus}
-                          sx={{ borderRadius: 2 }}
-                        >
-                          <MenuItem value="pending">Pending</MenuItem>
-                          <MenuItem value="active">Active</MenuItem>
-                          <MenuItem value="completed">Completed</MenuItem>
-                          <MenuItem value="cancelled">Cancelled</MenuItem>
-                        </Select>
-                      </FormControl>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Chip
+                          label={selectedOrder.status}
+                          color={getStatusColor(selectedOrder.status)}
+                          size="small"
+                          sx={{
+                            fontWeight: 600,
+                            borderRadius: 2,
+                            ...(selectedOrder.status === 'completed' && {
+                              color: '#ffffff'
+                            })
+                          }}
+                        />
+                        <Typography variant="caption" display="block" sx={{ mt: 1, fontStyle: 'italic', color: '#64748b' }}>
+                          Status can be updated directly from the orders table.
+                        </Typography>
+                      </Box>
                     </Box>
                     <Box>
                       <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>
@@ -798,12 +957,134 @@ const FarmOrders = () => {
             startIcon={<Download />}
             sx={{
               backgroundColor: '#059669',
-              '&:hover': { backgroundColor: '#047857' },
+
               borderRadius: 2,
               px: 3,
             }}
           >
             Download
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Report Dialog */}
+      <Dialog
+        open={reportOpen}
+        onClose={handleCloseReport}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            maxHeight: '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                Orders Report
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Overview of {filter === 'all' ? 'all' : filter} orders
+              </Typography>
+            </Box>
+            <IconButton onClick={handleCloseReport} sx={{ color: '#64748b' }}>
+              <Close />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Box>
+            {/* Summary Statistics */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6}>
+                <Paper sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 2, textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#1e293b', mb: 0.5 }}>
+                    {filteredOrders.length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Orders
+                  </Typography>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Paper sx={{ p: 2, backgroundColor: '#f0fdf4', borderRadius: 2, textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: '#059669', mb: 0.5 }}>
+                    ${filteredOrders.reduce((sum, o) => sum + (Number(o.total_cost) || 0), 0).toFixed(2)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Revenue
+                  </Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+
+            {/* Orders Summary Table */}
+            <Paper sx={{ p: 2, backgroundColor: '#f8fafc', borderRadius: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}>
+                Orders List
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Order ID</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Field</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Buyer</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Area</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Cost</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredOrders.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell>#{order.id}</TableCell>
+                        <TableCell>{order.field_name}</TableCell>
+                        <TableCell>{order.buyer_name}</TableCell>
+                        <TableCell>{order.area_rented}</TableCell>
+                        <TableCell>${Number(order.total_cost).toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={order.status}
+                            color={getStatusColor(order.status)}
+                            size="small"
+                            sx={{ fontWeight: 600, height: 24 }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+              Report generated on {new Date().toLocaleString()}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
+          <Button
+            onClick={() => handleDownloadReport('csv')}
+            variant="outlined"
+            startIcon={<Download />}
+            sx={{ borderRadius: 1.5 }}
+          >
+            Download CSV
+          </Button>
+          <Button
+            onClick={() => handleDownloadReport('pdf')}
+            variant="outlined"
+            startIcon={<Description />}
+            sx={{ borderRadius: 1.5 }}
+          >
+            Download PDF
+          </Button>
+          <Button onClick={handleCloseReport} variant="contained" sx={{ borderRadius: 1.5, bgcolor: '#4caf50', color: '#ffffff', '&:hover': { bgcolor: '#059669' } }}>
+            Close
           </Button>
         </DialogActions>
       </Dialog>

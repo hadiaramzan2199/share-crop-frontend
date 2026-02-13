@@ -588,7 +588,7 @@ const FarmerView = () => {
 
       {/* Create Field Form Dialog */}
       <CreateFieldForm
-        key={`create-field-${farmsList.length}`}
+        key={editingField ? `edit-field-${editingField.id || editingField._id}` : `create-field-${farmsList.length}`}
         open={createFieldOpen}
         onClose={() => {
           setCreateFieldOpen(false);
@@ -598,6 +598,7 @@ const FarmerView = () => {
         editMode={!!editingField}
         initialData={editingField}
         farmsList={farmsList}
+        fieldsList={fields}
       />
 
       {/* Add Farm Form Dialog */}

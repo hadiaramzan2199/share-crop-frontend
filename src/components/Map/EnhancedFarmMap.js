@@ -2113,7 +2113,7 @@ const EnhancedFarmMap = forwardRef(({
             field_id: product.id,
             quantity: quantity,
             total_price: totalCostInDollars,
-            status: 'active',
+            status: 'pending',
             mode_of_shipping: selectedShipping || 'Delivery',
             selected_harvest_date: selectedHarvestDate ? selectedHarvestDate.date : null,
             selected_harvest_label: selectedHarvestDate ? selectedHarvestDate.label : null
@@ -2128,32 +2128,18 @@ const EnhancedFarmMap = forwardRef(({
             })();
           }
 
-          // Deduct coins FIRST before creating order (atomic operation)
           let orderId = null;
           try {
-            // Deduct coins with order reference
-            const deductResponse = await coinService.deductCoins(currentUser.id, totalCostInCoins, {
-              reason: `Purchase: ${quantity}m² of ${product.name}`,
-              refType: 'order',
-              refId: null // Will be updated after order creation
-            });
-
-            if (!deductResponse) {
-              throw new Error('Failed to deduct coins');
-            }
-
-            console.log('[Purchase] Coins deducted:', { userId: currentUser.id, amount: totalCostInCoins, response: deductResponse });
-
-            // Update user coins in UI immediately
-            const updatedCoins = await coinService.getUserCoins(currentUser.id);
-            setUserCoins(updatedCoins);
-            if (onCoinRefresh) onCoinRefresh();
-
             // Create order via API
             const orderResponse = await orderService.createOrder(apiOrderData);
             orderId = orderResponse?.data?.id || orderResponse?.data?.order?.id || null;
 
             console.log('[Purchase] Order created:', { orderId, orderData: apiOrderData });
+
+            // Update user coins in UI immediately (fetch fresh balance from API)
+            const updatedCoins = await coinService.getUserCoins(currentUser.id);
+            setUserCoins(updatedCoins);
+            if (onCoinRefresh) onCoinRefresh();
 
             // Create notification for the farmer
             const farmerId = product.farmer_id || product.created_by;

@@ -42,6 +42,8 @@ import supabase from '../../services/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { userDocumentsService } from '../../services/userDocuments';
 import { useNavigate } from 'react-router-dom';
+import farmsService from '../../services/farms';
+import fieldsService from '../../services/fields';
 
 // Custom hook for mobile detection
 const useIsMobile = () => {
@@ -268,7 +270,7 @@ const farmIcons = [
   { value: 'yard', label: 'Yard', icon: <Yard sx={{ color: '#558b2f' }} /> }
 ];
 
-const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialData = null, farmsList = [] }) => {
+const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialData = null, farmsList = [], fieldsList = [] }) => {
   // Debug logging
 
   // Mobile detection hook
@@ -276,6 +278,123 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
 
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const [formData, setFormData] = useState({
+    selectedIcon: '',
+    category: '',
+    subcategory: '',
+    productName: '',
+    description: '',
+    fieldSize: '',
+    fieldSizeUnit: 'm²',
+    productionRate: '',
+    productionRateUnit: 'Kg',
+    sellingAmount: '',
+    sellingPrice: '',
+    retailPrice: '',
+    virtualProductionRate: '',
+    virtualCostPerUnit: '',
+    appFees: '',
+    userAreaVirtualRentPrice: '',
+    harvestDates: [{ date: '', label: '' }],
+    shippingOption: 'Both',
+    deliveryTime: '',
+    deliveryCharges: [{ upto: '', amount: '' }],
+    hasWebcam: false,
+    latitude: '',
+    longitude: '',
+    shippingScope: 'Global',
+    farmId: '',
+    available_for_rent: false,
+    rent_price_per_month: '',
+    rent_duration_monthly: false,
+    rent_duration_quarterly: false,
+    rent_duration_yearly: false
+  });
+
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+
+  // Selected farm info for area validation
+  const [selectedFarmArea, setSelectedFarmArea] = useState({ total: 0, occupied: 0, remaining: 0, unit: 'sqm' });
+
+  // Calculate remaining area whenever farm selection or fields change
+  useEffect(() => {
+    const calculateArea = async () => {
+      if (formData.farmId) {
+        let farm = farmsList.find(f => String(f.id || f._id) === String(formData.farmId));
+
+        if (!farm || (editMode && formData.farmId)) {
+          try {
+            const response = await farmsService.getById(formData.farmId);
+            if (response.data) {
+              farm = response.data;
+            }
+          } catch (err) {
+            console.error('Error fetching farm details:', err);
+          }
+        }
+
+        if (farm) {
+          const farmIdSource = String(farm.id || farm._id || '');
+          const totalArea = parseFloat(farm.area_value || farm.areaValue) || 0;
+          const farmUnit = farm.area_unit || farm.areaUnit || 'sqm';
+
+          let allFields = fieldsList || [];
+
+          if (allFields.length === 0) {
+            try {
+              const fieldsResponse = await fieldsService.getAllForMap();
+              if (fieldsResponse.data) {
+                allFields = fieldsResponse.data;
+              }
+            } catch (err) {
+              console.error('Error fetching fields list:', err);
+            }
+          }
+
+          const farmFields = allFields.filter(field => {
+            const fieldFarmId = String(field.farm_id || field.farmId || '').trim().toLowerCase();
+            const farmIdTarget = farmIdSource.trim().toLowerCase();
+            const isSameFarm = fieldFarmId === farmIdTarget;
+
+            const ci = initialData || {};
+            const currentFieldId = String(ci.id || ci._id || '').trim().toLowerCase();
+            const thisFieldId = String(field.id || field._id || '').trim().toLowerCase();
+
+            const isNotCurrentField = !editMode || (thisFieldId !== currentFieldId && currentFieldId !== '');
+
+            return isSameFarm && isNotCurrentField;
+          });
+
+          const occupied = farmFields.reduce((sum, f) => {
+            const sizeStr = f.field_size || f.fieldSize || f.area_m2 || '0';
+            const size = parseFloat(sizeStr) || 0;
+            return sum + size;
+          }, 0);
+
+          setSelectedFarmArea({
+            total: totalArea,
+            occupied: occupied,
+            remaining: Math.max(0, totalArea - occupied),
+            unit: farmUnit
+          });
+
+          setFormData(prev => {
+            if (prev.fieldSizeUnit !== farmUnit) {
+              return { ...prev, fieldSizeUnit: farmUnit };
+            }
+            return prev;
+          });
+        }
+      } else {
+        setSelectedFarmArea({ total: 0, occupied: 0, remaining: 0, unit: 'sqm' });
+      }
+    };
+
+    calculateArea();
+  }, [formData.farmId, farmsList, fieldsList, editMode, initialData]);
 
   // State for license check and upload
   const [checkingLicense, setCheckingLicense] = useState(true);
@@ -380,43 +499,7 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     return iconData ? iconData.icon : <Agriculture sx={{ color: '#8bc34a' }} />;
   };
 
-  const [formData, setFormData] = useState({
-    selectedIcon: '',
-    category: '',
-    subcategory: '',
-    productName: '',
-    description: '',
-    fieldSize: '',
-    fieldSizeUnit: 'm²',
-    productionRate: '',
-    productionRateUnit: 'Kg',
-    sellingAmount: '',
-    sellingPrice: '',
-    retailPrice: '',
-    virtualProductionRate: '',
-    virtualCostPerUnit: '',
-    appFees: '',
-    userAreaVirtualRentPrice: '',
-    harvestDates: [{ date: '', label: '' }],
-    shippingOption: 'Both',
-    deliveryTime: '',
-    deliveryCharges: [{ upto: '', amount: '' }],
-    hasWebcam: false,
-    latitude: '',
-    longitude: '',
-    shippingScope: 'Global',
-    farmId: '',
-    available_for_rent: false,
-    rent_price_per_month: '',
-    rent_duration_monthly: false,
-    rent_duration_quarterly: false,
-    rent_duration_yearly: false
-  });
 
-  const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  // const [expandedSection, setExpandedSection] = useState('basic');
-  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
   const categoryData = {
     'Beverages': ['Beer', 'Coffee', 'Juice', 'Milk', 'Soda', 'Teabags', 'Wine'],
@@ -448,20 +531,71 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
         ...prev,
         ...initialData,
         selectedIcon: initialData.icon ? initialData.icon.split('/').pop() : (initialData.image ? initialData.image.split('/').pop() : ''),
+      }));
+      setFormData(prev => ({
+        ...prev,
         productName: initialData.name || '',
-        category: initialData.category || '',
         description: initialData.description || '',
+        // Ensure category matches a parent category, if not use subcategory logic or fallback
+        category: initialData.category || '',
+        subcategory: initialData.subcategory || '',
+        fieldSize: initialData.field_size || initialData.fieldSize || initialData.area_m2 || '',
+        fieldSizeUnit: initialData.field_size_unit || initialData.fieldSizeUnit || initialData.unit || 'sqm',
+        productionRate: initialData.production_rate || initialData.productionRate || '',
+        productionRateUnit: initialData.production_rate_unit || initialData.productionRateUnit || 'Kg',
+        sellingAmount: initialData.quantity || '',
         sellingPrice: initialData.price || '',
-        latitude: initialData.latitude || '',
-        longitude: initialData.longitude || '',
-        harvestDates: initialData.harvestDates || [{ date: '', label: '' }],
-        available_for_buy: true,
+        farmId: initialData.farm_id || initialData.farmId || '',
+        latitude: initialData.coordinates?.[1] || initialData.latitude || '',
+        longitude: initialData.coordinates?.[0] || initialData.longitude || '',
+        hasWebcam: initialData.has_webcam || !!initialData.webcam_url,
+        harvestDates: Array.isArray(initialData.harvest_dates) ? initialData.harvest_dates :
+          Array.isArray(initialData.harvestDates) ? initialData.harvestDates :
+            [{ date: '', label: '' }],
+        shippingOption: initialData.shipping_option || 'Standard Delivery',
+        deliveryCharges: Array.isArray(initialData.delivery_charges) ? initialData.delivery_charges :
+          Array.isArray(initialData.deliveryCharges) ? initialData.deliveryCharges :
+            [{ upto: '', amount: '' }],
+        shippingScope: initialData.shipping_scope || 'Global',
+        price_per_m2: initialData.price_per_m2 || initialData.pricePerM2 || 0,
+        available_for_buy: initialData.available_for_buy ?? true,
         available_for_rent: Boolean(initialData.available_for_rent),
         rent_price_per_month: initialData.rent_price_per_month ?? '',
         rent_duration_monthly: Boolean(initialData.rent_duration_monthly),
         rent_duration_quarterly: Boolean(initialData.rent_duration_quarterly),
         rent_duration_yearly: Boolean(initialData.rent_duration_yearly)
       }));
+
+      // Special fix for the "Watermelon" in category warning:
+      // If the incoming category doesn't match a main category but is a valid subcategory,
+      // we need to set the parent category correctly.
+      const categoriesLookup = {
+        'Fruits': ['All Fruits', 'Apple', 'Banana', 'Berries', 'Citrus', 'Grapes', 'Mango', 'Melon', 'Peach', 'Pear', 'Stone Fruit', 'Tropical Fruit', 'Watermelon', 'Green Apple', 'Red Apple', 'Strawberry', 'Tangerine', 'Avocados'],
+        'Vegetables': ['All Vegetables', 'Beans', 'Cabbage', 'Carrot', 'Corn', 'Cucumber', 'Leafy Greens', 'Onion', 'Potato', 'Tomato', 'Root Vegetables', 'Eggplant', 'Lemon', 'Broccoli', 'Capsicum', 'Onions', 'Potatoes', 'Salad Greens'],
+      };
+
+      setFormData(prev => {
+        let correctedCategory = prev.category;
+        let correctedSubcategory = prev.subcategory;
+
+        // If category is actually a subcategory (like "Watermelon"), fix it
+        for (const [parent, children] of Object.entries(categoriesLookup)) {
+          if (children.includes(prev.category)) {
+            correctedCategory = parent;
+            correctedSubcategory = prev.category;
+            break;
+          }
+        }
+
+        if (correctedCategory !== prev.category || correctedSubcategory !== prev.subcategory) {
+          return {
+            ...prev,
+            category: correctedCategory,
+            subcategory: correctedSubcategory
+          };
+        }
+        return prev;
+      });
       // Set location address if coordinates exist
       if (initialData.latitude && initialData.longitude) {
         setLocationAddress(initialData.location || `${initialData.latitude}, ${initialData.longitude}`);
@@ -654,7 +788,14 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
     if (!formData.category || formData.category === 'Select Category') newErrors.category = 'Category is required';
     if (!formData.subcategory || formData.subcategory === 'Select Sub Category') newErrors.subcategory = 'Sub category is required';
     if (!formData.description.trim()) newErrors.description = 'Description is required';
-    if (!formData.fieldSize) newErrors.fieldSize = 'Field size is required';
+    if (!formData.fieldSize) {
+      newErrors.fieldSize = 'Field size is required';
+    } else if (parseFloat(formData.fieldSize) <= 0) {
+      newErrors.fieldSize = 'Field size must be a positive number';
+    } else if (parseFloat(formData.fieldSize) > selectedFarmArea.remaining) {
+      newErrors.fieldSize = `Not enough area left in farm (${selectedFarmArea.remaining.toFixed(2)} ${selectedFarmArea.unit} available)`;
+    }
+
     if (!formData.productionRate) newErrors.productionRate = 'Production rate is required';
     if (!formData.sellingAmount) newErrors.sellingAmount = 'Selling amount is required';
     if (!formData.sellingPrice) newErrors.sellingPrice = 'Selling price is required';
@@ -1001,6 +1142,11 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                         {errors.farmId}
                       </Typography>
                     )}
+                    {formData.farmId && (
+                      <Typography variant="caption" sx={{ mt: 0.5, display: 'block', color: selectedFarmArea.remaining > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                        Remaining Area: {selectedFarmArea.remaining.toFixed(2)} {selectedFarmArea.unit === 'sqm' ? 'm²' : selectedFarmArea.unit}
+                      </Typography>
+                    )}
                   </StyledFormControl>
 
                   {/* Category Dropdown */}
@@ -1160,8 +1306,9 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                         value={formData.fieldSize}
                         onChange={(e) => handleInputChange('fieldSize', e.target.value)}
                         error={!!errors.fieldSize}
-                        helperText={errors.fieldSize}
+                        helperText={errors.fieldSize || (formData.farmId ? `Max ${selectedFarmArea.remaining.toFixed(2)} ${selectedFarmArea.unit === 'sqm' ? 'm²' : selectedFarmArea.unit} available` : '')}
                         isMobile={isMobile}
+                        type="number"
                       />
                       <StyledFormControl isMobile={isMobile}>
                         <InputLabel>Unit</InputLabel>
@@ -1169,8 +1316,9 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                           value={formData.fieldSizeUnit}
                           onChange={(e) => handleInputChange('fieldSizeUnit', e.target.value)}
                           label="Unit"
+                          disabled={!!formData.farmId}
                         >
-                          <MenuItem value="m²">m²</MenuItem>
+                          <MenuItem value="sqm">m²</MenuItem>
                           <MenuItem value="acres">acres</MenuItem>
                           <MenuItem value="hectares">hectares</MenuItem>
                         </Select>
@@ -1329,8 +1477,8 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                           </Box>
                         ) : (
                           // Desktop Layout - Horizontal
-                          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>
-                            <Box sx={{ flex: '1 1 40%' }}>
+                          <Grid container spacing={2} alignItems="flex-end">
+                            <Grid item xs={12} md={5}>
                               <StyledTextField
                                 fullWidth
                                 type="date"
@@ -1339,9 +1487,10 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                                 onChange={(e) => handleHarvestDateChange(index, 'date', e.target.value)}
                                 InputLabelProps={{ shrink: true }}
                                 isMobile={isMobile}
+                                sx={{ width: '100%' }}
                               />
-                            </Box>
-                            <Box sx={{ flex: '1 1 40%' }}>
+                            </Grid>
+                            <Grid item xs={12} md={5}>
                               <StyledTextField
                                 fullWidth
                                 label="Label (optional)"
@@ -1349,35 +1498,38 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
                                 value={harvestDate?.label ?? ''}
                                 onChange={(e) => handleHarvestDateChange(index, 'label', e.target.value)}
                                 isMobile={isMobile}
+                                sx={{ width: '100%' }}
                               />
-                            </Box>
-                            <Box sx={{ flex: '0 0 auto', display: 'flex', gap: 1 }}>
-                              {index === (formData.harvestDates || []).length - 1 && (
-                                <IconButton
-                                  onClick={addHarvestDate}
-                                  sx={{
-                                    color: '#4caf50',
-                                    backgroundColor: '#e8f5e8',
-                                    '&:hover': { backgroundColor: '#c8e6c9' }
-                                  }}
-                                >
-                                  <Add />
-                                </IconButton>
-                              )}
-                              {(formData.harvestDates || []).length > 1 && (
-                                <IconButton
-                                  onClick={() => removeHarvestDate(index)}
-                                  sx={{
-                                    color: '#f44336',
-                                    backgroundColor: '#ffebee',
-                                    '&:hover': { backgroundColor: '#ffcdd2' }
-                                  }}
-                                >
-                                  <Remove />
-                                </IconButton>
-                              )}
-                            </Box>
-                          </Box>
+                            </Grid>
+                            <Grid item xs={12} md={2}>
+                              <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                                {index === (formData.harvestDates || []).length - 1 && (
+                                  <IconButton
+                                    onClick={addHarvestDate}
+                                    sx={{
+                                      color: '#4caf50',
+                                      backgroundColor: '#e8f5e8',
+                                      '&:hover': { backgroundColor: '#c8e6c9' }
+                                    }}
+                                  >
+                                    <Add />
+                                  </IconButton>
+                                )}
+                                {(formData.harvestDates || []).length > 1 && (
+                                  <IconButton
+                                    onClick={() => removeHarvestDate(index)}
+                                    sx={{
+                                      color: '#f44336',
+                                      backgroundColor: '#ffebee',
+                                      '&:hover': { backgroundColor: '#ffcdd2' }
+                                    }}
+                                  >
+                                    <Remove />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            </Grid>
+                          </Grid>
                         )}
                       </Box>
                     ))}
@@ -1750,10 +1902,10 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
             </Box>
           );
         })()}
-      </StyledDialogContent>
+      </StyledDialogContent >
 
       {/* Location Picker Dialog */}
-      <LocationPicker
+      < LocationPicker
         open={locationPickerOpen}
         onClose={() => setLocationPickerOpen(false)}
         onLocationSelect={handleLocationSelect}
@@ -1766,9 +1918,10 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
       />
 
       {/* Only show standard actions if we are in the normal form state */}
-      {(!checkingLicense &&
-        (user?.approval_status || (user?.is_active ? 'approved' : 'pending')) === 'approved' &&
-        farmsList && farmsList.length > 0) && (
+      {
+        (!checkingLicense &&
+          (user?.approval_status || (user?.is_active ? 'approved' : 'pending')) === 'approved' &&
+          farmsList && farmsList.length > 0) && (
           <StyledDialogActions isMobile={isMobile}>
             <StyledButton
               onClick={handleClose}
@@ -1792,8 +1945,9 @@ const CreateFieldForm = ({ open, onClose, onSubmit, editMode = false, initialDat
               {isSubmitting ? 'Creating...' : (editMode ? 'Update Field' : 'Create Field')}
             </StyledButton>
           </StyledDialogActions>
-        )}
-    </StyledDialog>
+        )
+      }
+    </StyledDialog >
   );
 };
 

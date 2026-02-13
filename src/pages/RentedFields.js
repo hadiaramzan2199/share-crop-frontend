@@ -87,7 +87,7 @@ function mapFieldFromApi(raw) {
     name: raw.name,
     farmName: raw.farmer_name,
     location: raw.location,
-    cropType: raw.category || raw.subcategory || '—',
+    cropType: raw.category || raw.subcategory,
     category: raw.category,
     subcategory: raw.subcategory,
     is_own_field: Boolean(raw.is_own_field),
@@ -96,17 +96,17 @@ function mapFieldFromApi(raw) {
     available_area: availableArea,
     area: quantity ? `${quantity} ${raw.unit || 'm²'}` : `${areaM2} m²`,
     price_per_m2: pricePerM2,
-    monthlyRent: (pricePerM2 * (quantity || areaM2)) || (typeof raw.price === 'string' ? parseFloat(raw.price) : raw.price) || 0,
+    monthlyRent: (pricePerM2 * (quantity || areaM2)) || (typeof raw.price === 'string' ? parseFloat(raw.price) : raw.price),
     status: raw.available !== false ? 'Active' : 'Inactive',
     progress,
     selected_harvests: harvestDates,
     selected_harvest_date: harvestDates[0]?.date,
     selected_harvest_label: harvestDates[0]?.label,
-    shipping_modes: shippingModes.length ? shippingModes : ['Not specified'],
+    shipping_modes: shippingModes,
     image_url: raw.image,
     farmer_name: raw.farmer_name,
     created_at: raw.created_at,
-    rentPeriod: totalArea > 0 ? 'Ongoing' : '—',
+    rentPeriod: totalArea > 0 ? 'Ongoing' : null,
     available_for_buy: availableForBuy,
     available_for_rent: availableForRent,
     rent_price_per_month: rentPricePerMonth,
@@ -165,8 +165,8 @@ function mapRentalFromApi(r) {
     is_own_field: false,
     name: r.field_name || `Field ${r.field_id}`,
     farmName: r.owner_name,
-    location: r.field_location || '—',
-    cropType: r.category || r.subcategory || '—',
+    location: r.field_location,
+    cropType: r.category || r.subcategory,
     category: r.category,
     subcategory: r.subcategory,
     total_area: totalArea,
@@ -178,9 +178,9 @@ function mapRentalFromApi(r) {
     status: status === 'active' ? 'Active' : status === 'ended' ? 'Ended' : status === 'cancelled' ? 'Cancelled' : status,
     progress,
     selected_harvests: [],
-    shipping_modes: ['Not specified'],
+    shipping_modes: [],
     farmer_name: r.owner_name,
-    rentPeriod: r.start_date && r.end_date ? `${r.start_date} – ${r.end_date}` : '—',
+    rentPeriod: r.start_date && r.end_date ? `${r.start_date} – ${r.end_date}` : null,
     rental_start_date: r.start_date,
     rental_end_date: r.end_date,
   };
@@ -1291,9 +1291,7 @@ const RentedFields = () => {
                       bgcolor: '#4caf50',
                       color: '#ffffff',
                       py: 0.75,
-                      '&:hover': {
-                        bgcolor: '#059669'
-                      }
+
                     }}
                   >
                     View Details
