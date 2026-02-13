@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container,
+  Box,
   Typography,
   Card,
   CardContent,
@@ -8,16 +8,21 @@ import {
   Button,
   TextField,
   Grid,
-  Box,
   Chip,
   IconButton,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Divider,
   Stack,
   Paper,
+  Tabs,
+  Tab,
+  CircularProgress,
+  useTheme,
+  alpha,
+  Tooltip,
+  InputAdornment,
+  LinearProgress,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import {
   Edit,
@@ -26,18 +31,82 @@ import {
   PhotoCamera,
   Email,
   AccountBalance,
-  CalendarToday
+  CalendarToday,
+  Lock,
+  CloudUpload,
+  Description,
+  Delete as DeleteIcon,
+  VerifiedUser,
+  Security,
+  Dashboard,
+  Person,
+  FolderOpen,
+  Phone,
+  LocationOn
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { profileService } from '../services/profile';
 import { orderService } from '../services/orders';
-import { Alert, Snackbar, InputAdornment, LinearProgress, CircularProgress } from '@mui/material';
-import { Lock, CloudUpload, Description, Delete as DeleteIcon, OpenInNew } from '@mui/icons-material';
-import supabase from '../services/supabase';
 import { userDocumentsService } from '../services/userDocuments';
+import supabase from '../services/supabase';
+
+// Helper component for statistics cards
+const StatCard = ({ label, value, icon, color }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2.5,
+      borderRadius: 3,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      background: '#ffffff',
+      border: '1px solid',
+      borderColor: 'divider',
+      transition: 'all 0.3s ease',
+      height: 100, // Fixed height
+      width: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+      '&:hover': {
+        borderColor: color,
+        transform: 'translateY(-2px)',
+        boxShadow: `0 4px 12px ${alpha(color, 0.15)}`
+      }
+    }}
+  >
+    <Box
+      sx={{
+        width: 48,
+        height: 48,
+        borderRadius: 2,
+        bgcolor: alpha(color, 0.1),
+        color: color,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
+      }}
+    >
+      {React.cloneElement(icon, { fontSize: 'medium' })}
+    </Box>
+    <Box sx={{ minWidth: 0, flex: 1 }}>
+      <Typography variant="h5" fontWeight="700" color="text.primary" sx={{ lineHeight: 1.2, mb: 0.5, fontSize: { xs: '1.25rem', md: '1.5rem' } }} noWrap>
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" fontWeight="500" noWrap>
+        {label}
+      </Typography>
+    </Box>
+  </Paper>
+);
 
 const Profile = () => {
+  const theme = useTheme();
   const { user, updateUser } = useAuth();
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Profile State
   const [profile, setProfile] = useState({
     name: '',
     email: '',
@@ -51,40 +120,44 @@ const Profile = () => {
     email_verified: false,
     totalSpent: 0,
     profile_image_url: null,
+    activeRentals: 0,
+    totalRentals: 0
   });
 
-  const [documents, setDocuments] = useState([]);
-  const [docLoading, setDocLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [editedProfile, setEditedProfile] = useState({ ...profile });
 
+  // Loading & statuses
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [passwordDialog, setPasswordDialog] = useState(false);
+
+  // Password State
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false,
-  });
-
-  const [editMode, setEditMode] = useState(false);
-  const [editedProfile, setEditedProfile] = useState({ ...profile });
-  const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // Documents State
+  const [documents, setDocuments] = useState([]);
+  const [docLoading, setDocLoading] = useState(false);
+
+  // Edit Mode Toggle
+  const [editMode, setEditMode] = useState(false);
+
   useEffect(() => {
-    if (user?.id) {
+    if (user) {
+      loadProfile();
       loadUserDocuments();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadUserDocuments = async () => {
+    if (!user?.id) return;
     try {
       setDocLoading(true);
       const response = await userDocumentsService.getUserDocuments(user.id);
@@ -96,24 +169,15 @@ const Profile = () => {
     }
   };
 
-  // Load user profile data
-  useEffect(() => {
-    if (user) {
-      loadProfile();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when user is set
-  }, [user]);
-
   const loadProfile = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Get user profile
       const profileResponse = await profileService.getProfile();
       const userData = profileResponse.data?.user || user;
 
-      // Get user stats based on role
+      // Calculate stats
       let stats = {
         totalRentals: 0,
         activeRentals: 0,
@@ -121,18 +185,22 @@ const Profile = () => {
       };
 
       try {
+        let orders = [];
         if (userData.user_type === 'buyer') {
           const ordersResponse = await orderService.getBuyerOrders();
-          const orders = ordersResponse.data || [];
-          stats.totalRentals = orders.length;
-          stats.activeRentals = orders.filter(o => ['pending', 'active', 'confirmed'].includes(o.status)).length;
-          stats.totalSpent = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+          orders = ordersResponse.data || [];
         } else if (userData.user_type === 'farmer') {
           const ordersResponse = await orderService.getFarmerOrders(userData.id);
-          const orders = ordersResponse.data || [];
+          orders = ordersResponse.data || [];
+        }
+
+        if (orders.length > 0) {
           stats.totalRentals = orders.length;
           stats.activeRentals = orders.filter(o => ['pending', 'active', 'confirmed'].includes(o.status)).length;
-          stats.totalSpent = orders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+          stats.totalSpent = orders.reduce((sum, o) => {
+            const price = parseFloat(o.total_price);
+            return sum + (isNaN(price) ? 0 : price);
+          }, 0);
         }
       } catch (statsErr) {
         console.warn('Could not load user stats:', statsErr);
@@ -141,12 +209,12 @@ const Profile = () => {
       setProfile({
         name: userData.name || '',
         email: userData.email || '',
-        phone: '', // Not in current schema
-        location: '', // Not in current schema
+        phone: '',
+        location: '',
         joinDate: userData.created_at || '',
-        bio: '', // Not in current schema
+        bio: '',
         avatar: null,
-        user_type: userData.user_type || '',
+        user_type: userData.user_type || 'User',
         coins: userData.coins || 0,
         email_verified: userData.email_verified || false,
         profile_image_url: userData.profile_image_url || null,
@@ -159,26 +227,22 @@ const Profile = () => {
         phone: '',
         location: '',
         bio: '',
+        profile_image_url: userData.profile_image_url || null
       });
+
     } catch (err) {
       console.error('Error loading profile:', err);
-      setError('Failed to load profile. Please try again.');
+      setError('Failed to load profile details.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = () => {
-    setEditedProfile({ ...profile });
-    setEditMode(true);
-  };
-
-  const handleSave = async () => {
+  const handleSaveProfile = async () => {
     try {
       setSaving(true);
       setError(null);
 
-      // Only update name and email (phone, location, bio not in schema yet)
       const updateData = {
         name: editedProfile.name,
         email: editedProfile.email,
@@ -188,31 +252,21 @@ const Profile = () => {
       const updatedUser = response.data?.user;
 
       if (updatedUser) {
-        // Update AuthContext
         updateUser(updatedUser);
-
-        // Update local profile
-        setProfile({
-          ...profile,
+        setProfile(prev => ({
+          ...prev,
           name: updatedUser.name,
-          email: updatedUser.email,
-        });
-
+          email: updatedUser.email
+        }));
         setEditMode(false);
         setSuccess('Profile updated successfully!');
       }
     } catch (err) {
       console.error('Error updating profile:', err);
-      setError(err.response?.data?.error || 'Failed to update profile. Please try again.');
+      setError(err.response?.data?.error || 'Failed to update profile.');
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCancel = () => {
-    setEditedProfile({ ...profile });
-    setEditMode(false);
-    setError(null);
   };
 
   const handleChangePassword = async () => {
@@ -220,7 +274,6 @@ const Profile = () => {
       setError('New passwords do not match');
       return;
     }
-
     if (passwordData.newPassword.length < 6) {
       setError('Password must be at least 6 characters long');
       return;
@@ -229,29 +282,17 @@ const Profile = () => {
     try {
       setChangingPassword(true);
       setError(null);
-
       await profileService.changePassword({
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
-
-      setPasswordDialog(false);
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setSuccess('Password changed successfully!');
     } catch (err) {
-      console.error('Error changing password:', err);
-      setError(err.response?.data?.error || 'Failed to change password. Please try again.');
+      setError(err.response?.data?.error || 'Failed to change password.');
     } finally {
       setChangingPassword(false);
     }
-  };
-
-  const handleInputChange = (field, value) => {
-    setEditedProfile({ ...editedProfile, [field]: value });
   };
 
   const handleAvatarChange = async (event) => {
@@ -260,36 +301,31 @@ const Profile = () => {
 
     try {
       setUploading(true);
-      setError(null);
-
       const fileExt = file.name.split('.').pop();
       const filePath = `profile-images/${user.id}-profile.${fileExt}`;
 
-      // 1. Upload to Supabase
       const { error: uploadError } = await supabase.storage
         .from('user-documents')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL and add cache-bust so the browser shows the new image (same path = cached otherwise)
       const { data: { publicUrl } } = supabase.storage
         .from('user-documents')
         .getPublicUrl(filePath);
-      const cacheBustedUrl = publicUrl + (publicUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
 
-      // 3. Save to backend (store cache-busted URL so UI everywhere shows latest)
+      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
+
       await profileService.updateProfileImage(user.id, cacheBustedUrl);
 
-      // 4. Update local state and auth context so header/sidebar etc. show new image immediately
       setProfile(prev => ({ ...prev, profile_image_url: cacheBustedUrl }));
       setEditedProfile(prev => ({ ...prev, profile_image_url: cacheBustedUrl }));
       updateUser({ ...user, profile_image_url: cacheBustedUrl });
 
-      setSuccess('Profile picture updated successfully!');
+      setSuccess('Profile picture updated!');
     } catch (err) {
-      console.error('Error uploading avatar:', err);
-      setError('Failed to upload profile picture. Please try again.');
+      console.error(err);
+      setError('Failed to update profile picture.');
     } finally {
       setUploading(false);
     }
@@ -301,26 +337,21 @@ const Profile = () => {
 
     try {
       setUploading(true);
-      setError(null);
-
       const fileName = file.name;
       const fileExt = fileName.split('.').pop();
       const safeName = fileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const filePath = `documents/${user.id}-${Date.now()}-${safeName}`;
 
-      // 1. Upload to Supabase
       const { error: uploadError } = await supabase.storage
         .from('user-documents')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('user-documents')
         .getPublicUrl(filePath);
 
-      // 3. Save to backend database
       await userDocumentsService.addDocument({
         user_id: user.id,
         file_name: fileName,
@@ -328,12 +359,10 @@ const Profile = () => {
         file_type: fileExt
       });
 
-      // 4. Refresh documents list
       loadUserDocuments();
       setSuccess('Document uploaded successfully!');
     } catch (err) {
-      console.error('Error uploading document:', err);
-      setError('Failed to upload document. Please try again.');
+      setError('Failed to upload document.');
     } finally {
       setUploading(false);
     }
@@ -346,311 +375,440 @@ const Profile = () => {
       setDocuments(prev => prev.filter(d => d.id !== docId));
       setSuccess('Document removed.');
     } catch (err) {
-      console.error('Error deleting document:', err);
       setError('Failed to delete document.');
     } finally {
       setDocLoading(false);
     }
   };
 
-  const profileStats = [
-    { label: 'Total Rentals', value: profile.totalRentals, icon: <AccountBalance /> },
-    { label: 'Active Rentals', value: profile.activeRentals, icon: <CalendarToday /> },
-    { label: 'Total Spent', value: `USD ${profile.totalSpent.toLocaleString()}`, icon: <AccountBalance /> },
-  ];
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', width: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4, px: 3, minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* Header */}
-      <Box sx={{ mb: 3, textAlign: 'center' }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 0.5, color: 'text.primary' }}>
-          Profile Settings
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.primary', opacity: 0.8 }}>
-          Manage your account information and preferences
-        </Typography>
-      </Box>
+    <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: '#f8fafc', pb: 8 }}>
+      {/* Notifications */}
+      <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError(null)}>
+        <Alert severity="error" onClose={() => setError(null)} sx={{ width: '100%' }}>{error}</Alert>
+      </Snackbar>
+      <Snackbar open={!!success} autoHideDuration={6000} onClose={() => setSuccess(null)}>
+        <Alert severity="success" onClose={() => setSuccess(null)} sx={{ width: '100%' }}>{success}</Alert>
+      </Snackbar>
 
-      {/* Main Profile Card */}
-      <Card sx={{
-        width: '100%',
-        maxWidth: 800,
-        borderRadius: 2,
-        mb: 3
-      }}>
-        {/* Profile Header */}
+
+
+      {/* Main Container - Flex Layout to prevent wrapping */}
+      <Box sx={{ px: { xs: 2, md: 6 }, mt: 4, maxWidth: 1600, mx: 'auto' }}>
         <Box sx={{
-          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-          p: 3,
-          borderRadius: '8px 8px 0 0',
-          position: 'relative',
-          overflow: 'hidden'
+          display: { xs: 'block', md: 'flex' },
+          gap: 4,
+          alignItems: 'flex-start'
         }}>
-          <Box sx={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            width: 200,
-            height: 200,
-            background: 'rgba(255,255,255,0.1)',
-            borderRadius: '50%',
-            transform: 'translate(50%, -50%)'
-          }} />
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, position: 'relative', zIndex: 1 }}>
-            <Box sx={{ position: 'relative' }}>
-              <Avatar
-                src={profile.profile_image_url}
+          {/* Left Column: Fixed Profile Sidebar */}
+          <Box sx={{
+            width: { xs: '100%', md: 320, lg: 360 },
+            flexShrink: 0,
+            mb: { xs: 4, md: 0 },
+            position: { md: 'sticky' },
+            top: { md: 24 },
+            zIndex: 10
+          }}>
+            <Card sx={{
+              borderRadius: 4,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+              overflow: 'visible'
+            }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 4 }}>
+                <Box sx={{ position: 'relative', mb: 2 }}>
+                  <Avatar
+                    src={profile.profile_image_url}
+                    sx={{
+                      width: 120,
+                      height: 120,
+                      border: `4px solid ${theme.palette.primary.light}`,
+                      fontSize: '3rem',
+                      bgcolor: theme.palette.primary.main
+                    }}
+                  >
+                    {!profile.profile_image_url && profile.name.charAt(0)}
+                  </Avatar>
+
+                  {uploading && (
+                    <CircularProgress
+                      size={128}
+                      sx={{
+                        position: 'absolute',
+                        top: -4,
+                        left: -4,
+                        color: theme.palette.primary.main,
+                        zIndex: 1
+                      }}
+                    />
+                  )}
+
+                  <Tooltip title="Upload Profile Picture" placement="right">
+                    <IconButton
+                      component="label"
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        bottom: 0,
+                        right: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid #e0e0e0',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        '&:hover': { backgroundColor: '#f5f5f5' }
+                      }}
+                    >
+                      <PhotoCamera fontSize="small" color="primary" />
+                      <input hidden accept="image/*" type="file" onChange={handleAvatarChange} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+
+                <Typography variant="h6" fontWeight="700" color="text.primary" align="center" gutterBottom>
+                  {profile.name}
+                </Typography>
+
+                <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+                  {profile.email}
+                </Typography>
+
+                <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+                  <Chip
+                    size="small"
+                    label={profile.user_type.toUpperCase()}
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontWeight: 600, borderRadius: 1 }}
+                  />
+                  {profile.email_verified && (
+                    <Chip
+                      size="small"
+                      label="VERIFIED"
+                      color="success"
+                      variant="outlined"
+                      sx={{ fontWeight: 600, borderRadius: 1 }}
+                    />
+                  )}
+                </Stack>
+
+                <Divider sx={{ width: '100%', mb: 3 }} />
+
+                <Box sx={{ width: '100%' }}>
+                  <Stack spacing={2}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">Joined</Typography>
+                      <Typography variant="body2" fontWeight="600">
+                        {profile.joinDate ? new Date(profile.joinDate).toLocaleDateString() : '-'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">Balance</Typography>
+                      <Typography variant="body2" fontWeight="600" color="primary.main">
+                        {profile.coins} Coins
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+              </Box>
+            </Card>
+          </Box>
+
+          {/* Right Column: Tabs and Content aligned to Top */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+
+            {/* Tabs aligned with top of Sidebar */}
+            <Box sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs
+                value={activeTab}
+                onChange={handleTabChange}
+                variant="scrollable"
+                scrollButtons="auto"
                 sx={{
-                  width: 80,
-                  height: 80,
-                  border: '3px solid rgba(255,255,255,0.2)',
-                  fontSize: '1.5rem',
-                  fontWeight: 600,
-                  bgcolor: 'primary.light'
+                  '& .MuiTab-root': {
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '1rem',
+                    minHeight: 48,
+                    mr: 2
+                  },
+                  '& .Mui-selected': {
+                    color: theme.palette.primary.main,
+                  },
+                  '& .MuiTabs-indicator': {
+                    height: 3,
+                    borderRadius: '3px 3px 0 0',
+                    backgroundColor: theme.palette.primary.main
+                  }
                 }}
               >
-                {!profile.profile_image_url && profile.name.charAt(0)}
-              </Avatar>
-              {uploading && (
-                <CircularProgress
-                  size={86}
-                  sx={{
-                    position: 'absolute',
-                    top: -3,
-                    left: -3,
-                    zIndex: 1,
-                    color: 'white'
-                  }}
-                />
-              )}
-              {editMode && (
-                <IconButton
-                  sx={{
-                    position: 'absolute',
-                    bottom: -5,
-                    right: -5,
-                    backgroundColor: 'white',
-                    color: 'primary.main',
-                    '&:hover': { backgroundColor: 'grey.100' },
-                    boxShadow: 2
-                  }}
-                  component="label"
-                >
-                  <PhotoCamera fontSize="small" />
-                  <input
-                    type="file"
-                    hidden
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                  />
-                </IconButton>
-              )}
+                <Tab icon={<Dashboard fontSize="small" />} iconPosition="start" label="Overview" />
+                <Tab icon={<FolderOpen fontSize="small" />} iconPosition="start" label="Documents" />
+                <Tab icon={<Security fontSize="small" />} iconPosition="start" label="Security" />
+              </Tabs>
             </Box>
 
-            <Box sx={{ flex: 1, color: 'white' }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
-                {profile.name}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                <Chip
-                  label={profile.user_type ? profile.user_type.charAt(0).toUpperCase() + profile.user_type.slice(1) : 'User'}
-                  size="small"
-                  sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'white',
-                    fontWeight: 500
-                  }}
-                />
-                {profile.email_verified && (
-                  <Chip
-                    label="Verified"
-                    size="small"
-                    sx={{
-                      backgroundColor: 'rgba(255,255,255,0.2)',
-                      color: 'white',
-                      fontWeight: 500
-                    }}
-                  />
-                )}
-                {profile.joinDate && (
-                  <Typography variant="body2" sx={{ opacity: 1, color: 'white' }}>
-                    Member since {new Date(profile.joinDate).toLocaleDateString()}
-                  </Typography>
-                )}
-              </Box>
-              <Typography variant="body2" sx={{ opacity: 0.9, color: 'white', mt: 1 }}>
-                {profile.coins} Coins
-              </Typography>
-            </Box>
+            {/* Content Area */}
+            <Box sx={{ minHeight: 400 }}>
 
-            <Box sx={{ alignSelf: 'flex-start', display: 'flex', gap: 1 }}>
-              {!editMode ? (
+              {/* Overview Tab */}
+              {activeTab === 0 && (
                 <>
-                  <Button
-                    startIcon={<Edit />}
-                    onClick={handleEdit}
-                    variant="contained"
-                    sx={{
-                      backgroundColor: 'rgba(255,255,255,0.2)',
-                      color: 'white',
-                      '&:hover': { backgroundColor: 'rgba(255,255,255,0.3)' },
-                      backdropFilter: 'blur(10px)',
-                      border: '1px solid rgba(255,255,255,0.2)'
-                    }}
-                  >
-                    Edit Profile
-                  </Button>
-                  <Button
-                    startIcon={<Lock />}
-                    onClick={() => setPasswordDialog(true)}
-                    variant="outlined"
-                    sx={{
-                      color: 'white',
-                      borderColor: 'rgba(255,255,255,0.5)',
-                      '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }
-                    }}
-                  >
-                    Change Password
-                  </Button>
+                  <Box sx={{ width: '100%', maxWidth: '100%' }}>
+                    {/* Stats Cards Row */}
+                    <Grid container spacing={3} sx={{ mb: { xs: 5, md: 7 }, width: '100%' }}>
+                      <Grid item xs={12} sm={6} lg={4}>
+                        <StatCard
+                          label="Total Rentals"
+                          value={profile.totalRentals}
+                          icon={<Dashboard />}
+                          color={theme.palette.primary.main}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6} lg={4}>
+                        <StatCard
+                          label="Active Rentals"
+                          value={profile.activeRentals}
+                          icon={<CalendarToday />}
+                          color={theme.palette.secondary.main}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6} lg={4}>
+                        <StatCard
+                          label="Total Spent"
+                          value={`$${profile.totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          icon={<AccountBalance />}
+                          color="#8bc34a"
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+
+                  {/* Personal Info Form */}
+                  <Card sx={{ borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                        <Typography variant="h6" fontWeight="700">Personal Information</Typography>
+                        {!editMode ? (
+                          <Button
+                            startIcon={<Edit />}
+                            variant="outlined"
+                            onClick={() => setEditMode(true)}
+                            size="small"
+                          >
+                            Edit
+                          </Button>
+                        ) : (
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              variant="text"
+                              color="inherit"
+                              onClick={() => {
+                                setEditMode(false);
+                                setEditedProfile({ ...profile });
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              variant="contained"
+                              onClick={handleSaveProfile}
+                              disabled={saving}
+                            >
+                              Save
+                            </Button>
+                          </Stack>
+                        )}
+                      </Box>
+
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            label="Full Name"
+                            value={editMode ? editedProfile.name : profile.name}
+                            onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
+                            disabled={!editMode}
+                            variant="outlined"
+                            size="medium"
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            label="Email Address"
+                            value={editMode ? editedProfile.email : profile.email}
+                            onChange={(e) => setEditedProfile({ ...editedProfile, email: e.target.value })}
+                            disabled={!editMode}
+                            variant="outlined"
+                            size="medium"
+                          />
+                        </Grid>
+
+                      </Grid>
+                    </CardContent>
+                  </Card>
                 </>
-              ) : (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button
-                    startIcon={<Save />}
-                    onClick={handleSave}
-                    disabled={saving}
-                    variant="contained"
-                    sx={{
-                      backgroundColor: 'white',
-                      color: 'primary.main',
-                      '&:hover': { backgroundColor: 'grey.100' }
-                    }}
-                  >
-                    {saving ? 'Saving...' : 'Save'}
-                  </Button>
-                  <Button
-                    startIcon={<Cancel />}
-                    onClick={handleCancel}
-                    disabled={saving}
-                    sx={{
-                      color: 'white',
-                      borderColor: 'rgba(255,255,255,0.5)',
-                      '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' }
-                    }}
-                    variant="outlined"
-                  >
-                    Cancel
-                  </Button>
-                </Box>
               )}
+
+              {/* Documents Tab */}
+              {activeTab === 1 && (
+                <Card sx={{ borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  <CardContent sx={{ p: 4 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                      <Box>
+                        <Typography variant="h6" fontWeight="700">My Documents</Typography>
+                        <Typography variant="body2" color="text.secondary">Manage your licenses, permits, and ID documents</Typography>
+                      </Box>
+                      <Button
+                        component="label"
+                        variant="contained"
+                        startIcon={<CloudUpload />}
+                        disabled={uploading}
+                      >
+                        Upload
+                        <input type="file" hidden onChange={handleDocumentUpload} />
+                      </Button>
+                    </Box>
+
+                    {uploading && <LinearProgress sx={{ mb: 3, borderRadius: 1 }} />}
+
+                    {documents.length === 0 ? (
+                      <Box sx={{ py: 8, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2 }}>
+                        <Description sx={{ fontSize: 48, color: 'text.secondary', mb: 1.5, opacity: 0.5 }} />
+                        <Typography color="text.secondary">No documents uploaded yet.</Typography>
+                      </Box>
+                    ) : (
+                      <Stack spacing={2}>
+                        {documents.map((doc) => (
+                          <Paper
+                            key={doc.id}
+                            variant="outlined"
+                            sx={{
+                              p: 2,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderRadius: 2,
+                              transition: 'background-color 0.2s',
+                              '&:hover': { bgcolor: 'grey.50' }
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                              <Avatar sx={{ bgcolor: 'primary.light', mr: 2 }}>
+                                <Description sx={{ color: 'white' }} />
+                              </Avatar>
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
+                                  {doc.file_name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(doc.created_at).toLocaleDateString()}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Stack direction="row" spacing={1}>
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                component="a"
+                                href={doc.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <FolderOpen fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                disabled={docLoading}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Security Tab */}
+              {activeTab === 2 && (
+                <Card sx={{ borderRadius: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography variant="h6" fontWeight="700" gutterBottom>Change Password</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+                      Ensure your account is secure by using a strong password.
+                    </Typography>
+
+                    <Grid container spacing={3} maxWidth="md">
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Current Password"
+                          type="password"
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          variant="outlined"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="New Password"
+                          type="password"
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          variant="outlined"
+                          helperText="Minimum 6 characters"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Confirm New Password"
+                          type="password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          variant="outlined"
+                          error={passwordData.confirmPassword !== '' && passwordData.newPassword !== passwordData.confirmPassword}
+                          helperText={passwordData.confirmPassword !== '' && passwordData.newPassword !== passwordData.confirmPassword ? "Passwords don't match" : ""}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Button
+                          variant="contained"
+                          onClick={handleChangePassword}
+                          disabled={changingPassword || !passwordData.currentPassword || !passwordData.newPassword}
+                          size="large"
+                          sx={{ mt: 1 }}
+                        >
+                          {changingPassword ? 'Updating...' : 'Update Password'}
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              )}
+
             </Box>
           </Box>
         </Box>
-
-        <CardContent sx={{ p: 3 }}>
-          {/* Stats Section */}
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, fontSize: '1.125rem' }}>
-              Account Overview
-            </Typography>
-            <Grid container spacing={2}>
-              {profileStats.map((stat, index) => (
-                <Grid item xs={12} sm={4} key={index}>
-                  <Paper sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                    }
-                  }}>
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <Avatar sx={{
-                        backgroundColor: index === 0 ? '#3b82f6' : index === 1 ? '#10b981' : '#f59e0b',
-                        width: 48,
-                        height: 48
-                      }}>
-                        {stat.icon}
-                      </Avatar>
-                      <Box sx={{ textAlign: 'left' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.25rem' }}>
-                          {stat.value}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-                          {stat.label}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
-
-          <Divider sx={{ my: 4 }} />
-
-          {/* Profile Information Form */}
-          <Box>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, fontSize: '1.125rem' }}>
-              Personal Information
-            </Typography>
-
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Full Name"
-                  value={editMode ? editedProfile.name : profile.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  disabled={!editMode}
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      backgroundColor: editMode ? 'white' : 'grey.50',
-                      fontSize: '0.875rem'
-                    }
-                  }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Email"
-                  value={editMode ? editedProfile.email : profile.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  disabled={!editMode}
-                  type="email"
-                  variant="outlined"
-                  InputProps={{
-                    startAdornment: (
-                      <Box sx={{ mr: 1, display: 'flex', color: 'text.secondary' }}>
-                        <Email />
-                      </Box>
-                    )
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      backgroundColor: editMode ? 'white' : 'grey.50',
-                      fontSize: '0.875rem'
-                    }
-                  }}
-                />
-              </Grid>
-
-              {/* Phone, Location, and Bio fields removed - not in current database schema */}
-              {/* These can be added later when the schema is extended */}
-            </Grid>
-          </Box>
-
-
-        </CardContent>
-      </Card>
-    </Container>
+      </Box>
+    </Box >
   );
 };
 
